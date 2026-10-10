@@ -15,12 +15,15 @@ foreach($authorityItem in $authorityVerification.artifactHashes.PSObject.Propert
 }
 New-Item -ItemType Directory -Force -Path $authorityRelease,$authorityConfigRelease,$authorityOutput | Out-Null
 Copy-Item -LiteralPath $authorityDll -Destination $authorityRelease -Force
-foreach($authorityFile in @('README.md','CHANGELOG.md','manifest.json','icon.png')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $authorityFile) -Destination $authorityRelease -Force}
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README-Thunderstore.md') -Destination (Join-Path $authorityRelease 'README.md') -Force
+foreach($authorityFile in @('CHANGELOG.md','manifest.json','icon.png')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $authorityFile) -Destination $authorityRelease -Force}
 $authorityFiles=@('TooManyLags.dll','README.md','CHANGELOG.md','manifest.json','icon.png') | ForEach-Object {Join-Path $authorityRelease $_}
 $authorityZip=Join-Path $authorityOutput ($authorityStem+'.zip')
 Compress-Archive -LiteralPath $authorityFiles -DestinationPath $authorityZip -Force
 $authoritySources=@('src','tests','tools','README.md','VALIDATION.md','manifest.json','icon.png','botanic.toomanylags.fgnaddon.cfg','generate-config.ps1','build.ps1','verify.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-integration.ps1','test-directional.ps1','test-field-cache.ps1','test-regions.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1','benchmark.ps1','benchmark-regions.ps1','package.ps1','verification.json') | ForEach-Object {Join-Path $PSScriptRoot $_}
 $authoritySources+=Join-Path $PSScriptRoot 'CHANGELOG.md'
+$authoritySources+=Join-Path $PSScriptRoot 'README-Thunderstore.md'
+$authoritySources+=Join-Path $PSScriptRoot 'docs'
 $authoritySources+=Join-Path $PSScriptRoot 'thunderstore.toml'
 $authoritySources+=Join-Path $PSScriptRoot 'publish.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-fgn-settings.ps1'
@@ -32,7 +35,7 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'botanic.toomanylags.fgnaddon.cf
 Compress-Archive -LiteralPath (Join-Path $PSScriptRoot 'release-config\BepInEx') -DestinationPath (Join-Path $authorityOutput ($authorityStem+'-config.zip')) -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'botanic.toomanylags.fgnaddon.cfg') -Destination (Join-Path $authorityOutput 'botanic.toomanylags.fgnaddon.cfg') -Force
 Copy-Item -LiteralPath $authorityDll -Destination (Join-Path $authorityOutput ($authorityStem+'.dll')) -Force
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination (Join-Path $authorityOutput ($authorityStem+'-README.md')) -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README-Thunderstore.md') -Destination (Join-Path $authorityOutput ($authorityStem+'-README.md')) -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'VALIDATION.md') -Destination (Join-Path $authorityOutput ($authorityStem+'-Verification.md')) -Force
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $authorityArchive=[IO.Compression.ZipFile]::OpenRead($authorityZip)
@@ -47,7 +50,8 @@ try{
     if($authorityPacked -ne $authorityHash){throw 'Packaged DLL differs from verified DLL.'}
     foreach($authorityText in @('README.md','CHANGELOG.md','manifest.json')){
         $authorityReader=New-Object IO.StreamReader($authorityArchive.GetEntry($authorityText).Open())
-        try{if($authorityReader.ReadToEnd() -cne [IO.File]::ReadAllText((Join-Path $PSScriptRoot $authorityText))){throw ('Packaged content differs: '+$authorityText)}}finally{$authorityReader.Dispose()}
+        $authorityTextSource=if($authorityText -eq 'README.md'){'README-Thunderstore.md'}else{$authorityText}
+        try{if($authorityReader.ReadToEnd() -cne [IO.File]::ReadAllText((Join-Path $PSScriptRoot $authorityTextSource))){throw ('Packaged content differs: '+$authorityText)}}finally{$authorityReader.Dispose()}
     }
 }finally{$authorityArchive.Dispose()}
 $authorityConfigArchive=[IO.Compression.ZipFile]::OpenRead((Join-Path $authorityOutput ($authorityStem+'-config.zip')))

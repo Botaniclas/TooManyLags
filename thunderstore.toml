@@ -15,7 +15,7 @@ VerdantsAscent-FiresGhettoNetworking = "1.5.36"
 
 [build]
 icon = "./icon.png"
-readme = "./README.md"
+readme = "./README-Thunderstore.md"
 outdir = "./outputs"
 
 [[build.copy]]

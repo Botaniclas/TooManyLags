@@ -25,6 +25,18 @@ This shares client workload more fairly, especially in large bases. Server owner
 - Hostile Mobs use AI target ownership with attack protection, consent, retries and safe server fallback. Hostile summons follow the same rules. Friendly magic summons, including skeletons, spirit animals and roots, stay outside both the grid and mob ownership policy. Ordinary tamed animals still use the grid; bosses and active controls retain their safeguards.
 - Open inventories, active users and refilling remain protected. Local PUP collision/stability guards remain a separate feature.
 
+## Ownership grid in action
+
+These examples use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOwnerDebug/) to show ownership: white objects belong to the server; purple objects belong to the player in these recordings. Movement and camera-sector changes update nearby grid cells using their configured delays.
+
+**Ownership from above**
+
+https://github.com/user-attachments/assets/4a445578-1edf-4abb-8eea-f28183878d3c
+
+**Ownership while moving**
+
+https://github.com/user-attachments/assets/8555a985-7696-4cc6-865a-5115c3695f72
+
 ## Configuration
 
 Edit `BepInEx/config/botanic.toomanylags.fgnaddon.cfg`; restart after changes. Sections explain each feature briefly.

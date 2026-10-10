@@ -40,6 +40,8 @@ The pure grid stores one deferred bit per active policy and one refresh bit per 
 
 ## Checks and limits
 
+The 1.0.6 documentation refresh adds the two supplied GitHub videos to the repository README and links their GIF conversions from the Thunderstore README. Both GIFs were decoded frame by frame and visually reviewed: 640x358 pixels, 10 fps, infinite loop, 8.2/13.8 seconds. The original recordings remain available through each GIF's link. Media are hosted in the GitHub repository, outside the install ZIP. The DLL and previous runtime test results are unchanged; metadata/media hashes and archive contents were checked again before publication.
+
 Build uses installed Valheim/BepInEx APIs with warnings treated as errors. Controller/grid, directional geometry, field cache, region bypass, inventory and refill suites run against production logic. AI fixtures run on both CLR and Valheim's embedded Mono; optional readiness and modern runtime bridge fixtures are separate. Native IL/contracts are checked against FiresGhettoNetworking 1.5.36 and 1.5.41. Both ownership transpilers compose in either order, preserving native branches and changing only the intended getter/two calls. Startup validates actual contracts rather than rejecting FGN version numbers.
 
 The actual config binding prefixes execute with installed BepInEx.ConfigFile: 42 settings, nine English sections, reload/save equality. Verification JSON records the final DLL, native dependencies, copied sources and config hashes. Release packaging checks version, DLL hash, manifest, README and config contents.

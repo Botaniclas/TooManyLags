@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.5.0")]
+[assembly: AssemblyVersion("1.0.6.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FGN Addon", "1.0.5")]
+    [BepInPlugin(Id, "TooManyLags - FGN Addon", "1.0.6")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.5", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.6", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -30,7 +30,7 @@ namespace TooManyLags
         private void Awake()
         {
             instance = this;
-            bool enabled = Config.Bind("01 - General", "Enabled", true, "Enable TooManyLags on the dedicated server and clients. Requires FiresGhettoNetworking. The object grid needs Server-Side Simulation. Restart after config changes.").Value;
+            bool enabled = Config.Bind("01 - General", "Enabled", true, "Enable TooManyLags on the dedicated server and clients. Required FiresGhettoNetworking settings are overridden for this session, including Server-Side Simulation on the dedicated server. This can increase server CPU usage. Restart after config changes.").Value;
             logs = Config.Bind("01 - General", "EnableLogs", false, "Enable extra diagnostic messages. Startup failures are always reported.").Value;
             Diagnostics = logs;
             bool buildings = Config.Bind("02 - Static Buildings", "ServerOwnedStaticBuildings", false, "Keep eligible non-interactive building pieces server-owned. Independent of the interactive grid.").Value;
@@ -71,6 +71,16 @@ namespace TooManyLags
             enabledMod = true;
             if (!Chainloader.PluginInfos.TryGetValue(FgnId, out networkPlugin) || !networkPlugin.Instance)
             { enabledMod = false; Logger.LogWarning("TooManyLags inactive: FiresGhettoNetworking is not loaded."); return; }
+            try
+            {
+                bool enableAI = Config.Bind("09 - AI Mob Ownership", "EnableAIOwnership", true,
+                    "Use the mob's active player target for FGN ownership. Requires two eligible nearby players. Attacks block transfers and retry after attack end. Install the same version on server and clients; restart required.").Value;
+                bool activated = FgnSessionSettings.Apply(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config,
+                    Application.isBatchMode, enableAI, Chainloader.PluginInfos.ContainsKey("dev.ontrigger.vpo"));
+                if (activated) Logger.LogWarning("TooManyLags enabled FGN Server-Side Simulation for this session. This can increase server CPU usage; the saved FGN config is unchanged.");
+            }
+            catch (Exception error)
+            { enabledMod = false; Logger.LogWarning("TooManyLags inactive: required FGN session settings could not be applied. " + error.GetBaseException()); return; }
             if (!Application.isBatchMode)
             {
                 try
@@ -89,7 +99,7 @@ namespace TooManyLags
             {
                 PluginInfo fgn = networkPlugin;
                 CompatibilityBridge bridge = new CompatibilityBridge(fgn.Instance);
-                if (!bridge.Configured()) throw new NotSupportedException("Enable FGN SSS and Fix Lost Station Inserts; disable both Server ZDO Ownership Transfer options. " + bridge.State());
+                if (!bridge.Configured()) throw new NotSupportedException("Required FGN session settings are unavailable. " + bridge.State());
                 // Bind required client protocol signatures before installing
                 // any hooks; changed APIs are reported even when logs are off.
                 new FgnOwnerHandoff(bridge.Assembly, 1L);

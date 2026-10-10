@@ -1,6 +1,6 @@
 {
   "name": "TooManyLags_FGN_Addon",
-  "version_number": "1.0.5",
+  "version_number": "1.0.6",
   "website_url": "https://github.com/Botaniclas/TooManyLags",
   "description": "FiresGhettoNetworking addon for near-zero latency on locally owned interactions. Shared areas use the server, aiming to make players feel their own ping instead of others'. Includes Hostile Mobs ownership.",
   "dependencies": [

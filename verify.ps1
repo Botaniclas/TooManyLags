@@ -8,10 +8,10 @@ $ErrorActionPreference='Stop'
 $authorityDll=Join-Path $PSScriptRoot 'bin\TooManyLags.dll'
 $authorityVerifiedHash=(Get-FileHash -LiteralPath $authorityDll -Algorithm SHA256).Hash
 $authorityResults=@()
-foreach($authorityTest in @('test-inventory.ps1','test-fgn-handoff.ps1','test-integration.ps1','test-directional.ps1','test-field-cache.ps1','test-regions.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1')){
+foreach($authorityTest in @('test-fgn-settings.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-integration.ps1','test-directional.ps1','test-field-cache.ps1','test-regions.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1')){
     $authorityArguments=@{}
     if($authorityTest -in @('test-inventory.ps1','test-fgn-handoff.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1')){$authorityArguments.ValheimDirectory=$ValheimDirectory}
-    if($authorityTest -in @('test-fgn-handoff.ps1','test-integration.ps1','test-native.ps1','test-combat.ps1','test-combat-bridge.ps1')){$authorityArguments.BepInExDirectory=$BepInExDirectory}
+    if($authorityTest -in @('test-fgn-settings.ps1','test-fgn-handoff.ps1','test-integration.ps1','test-native.ps1','test-combat.ps1','test-combat-bridge.ps1')){$authorityArguments.BepInExDirectory=$BepInExDirectory}
     $authorityLines=@(& (Join-Path $PSScriptRoot $authorityTest) @authorityArguments)
     $authorityLines | ForEach-Object {Write-Output $_}
     $authorityResults += [ordered]@{test=$authorityTest;passed=$true;output=($authorityLines -join [Environment]::NewLine)}
@@ -50,7 +50,7 @@ if(Test-Path -LiteralPath $authorityRegionBenchmarkPath){
     }
 }
 [ordered]@{
-    version='1.0.5';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
+    version='1.0.6';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
     benchmark=$authorityBenchmark;regionBenchmark=$authorityRegionBenchmark;import=$authorityImport;artifactHashes=$authorityHashes;liveMultiplayerTested=$false
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Encoding UTF8
 Write-Output ('Verified release SHA256: '+$authorityVerifiedHash)

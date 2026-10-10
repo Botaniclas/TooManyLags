@@ -1,6 +1,14 @@
-# TooManyLags - FGN Addon 1.0.5: verification
+# TooManyLags - FGN Addon 1.0.6: verification
 
-Version 1.0.5 changes the release version and package metadata only. Runtime ownership behavior remains the same as 1.0.4.
+Version 1.0.6 adds startup-only overrides for required FiresGhettoNetworking settings. The grid, AI handoff protocol and ownership protections remain unchanged.
+
+## Required FiresGhettoNetworking session settings
+
+After FGN's Awake and before TML installs its grid or AI policy, FgnSessionSettings replaces only the required static ConfigEntry references with entries in an isolated, non-saving ConfigFile. FGN's own ConfigFile keeps the original entries: later saves and reloads do not persist the overrides. Dedicated servers use SSS and station routing, with broad/selective ownership disabled. Clients only disable those conflicting ownership options. Creature balancing is enabled on both sides when TML AI ownership is configured on; disabling it leaves the existing FGN balancing setting untouched. No config getter patch, event subscription or recurring override scan is installed.
+
+If FGN already installed server simulation, its initializer is not repeated. If it was off, TML checks FGN's dedicated-server detection and scene-scheduler compatibility, checks the ValheimPerformanceOptimizations plugin identity, then invokes FGN's native ApplyServerSideSimulationPatches before setting SimulationActive, matching FGN's own startup order. Existing broad/selective prefixes read the disabled entries and pass through; their startup-only creature/ship ownership mode flags are cleared. Compatibility blocks and missing/uninitialized contracts leave TML inactive rather than announcing readiness. SSS activation produces one startup CPU warning regardless of optional diagnostic logging.
+
+Tests use the actual BepInEx ConfigFile and production setup code to check 52 assertions covering disabled/enabled SSS, one-time initialization, stale modes, unchanged saved entries even after Save/Reload, metadata, client scope, disabled AI and blocked/missing contracts. Native IL/metadata checks verify the initializer, completion order, safety properties, fields and dynamic ownership gates against FGN 1.5.36 and 1.5.41. No live Unity/dedicated-server startup or multiplayer session was performed; server CPU impact depends on the loaded world and owned objects.
 
 Based on TooManyLags 1.0.0 and BotanicServerAuthority 3.7.4. Existing grid geometry, directional timers, inventory consent, refilling protection, summon exclusion, default ownership, regional bypass and unloading cleanup are retained. The original project remains unchanged.
 

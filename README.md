@@ -2,6 +2,12 @@
 
 A FiresGhettoNetworking extension designed to make nearby interactions feel almost latency-free: locally owned objects are processed directly on your client, without waiting for another player's connection. In shared areas, the server takes over so each player primarily feels their own latency instead of someone else's lag. Includes ownership improvements for Hostile Mobs.
 
+## Forced FiresGhettoNetworking settings
+
+TooManyLags applies required FiresGhettoNetworking settings at startup, including enabling **Server-Side Simulation** on the dedicated server. Their saved config values are ignored while TooManyLags is enabled; the config file stays unchanged. Other FGN settings and incompatible-mod safety blocks remain active.
+
+**If Server-Side Simulation was previously off, enabling it adds CPU workload to the server.**
+
 ## Why it helps
 
 Valheim distributes simulation between object owners. A door or creature owned by another player can feel delayed when that player's connection is slow, even if yours is fast.
@@ -38,7 +44,7 @@ Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOw
 
 1. Install **BepInEx, FiresGhettoNetworking and the same mod version on the dedicated server and every client**. Copy `TooManyLags.dll` into `BepInEx/plugins/TooManyLags/`.
 2. Copy the supplied config into `BepInEx/config/`, or let first startup generate it. Keep `EnableAIOwnership` consistent across server and clients.
-3. In the server's FiresGhettoNetworking config enable **Server-Side Simulation**, **Fix Lost Station Inserts** and **Balance Creature Ownership**. Disable both **Server ZDO Ownership Transfer** options. Restart.
+3. Restart. TooManyLags enables **Server-Side Simulation** and **Fix Lost Station Inserts** on the dedicated server, disables both **Server ZDO Ownership Transfer** options, and enables **Balance Creature Ownership** when `EnableAIOwnership=true`. These session settings take priority over the FGN config; other FGN settings remain yours.
 
 **PUP FPS is optional.**
 

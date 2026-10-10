@@ -1,5 +1,11 @@
 # Changelog
 
+**1.0.6**
+```
+- Applies required FiresGhettoNetworking settings for the current session without changing its saved config: dedicated-server simulation and station routing on, broad/selective server ownership off, creature balancing on when AI ownership is enabled.
+- Starts previously disabled server simulation through FGN's native initializer, retaining its incompatible-mod safety blocks. Adds a prominent warning about the extra server CPU demand.
+```
+
 **1.0.5**
 ```
 - Adds the GitHub project link to the package metadata. Ownership behavior and configuration defaults are unchanged.

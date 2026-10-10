@@ -190,8 +190,9 @@ internal static class NativeReleaseAudit
                         Check(called.DeclaringType.FullName != "System.Version", "Runtime numeric version gate remains");
                         Check(!((called.DeclaringType.FullName == "ZRpc" || called.DeclaringType.FullName == "ZRoutedRpc") &&
                             called.Name == "Register"), "Authority registers/replaces a client RPC callback");
-                        Check(!(called.DeclaringType.FullName == "System.Reflection.FieldInfo" && called.Name == "SetValue"),
-                            "Authority writes a reflected native/private field");
+                        Check(!(called.DeclaringType.FullName == "System.Reflection.FieldInfo" && called.Name == "SetValue") ||
+                            (type.FullName == "TooManyLags.FgnSessionSettings" && method.Name == "Apply"),
+                            "Reflection writes must be confined to approved FGN startup settings; native gameplay fields remain untouched");
                     }
                     string text = instruction.Operand as string;
                     if (text != null)
@@ -602,9 +603,53 @@ internal static class NativeReleaseAudit
             CheckConfig(plugin.GetField(name, Static), name);
         CheckConfig(stations.GetField("ConfigEnabled", Static), "Fix Lost Station Inserts");
         Check(fgn.GetType("FiresGhettoNetworkMod.ServerAuthorityPatches", true).GetField("SimulationActive", Static).FieldType == typeof(bool), "FGN runtime SSS state contract changed");
+        SessionSettings(authority, fgn, plugin);
         // Keep compiler honest about the supplied actual game identity.
         Check(game.GetType("ZNetPeer", true) == gate.GetMethod("IsMatched", Static).GetParameters()[0].ParameterType, "FGN resolves a different native peer assembly");
         Console.WriteLine("PASS: Actual FGN ProcessRoutedRPC: three readonly captured delegates replaced without changing branches; Station/TryRoute/Deliver and handoff/protocol/SSS fields bind; incompatible dispatcher preflight rejected.");
+    }
+    private static void SessionSettings(Assembly authority, Assembly fgn, Type plugin)
+    {
+        MethodInfo initialize = plugin.GetMethod("ApplyServerSideSimulationPatches", Static);
+        CheckMethod(initialize, typeof(void), "");
+        Check(initialize.IsStatic, "Native simulation initializer must be static");
+        Type compatibility = fgn.GetType("FiresGhettoNetworkMod.ValheimCommunityPatchCompat", true);
+        CheckMethod(compatibility.GetMethod("Detect", Static), typeof(void), "");
+        foreach (Type type in new[] { compatibility, fgn.GetType("FiresGhettoNetworkMod.ServerClientUtils", true) })
+        {
+            string propertyName = type == compatibility ? "SchedulesSceneObjects" : "IsDedicatedServerDetected";
+            PropertyInfo property = type.GetProperty(propertyName, Static);
+            Check(property != null && property.PropertyType == typeof(bool) && property.GetGetMethod(true).IsStatic, "Native startup safety property: " + propertyName);
+        }
+        Type creatures = fgn.GetType("FiresGhettoNetworkMod.CreatureOwnership", true);
+        CheckConfig(creatures.GetField("ConfigEnabled", Static), "Balance Creature Ownership");
+        foreach (string typeName in new[] { "CreatureOwnership", "HelmOwnership" })
+        {
+            string fieldName = typeName == "CreatureOwnership" ? "ServerOwnsCreatures" : "ServerOwnsShips";
+            FieldInfo mode = fgn.GetType("FiresGhettoNetworkMod." + typeName, true).GetField(fieldName, Static);
+            Check(mode != null && mode.FieldType == typeof(bool) && !mode.IsInitOnly, "Native startup-only ownership mode: " + fieldName);
+        }
+        List<CodeInstruction> awake = PatchProcessor.GetOriginalInstructions(plugin.GetMethod("Awake", Instance));
+        int nativeStart = -1, nativeReady = -1;
+        for (int i = 0; i < awake.Count; i++)
+        {
+            if (initialize.Equals(awake[i].operand)) nativeStart = i;
+            FieldInfo written = awake[i].operand as FieldInfo;
+            if (awake[i].opcode == OpCodes.Stsfld && written != null && written.Name == "SimulationActive") nativeReady = i;
+        }
+        Check(nativeStart >= 0 && nativeReady > nativeStart, "FGN uses this initializer before its completion flag");
+        foreach (string typeName in new[] { "ServerOwnershipPatches", "ServerOwnershipPatchesV3" })
+        {
+            Type ownership = fgn.GetType("FiresGhettoNetworkMod." + typeName, true);
+            string flag = typeName == "ServerOwnershipPatches" ? "ConfigEnableServerOwnership" : "ConfigEnableServerOwnershipSelective";
+            FieldInfo config = plugin.GetField(flag, Static);
+            bool reads = false;
+            foreach (CodeInstruction instruction in PatchProcessor.GetOriginalInstructions(ownership.GetMethod("ReleaseNearbyZDOS_Prefix", Static)))
+                if (config.Equals(instruction.operand)) reads = true;
+            Check(reads, "Installed legacy ownership prefix reads the current config reference: " + typeName);
+        }
+        Check(authority.GetType("TooManyLags.FgnSessionSettings", true).GetMethod("Apply", Static) != null, "Production session setup included");
+        Console.WriteLine("PASS: Actual FGN session contracts: native simulation initializer/completion order, dedicated and scene-scheduler safety guards, five config fields, stale mode flags and live legacy ownership gates.");
     }
     private static void CheckConfig(FieldInfo field, string name)
     {

@@ -1,0 +1,344 @@
+{
+  "condition": "character != null && !character.IsPlayer() && character.GetFaction() == Character.Faction.Players",
+  "matched": [
+    {
+      "prefab": "Bjorn_spiritcaller",
+      "path": "Assets/Characters/Bjorn/Bjorn_spiritcaller.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$spiritcaller_bjorn",
+      "m_faction": 0,
+      "m_group": "",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 40.0
+      },
+      "tameable": {
+        "m_startsTamed": 1,
+        "m_commandable": 0,
+        "m_unsummonDistance": 150.0,
+        "m_unsummonOnOwnerLogoutSeconds": 120.0,
+        "m_levelUpOwnerSkill": 10
+      }
+    },
+    {
+      "prefab": "Boar_spiritcaller",
+      "path": "Assets/Characters/Boar/Boar_spiritcaller.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$spiritcaller_boar",
+      "m_faction": 0,
+      "m_group": "",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 40.0
+      },
+      "tameable": {
+        "m_startsTamed": 1,
+        "m_commandable": 0,
+        "m_unsummonDistance": 150.0,
+        "m_unsummonOnOwnerLogoutSeconds": 120.0,
+        "m_levelUpOwnerSkill": 10
+      }
+    },
+    {
+      "prefab": "Moose_spiritcaller",
+      "path": "Assets/Characters/moose/Moose_spiritcaller.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$spiritcaller_moose",
+      "m_faction": 0,
+      "m_group": "",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 40.0
+      },
+      "tameable": {
+        "m_startsTamed": 1,
+        "m_commandable": 0,
+        "m_unsummonDistance": 150.0,
+        "m_unsummonOnOwnerLogoutSeconds": 120.0,
+        "m_levelUpOwnerSkill": 10
+      }
+    },
+    {
+      "prefab": "Skeleton_Friendly",
+      "path": "Assets/Characters/Skeleton/Skeleton_Friendly.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$enemy_skeleton_summoned",
+      "m_faction": 0,
+      "m_group": "",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 20.0
+      },
+      "tameable": {
+        "m_startsTamed": 1,
+        "m_commandable": 0,
+        "m_unsummonDistance": 150.0,
+        "m_unsummonOnOwnerLogoutSeconds": 120.0,
+        "m_levelUpOwnerSkill": 10
+      }
+    },
+    {
+      "prefab": "Wolf_spiritcaller",
+      "path": "Assets/Characters/Wolf/Wolf_spiritcaller.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$spiritcaller_wolf",
+      "m_faction": 0,
+      "m_group": "",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 40.0
+      },
+      "tameable": {
+        "m_startsTamed": 1,
+        "m_commandable": 0,
+        "m_unsummonDistance": 150.0,
+        "m_unsummonOnOwnerLogoutSeconds": 120.0,
+        "m_levelUpOwnerSkill": 10
+      }
+    },
+    {
+      "prefab": "staff_greenroots_tentaroot",
+      "path": "Assets/GameElements/Items/weapons/_res/staffs/staff_greenroots_tentaroot.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$enemy_summonedroot",
+      "m_faction": 0,
+      "m_group": "",
+      "m_tamed": null,
+      "m_aiSkipTarget": 1,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 20.0
+      }
+    }
+  ],
+  "ordinaryTameables": [
+    {
+      "prefab": "Asksvin",
+      "path": "Assets/Characters/Asksvin/Asksvin.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$enemy_asksvin",
+      "m_faction": 4,
+      "m_group": "asksvin",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 10.0
+      },
+      "tameable": {
+        "m_startsTamed": 0,
+        "m_commandable": 0,
+        "m_unsummonDistance": 0.0,
+        "m_unsummonOnOwnerLogoutSeconds": 0.0,
+        "m_levelUpOwnerSkill": 0
+      }
+    },
+    {
+      "prefab": "Boar",
+      "path": "Assets/Characters/Boar/Boar.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$enemy_boar",
+      "m_faction": 2,
+      "m_group": "boar",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 6.0
+      },
+      "tameable": {
+        "m_startsTamed": 0,
+        "m_commandable": 0,
+        "m_unsummonDistance": 0.0,
+        "m_unsummonOnOwnerLogoutSeconds": 0.0,
+        "m_levelUpOwnerSkill": 0
+      }
+    },
+    {
+      "prefab": "Hen",
+      "path": "Assets/Characters/Chicken/Hen.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$enemy_hen",
+      "m_faction": 2,
+      "m_group": "chicken",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 6.0
+      },
+      "tameable": {
+        "m_startsTamed": 1,
+        "m_commandable": 0,
+        "m_unsummonDistance": 0.0,
+        "m_unsummonOnOwnerLogoutSeconds": 0.0,
+        "m_levelUpOwnerSkill": 0
+      }
+    },
+    {
+      "prefab": "Lox",
+      "path": "Assets/Characters/Lox/Lox.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$enemy_lox",
+      "m_faction": 7,
+      "m_group": "lox",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 6.0
+      },
+      "tameable": {
+        "m_startsTamed": 0,
+        "m_commandable": 0,
+        "m_unsummonDistance": 0.0,
+        "m_unsummonOnOwnerLogoutSeconds": 0.0,
+        "m_levelUpOwnerSkill": 0
+      }
+    },
+    {
+      "prefab": "Moose",
+      "path": "Assets/Characters/moose/Moose.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$enemy_moose",
+      "m_faction": 13,
+      "m_group": "moose",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 6.0
+      },
+      "tameable": {
+        "m_startsTamed": 0,
+        "m_commandable": 0,
+        "m_unsummonDistance": 0.0,
+        "m_unsummonOnOwnerLogoutSeconds": 0.0,
+        "m_levelUpOwnerSkill": 0
+      }
+    },
+    {
+      "prefab": "Wolf",
+      "path": "Assets/Characters/Wolf/Wolf.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$enemy_wolf",
+      "m_faction": 5,
+      "m_group": "wolf",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 20.0
+      },
+      "tameable": {
+        "m_startsTamed": 0,
+        "m_commandable": 1,
+        "m_unsummonDistance": 0.0,
+        "m_unsummonOnOwnerLogoutSeconds": 0.0,
+        "m_levelUpOwnerSkill": 0
+      }
+    }
+  ],
+  "hostileSummonExamples": [
+    {
+      "prefab": "Charred_Twitcher_Summoned",
+      "path": "Assets/Characters/TheCharred/Charred_Twitcher_Summoned.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$enemy_charred_twitcher_summoned",
+      "m_faction": 4,
+      "m_group": "",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 20.0
+      }
+    },
+    {
+      "prefab": "Troll_Summoned",
+      "path": "Assets/Characters/Troll/Troll_Summoned.prefab",
+      "characterType": "Humanoid",
+      "m_name": "$enemy_summonedtroll",
+      "m_faction": 11,
+      "m_group": "",
+      "m_tamed": null,
+      "m_aiSkipTarget": 0,
+      "m_aiCannotTargetOthers": 0,
+      "aiType": "MonsterAI",
+      "ai": {
+        "m_huntPlayer": null,
+        "m_passiveAggresive": 0,
+        "m_aggravatable": 0,
+        "m_alertRange": 20.0
+      }
+    }
+  ],
+  "scanCounts": {
+    "characters": 162,
+    "spawnAbilities": 31,
+    "weapons": 209,
+    "errors": 0
+  }
+}

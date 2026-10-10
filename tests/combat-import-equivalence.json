@@ -1,0 +1,88 @@
+{
+  "source": "BotanicPupPatch-2.1.0",
+  "target": "TooManyLags-FGNAddon-1.0.4",
+  "original_source_preserved": true,
+  "files": [
+    {
+      "file": "FgnCombatOwnership.cs",
+      "source_sha256": "1EEEA58FF57EBBB0E8CC3A271A45D2D43C82BE94D97AEE1B579C6C87CBD70C14",
+      "import_sha256": "DE261174740418CE00A7A7319F9E17E1B47D6DE6366FCAE2CC0DCE2302B0C433",
+      "namespace_branding_protocol_only": false,
+      "additional_changes": [
+        "Config section/descriptions/default adapted for required FGN and 09 - AI Mob Ownership.",
+        "StartupError and optional allowInstall gate added; duplicate policy keeps passive OFF endpoint.",
+        "ServerReady distinguishes explicit absent PUP from invalid present PUP; native readiness at canonical and differing live poses, finite checks, original loaded-instance and final eligibility proof retained.",
+        "Runtime failure comment now describes independent modules.",
+        "1.0.3 adds the narrow non-player Character.Faction.Players exclusion to AI eligibility/watches/reports/queued handoff veto/server loading/lease cleanup/late-hit forwarding. Current-player-only targets and original protections/caps remain unchanged.",
+        "1.0.3 uses weak cached loaded actor references for current live faction and a scene-scoped 1024-entry FIFO cache of prefab Character references for unloaded ZDO classification. Missing prefabs are retried; session/fault/scene lifecycle clears caches; current cached faction is read instead of storing an immutable boolean."
+      ]
+    },
+    {
+      "file": "FgnCombatBridge.cs",
+      "source_sha256": "6DA9D9FFC3CE4456EE1CF0AD6B643B63FF142712503EC371E510A5298D0F90F1",
+      "import_sha256": "E5B01760602EB788D14EBD7E1171DE204EA746A4C28A397600BBE474FBEF54FC",
+      "namespace_branding_protocol_only": true,
+      "additional_changes": null
+    },
+    {
+      "file": "FgnTargetEvents.cs",
+      "source_sha256": "9EF746D94E58AFC179369E49E83B34353F30308579E0CEC064AE6922FFD40D48",
+      "import_sha256": "988A9CBA3CB52BDB704BC08C560BDB97982E2C8622608E298DAAEC159D814541",
+      "namespace_branding_protocol_only": true,
+      "additional_changes": null
+    },
+    {
+      "file": "FgnAttackRetry.cs",
+      "source_sha256": "320D7B22477F9A54084D3EF2641C966A09494FEAA18C260C053A7A3602D63B31",
+      "import_sha256": "FAB5F8E83BFC3E8439FE451EDCDEAD36376DA602A2DA89814AE26CAADBC1946E",
+      "namespace_branding_protocol_only": true,
+      "additional_changes": null
+    },
+    {
+      "file": "FgnCombatStatus.cs",
+      "source_sha256": "28389E5C7B741C0B5E23A4075D02E687C38340F88CE62A4DD16EFF3C46FABF7E",
+      "import_sha256": "B5AF4CB1C9A227A75B758B43EB5D4F76039A45381CA9D841980B2102A26D2794",
+      "namespace_branding_protocol_only": true,
+      "additional_changes": null
+    },
+    {
+      "file": "FieldReader.cs",
+      "source_sha256": "D810DC6A054862BF3667B594B368CB2C967A6000C87E1BA9F83A4647EA37413B",
+      "import_sha256": "CA3FCF0D4AC0001DFD3CE28587A3D8F5C9BA0E718F726043FD89F24798579A4E",
+      "namespace_branding_protocol_only": true,
+      "additional_changes": null
+    },
+    {
+      "file": "CellReadiness.cs",
+      "source_sha256": "D07C31F0528E7DFD129177BB4D12096AC14FCB16EE02549DE7FC91A3A1AD1D97",
+      "import_sha256": "F5A5C0A044CCE193A78980641425F1A74938A832766A50950AA11C4B20B92959",
+      "namespace_branding_protocol_only": false,
+      "additional_changes": [
+        "Usage comment adapted; executable code unchanged."
+      ]
+    },
+    {
+      "file": "NativePup.cs",
+      "source_sha256": "14558BAEF190889E7C99C8443418065CE2C3D1AF8A603E76D6B16BBE647D8389",
+      "import_sha256": "6099650C9E4D870B75350A761E0B953AB162FD9831C56CF7FA872EAB977E2D10",
+      "namespace_branding_protocol_only": false,
+      "additional_changes": [
+        "Trimmed to readiness fields/delegates/helpers and full CellReadiness proof.",
+        "Removed body/support/retention APIs, physics hooks, bounds helper and unrelated counters.",
+        "Explicit null constructor means PUP absent; present adapter validates original verified hash; present inactive PUP denies readiness."
+      ]
+    },
+    {
+      "file": "FriendlyCreatures.cs",
+      "source_sha256": null,
+      "import_sha256": "DC4622B6EA1EBC46CBCD433839DE5244D1E7D9C112F4340CA2DDEB3541242F9F",
+      "namespace_branding_protocol_only": false,
+      "additional_changes": [
+        "New pure helper: live non-player Character.GetFaction()==Character.Faction.Players. No prefab names, Tameable/unsummon heuristic, world/cache references or ownership mutations."
+      ]
+    }
+  ],
+  "optional_pup_adapter": "Trimmed to exact readiness only; absent adapter explicit, unsupported present PUP fails closed. Body/support/retention/physics hook surfaces excluded.",
+  "test_changes": "Namespace, protocol/constants and fixture paths adapted; added absent-PUP/duplicate-policy proof; CLR host propagates Environment.ExitCode; native audit scoped to combat plus exact optional readiness contract. 1.0.3 adds friendly/ordinary-tamed/hostile PlayerSpawned/root/cache bound/reset/missing-prefab/loaded-faction/current-veto fixtures and audits the actual native raw-faction API; copy equivalence is explicitly broken by this narrow additional filter.",
+  "faction_scope": "Current loaded actor faction wins. Unloaded creatures use current prefab faction because native faction is not carried in these ZDOs; arbitrary modded per-instance faction mutation while unloaded is not promised."
+}

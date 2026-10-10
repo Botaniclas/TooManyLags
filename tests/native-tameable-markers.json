@@ -1,0 +1,90 @@
+[
+  {
+    "prefab": "Asksvin",
+    "path": "Assets/Characters/Asksvin/Asksvin.prefab",
+    "m_startsTamed": 0,
+    "m_commandable": 0,
+    "m_unsummonDistance": 0.0,
+    "m_unsummonOnOwnerLogoutSeconds": 0.0
+  },
+  {
+    "prefab": "Bjorn_spiritcaller",
+    "path": "Assets/Characters/Bjorn/Bjorn_spiritcaller.prefab",
+    "m_startsTamed": 1,
+    "m_commandable": 0,
+    "m_unsummonDistance": 150.0,
+    "m_unsummonOnOwnerLogoutSeconds": 120.0
+  },
+  {
+    "prefab": "Boar",
+    "path": "Assets/Characters/Boar/Boar.prefab",
+    "m_startsTamed": 0,
+    "m_commandable": 0,
+    "m_unsummonDistance": 0.0,
+    "m_unsummonOnOwnerLogoutSeconds": 0.0
+  },
+  {
+    "prefab": "Boar_spiritcaller",
+    "path": "Assets/Characters/Boar/Boar_spiritcaller.prefab",
+    "m_startsTamed": 1,
+    "m_commandable": 0,
+    "m_unsummonDistance": 150.0,
+    "m_unsummonOnOwnerLogoutSeconds": 120.0
+  },
+  {
+    "prefab": "Hen",
+    "path": "Assets/Characters/Chicken/Hen.prefab",
+    "m_startsTamed": 1,
+    "m_commandable": 0,
+    "m_unsummonDistance": 0.0,
+    "m_unsummonOnOwnerLogoutSeconds": 0.0
+  },
+  {
+    "prefab": "Lox",
+    "path": "Assets/Characters/Lox/Lox.prefab",
+    "m_startsTamed": 0,
+    "m_commandable": 0,
+    "m_unsummonDistance": 0.0,
+    "m_unsummonOnOwnerLogoutSeconds": 0.0
+  },
+  {
+    "prefab": "Moose",
+    "path": "Assets/Characters/moose/Moose.prefab",
+    "m_startsTamed": 0,
+    "m_commandable": 0,
+    "m_unsummonDistance": 0.0,
+    "m_unsummonOnOwnerLogoutSeconds": 0.0
+  },
+  {
+    "prefab": "Moose_spiritcaller",
+    "path": "Assets/Characters/moose/Moose_spiritcaller.prefab",
+    "m_startsTamed": 1,
+    "m_commandable": 0,
+    "m_unsummonDistance": 150.0,
+    "m_unsummonOnOwnerLogoutSeconds": 120.0
+  },
+  {
+    "prefab": "Skeleton_Friendly",
+    "path": "Assets/Characters/Skeleton/Skeleton_Friendly.prefab",
+    "m_startsTamed": 1,
+    "m_commandable": 0,
+    "m_unsummonDistance": 150.0,
+    "m_unsummonOnOwnerLogoutSeconds": 120.0
+  },
+  {
+    "prefab": "Wolf",
+    "path": "Assets/Characters/Wolf/Wolf.prefab",
+    "m_startsTamed": 0,
+    "m_commandable": 1,
+    "m_unsummonDistance": 0.0,
+    "m_unsummonOnOwnerLogoutSeconds": 0.0
+  },
+  {
+    "prefab": "Wolf_spiritcaller",
+    "path": "Assets/Characters/Wolf/Wolf_spiritcaller.prefab",
+    "m_startsTamed": 1,
+    "m_commandable": 0,
+    "m_unsummonDistance": 150.0,
+    "m_unsummonOnOwnerLogoutSeconds": 120.0
+  }
+]

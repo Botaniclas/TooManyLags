@@ -1,0 +1,14 @@
+bin/
+obj/
+release-thunderstore/
+release-config/
+outputs/
+verification.json
+.vs/
+.idea/
+*.user
+*.suo
+*.dll
+*.exe
+*.pdb
+*.zip

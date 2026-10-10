@@ -56,7 +56,7 @@ Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOw
 
 1. Install **BepInEx, FiresGhettoNetworking and the same mod version on the dedicated server and every client**. Copy `TooManyLags.dll` into `BepInEx/plugins/TooManyLags/`.
 2. Copy the supplied config into `BepInEx/config/`, or let first startup generate it. Keep `EnableAIOwnership` consistent across server and clients.
-3. Restart. TooManyLags enables **Server-Side Simulation** and **Fix Lost Station Inserts** on the dedicated server, disables both **Server ZDO Ownership Transfer** options, and enables **Balance Creature Ownership** when `EnableAIOwnership=true`. These session settings take priority over the FGN config; other FGN settings remain yours.
+3. Restart. **TooManyLags automatically applies all required FiresGhettoNetworking settings at startup; no manual FGN configuration is needed.** These overrides apply to the current session only. Your saved FGN config and other FGN settings remain unchanged.
 
 **PUP FPS is optional.**
 

@@ -1,5 +1,10 @@
 # Changelog
 
+**Unreleased**
+```
+- Clarifies that installation requires no manual FiresGhettoNetworking configuration; required settings are applied automatically for the current session.
+```
+
 **1.0.6**
 ```
 - Applies required FiresGhettoNetworking settings for the current session without changing its saved config: dedicated-server simulation and station routing on, broad/selective server ownership off, creature balancing on when AI ownership is enabled.

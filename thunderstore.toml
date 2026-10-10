@@ -5,7 +5,7 @@ schemaVersion = "0.0.1"
 namespace = "Botaniclas"
 name = "TooManyLags_FGN_Addon"
 versionNumber = "1.0.6"
-description = "FiresGhettoNetworking addon for near-zero latency on locally owned interactions. Shared areas use the server, aiming to make players feel their own ping instead of others'. Includes Hostile Mobs ownership."
+description = "FiresGhettoNetworking addon designed to minimize latency for every player through dynamic object and mob ownership, reducing the impact of other players' lag."
 websiteUrl = "https://github.com/Botaniclas/TooManyLags"
 containsNsfwContent = false
 

@@ -2,7 +2,7 @@
   "name": "TooManyLags_FGN_Addon",
   "version_number": "1.0.6",
   "website_url": "https://github.com/Botaniclas/TooManyLags",
-  "description": "FiresGhettoNetworking addon for near-zero latency on locally owned interactions. Shared areas use the server, aiming to make players feel their own ping instead of others'. Includes Hostile Mobs ownership.",
+  "description": "FiresGhettoNetworking addon designed to minimize latency for every player through dynamic object and mob ownership, reducing the impact of other players' lag.",
   "dependencies": [
     "denikson-BepInExPack_Valheim-5.4.2351",
     "VerdantsAscent-FiresGhettoNetworking-1.5.36"

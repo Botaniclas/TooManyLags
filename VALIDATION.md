@@ -1,4 +1,6 @@
-# TooManyLags - FGN Addon 1.0.4: verification
+# TooManyLags - FGN Addon 1.0.5: verification
+
+Version 1.0.5 changes the release version and package metadata only. Runtime ownership behavior remains the same as 1.0.4.
 
 Based on TooManyLags 1.0.0 and BotanicServerAuthority 3.7.4. Existing grid geometry, directional timers, inventory consent, refilling protection, summon exclusion, default ownership, regional bypass and unloading cleanup are retained. The original project remains unchanged.
 

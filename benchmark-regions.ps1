@@ -24,4 +24,4 @@ if($LASTEXITCODE -ne 0){throw 'Region benchmark compile failed.'}
 & $authorityExecutable | Tee-Object -FilePath (Join-Path $authorityOutput 'results.txt')
 if($LASTEXITCODE -ne 0){throw 'Region benchmark failed.'}
 $authorityHashes=@{};foreach($authorityFile in (Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs')){$authorityHashes[$authorityFile.Name]=(Get-FileHash -LiteralPath $authorityFile.FullName -Algorithm SHA256).Hash}
-[ordered]@{version='1.0.4';synthetic=$true;baseline='3.6.0';recordedAt=(Get-Date).ToString('o');sourceHashes=$authorityHashes;output=[IO.File]::ReadAllText((Join-Path $authorityOutput 'results.txt'))} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $authorityOutput 'results.json') -Encoding UTF8
+[ordered]@{version='1.0.5';synthetic=$true;baseline='3.6.0';recordedAt=(Get-Date).ToString('o');sourceHashes=$authorityHashes;output=[IO.File]::ReadAllText((Join-Path $authorityOutput 'results.txt'))} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $authorityOutput 'results.json') -Encoding UTF8

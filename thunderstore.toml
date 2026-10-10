@@ -1,0 +1,34 @@
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "Botaniclas"
+name = "TooManyLags_FGN_Addon"
+versionNumber = "1.0.5"
+description = "FiresGhettoNetworking addon for near-zero latency on locally owned interactions. Shared areas use the server, aiming to make players feel their own ping instead of others'. Includes Hostile Mobs ownership."
+websiteUrl = "https://github.com/Botaniclas/TooManyLags"
+containsNsfwContent = false
+
+[package.dependencies]
+denikson-BepInExPack_Valheim = "5.4.2351"
+VerdantsAscent-FiresGhettoNetworking = "1.5.36"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "./outputs"
+
+[[build.copy]]
+source = "./bin/TooManyLags.dll"
+target = "TooManyLags.dll"
+
+[[build.copy]]
+source = "./CHANGELOG.md"
+target = "CHANGELOG.md"
+
+[publish]
+repository = "https://thunderstore.io"
+communities = ["valheim"]
+
+[publish.categories]
+valheim = ["mods", "tweaks", "server-side", "client-side", "ai-generated"]

@@ -5,6 +5,7 @@
 - With KeepOwnershipOnCellExit enabled in directional mode, only inner/red fields transfer automatically when one player remains after an overlap ends.
 - Forward/outer fields retain their settled owner until the remaining player's next cell or heading-sector change, without repeated field jobs while stationary. Existing handoff protections remain active.
 - Adds a simple 256x256 icon showing LAGS crossed out with a red X.
+- Adds the GitHub project link to the package metadata.
 ```
 
 **1.0.3**

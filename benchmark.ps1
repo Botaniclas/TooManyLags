@@ -11,7 +11,7 @@ if($LASTEXITCODE -ne 0){throw 'Benchmark compile failed.'}
 & $authorityExe | Tee-Object -FilePath (Join-Path $authorityOutput 'results.txt')
 if($LASTEXITCODE -ne 0){throw 'Benchmark failed.'}
 [ordered]@{
-    version='1.0.6';synthetic=$true;recordedAt=(Get-Date).ToString('o')
+    version='1.0.7';synthetic=$true;recordedAt=(Get-Date).ToString('o')
     baselineDirectory=$BaselineDirectory
     gridSha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'src\AuthorityGrid.cs') -Algorithm SHA256).Hash
     baselineSha256=(Get-FileHash -LiteralPath (Join-Path $BaselineDirectory 'src\AuthorityGrid.cs') -Algorithm SHA256).Hash

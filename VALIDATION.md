@@ -40,6 +40,8 @@ The pure grid stores one deferred bit per active policy and one refresh bit per 
 
 ## Checks and limits
 
+Version 1.0.7 changes the installation wording to explicitly state that required FiresGhettoNetworking settings are automatic. Runtime source and configuration defaults remain the same as 1.0.6 except for the plugin/assembly version and generated config header. The release is rebuilt and checked before packaging.
+
 The 1.0.6 documentation refresh adds the two supplied GitHub videos to the repository README and links their GIF conversions from the Thunderstore README. Both GIFs were decoded frame by frame and visually reviewed: 640x358 pixels, 10 fps, infinite loop, 8.2/13.8 seconds. The original recordings remain available through each GIF's link. Media are hosted in the GitHub repository, outside the install ZIP. The DLL and previous runtime test results are unchanged; metadata/media hashes and archive contents were checked again before publication.
 
 Build uses installed Valheim/BepInEx APIs with warnings treated as errors. Controller/grid, directional geometry, field cache, region bypass, inventory and refill suites run against production logic. AI fixtures run on both CLR and Valheim's embedded Mono; optional readiness and modern runtime bridge fixtures are separate. Native IL/contracts are checked against FiresGhettoNetworking 1.5.36 and 1.5.41. Both ownership transpilers compose in either order, preserving native branches and changing only the intended getter/two calls. Startup validates actual contracts rather than rejecting FGN version numbers.

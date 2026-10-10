@@ -1,6 +1,6 @@
 # Changelog
 
-**Unreleased**
+**1.0.7**
 ```
 - Clarifies that installation requires no manual FiresGhettoNetworking configuration; required settings are applied automatically for the current session.
 ```

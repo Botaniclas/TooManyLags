@@ -157,8 +157,12 @@ internal static class NativeCombatAudit
             int policyCheck=startPolicy.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="ExistingMobPolicy"),
                 policyInstall=startPolicy.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="FgnCombatOwnership"&&((MethodReference)i.Operand).Name=="Install");
             Check(policyCheck>=0&&policyInstall>policyCheck,"actual startup detects the preferred policy before installing addon combat hooks");
-            Check(policyInstall>=2&&startPolicy[policyInstall-1].OpCode.Name=="ceq"&&startPolicy[policyInstall-2].OpCode.Name=="ldc.i4.0",
-                "actual startup inverts the duplicate-policy result for the optional install gate");
+            Check(policyInstall>=8 && startPolicy[policyInstall-8].OpCode.Name == startPolicy[policyCheck+1].OpCode.Name.Replace("stloc", "ldloc") &&
+                startPolicy[policyInstall-7].OpCode.Name.StartsWith("brtrue") && ReferenceEquals(startPolicy[policyInstall-7].Operand,startPolicy[policyInstall-1]) &&
+                startPolicy[policyInstall-5].Operand is FieldReference && ((FieldReference)startPolicy[policyInstall-5].Operand).Name=="playerSimulation" &&
+                startPolicy[policyInstall-4].OpCode.Name=="ldc.i4.0" && startPolicy[policyInstall-3].OpCode.Name=="ceq" &&
+                startPolicy[policyInstall-1].OpCode.Name=="ldc.i4.0" && ReferenceEquals(startPolicy[policyInstall-2].Operand,startPolicy[policyInstall]),
+                "actual startup suppresses native combat when a duplicate policy or player-simulation mode is selected");
             MethodDefinition existingPolicy=Method(plugin,"ExistingMobPolicy");
             Check(new[]{"botanic.pup.patch","BotanicPupPatch.FgnCombatOwnership","Enabled","botanic.pup.patch.fgn.aiownership"}.All(value=>
                 existingPolicy.Body.Instructions.Any(i=>i.OpCode.Name=="ldstr"&&(string)i.Operand==value)),
@@ -176,7 +180,7 @@ internal static class NativeCombatAudit
             TypeDefinition factions=nativeCharacter.NestedTypes.Single(t=>t.Name=="Faction");
             Check(Convert.ToInt32(factions.Fields.Single(f=>f.Name=="Players").Constant)==0&&
                 Convert.ToInt32(factions.Fields.Single(f=>f.Name=="PlayerSpawned").Constant)==11,"native friendly Players and hostile PlayerSpawned factions remain distinct");
-            TypeDefinition friendly=addon.MainModule.Types.Single(t=>t.Name=="FriendlyCreatures");
+            TypeDefinition friendly=addon.MainModule.Types.Single(t=>t.FullName=="TooManyLags.FriendlyCreatures");
             MethodDefinition friendlyPredicate=Method(friendly,"IsFriendly");
             Check(friendly.Fields.Count==0&&new[]{"IsPlayer","GetFaction"}.All(name=>friendlyPredicate.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name==name))&&
                 !friendlyPredicate.Body.Instructions.Any(i=>i.Operand is MethodReference&&new[]{"IsTamed","GetComponent","GetPrefab"}.Contains(((MethodReference)i.Operand).Name)),

@@ -55,6 +55,8 @@ internal static class NativeReleaseAudit
             }
             if (actorOnly)
             {
+                authority.GetType("TooManyLags.PlayerSimulation.NativeContracts", true).GetMethod("Validate", Static).Invoke(null, null);
+                Console.WriteLine("PASS: Actual player-simulation inventory and sector contracts in modern interface-compatible metadata host.");
                 Console.WriteLine("PASS: " + assertions + " actual native Pickable rewrite assertions in modern interface-compatible metadata host. No Unity harvest executed.");
                 return;
             }
@@ -189,9 +191,9 @@ internal static class NativeReleaseAudit
                     {
                         Check(called.DeclaringType.FullName != "System.Version", "Runtime numeric version gate remains");
                         Check(!((called.DeclaringType.FullName == "ZRpc" || called.DeclaringType.FullName == "ZRoutedRpc") &&
-                            called.Name == "Register"), "Authority registers/replaces a client RPC callback");
+                            called.Name == "Register") || (type.FullName == "TooManyLags.PlayerSimulation.Network" && method.Name == "Register"), "Authority registers/replaces a native client RPC callback");
                         Check(!(called.DeclaringType.FullName == "System.Reflection.FieldInfo" && called.Name == "SetValue") ||
-                            (type.FullName == "TooManyLags.FgnSessionSettings" && method.Name == "Apply"),
+                            (type.FullName == "TooManyLags.FgnSessionSettings" && (method.Name == "Apply" || method.Name == "CreatureBalancing")),
                             "Reflection writes must be confined to approved FGN startup settings; native gameplay fields remain untouched");
                     }
                     string text = instruction.Operand as string;
@@ -349,7 +351,7 @@ internal static class NativeReleaseAudit
                 PatchParameters(type, target); targets++;
             }
         }
-        Check(targets == 20, "Unexpected Harmony target count: " + targets);
+        Check(targets == 40, "Unexpected Harmony target count: " + targets);
     }
     private static MethodDefinition ByToken(TypeDefinition type, int token)
     { foreach (MethodDefinition method in type.Methods) if (method.MetadataToken.ToInt32() == token) return method; return null; }
@@ -432,6 +434,13 @@ internal static class NativeReleaseAudit
             foreach (ParameterDefinition parameter in method.Parameters)
             {
                 string name = parameter.Name;
+                if (name == "__state")
+                {
+                    string state = parameter.ParameterType.FullName.TrimEnd('&'); bool paired = false;
+                    foreach (MethodDefinition other in patch.Methods) foreach (ParameterDefinition arg in other.Parameters)
+                        if (!ReferenceEquals(other, method) && arg.Name == "__state" && arg.ParameterType.FullName.TrimEnd('&') == state) paired = true;
+                    Check(paired, "Harmony state must have matching prefix/postfix types"); continue;
+                }
                 if (name == "__runOriginal") { Check(parameter.ParameterType.FullName == "System.Boolean", "runOriginal type"); continue; }
                 if (name == "__originalMethod") { Check(parameter.ParameterType.FullName == "System.Reflection.MethodBase", "originalMethod type"); continue; }
                 if (name == "__instance") { Check(parameter.ParameterType.FullName == native.DeclaringType.FullName, "instance type mismatch"); continue; }
@@ -649,6 +658,11 @@ internal static class NativeReleaseAudit
             Check(reads, "Installed legacy ownership prefix reads the current config reference: " + typeName);
         }
         Check(authority.GetType("TooManyLags.FgnSessionSettings", true).GetMethod("Apply", Static) != null, "Production session setup included");
+        authority.GetType("TooManyLags.FgnSimulationStartup", true).GetMethod("Validate", Static).Invoke(null, new object[] { initialize });
+        Type latency = authority.GetType("TooManyLags.PlayerSimulation.NativeLatency", true);
+        latency.GetMethod("Bind", Static).Invoke(null, new object[] { fgn });
+        Check(plugin.GetProperty("Harmony", Static) != null, "Actual FiresGhettoNetworking patch owner available for startup removal");
+        Console.WriteLine("PASS: Player-simulation mode validates actual simulation groups, connection RTT delegates and native inventory/sector contracts.");
         Console.WriteLine("PASS: Actual FGN session contracts: native simulation initializer/completion order, dedicated and scene-scheduler safety guards, five config fields, stale mode flags and live legacy ownership gates.");
     }
     private static void CheckConfig(FieldInfo field, string name)

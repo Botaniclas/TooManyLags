@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using BepInEx.Configuration;
 using TooManyLags;
+using HarmonyLib;
 
 internal static class FgnSessionSettingsTests
 {
@@ -92,6 +93,31 @@ internal static class FgnSessionSettingsTests
         try { FgnSessionSettings.Apply(assembly, missing, true, true, false); }
         catch (NotSupportedException) { rejected = true; }
         Check(rejected && ReferenceEquals(untouched, FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnership), "uninitialized config is rejected before any replacement");
+        foreach (bool active in new[] { false, true })
+        {
+            ConfigFile original = Setup(path, active, true);
+            string saved = File.ReadAllText(path);
+            var fgn = FiresGhettoNetworkMod.FiresGhettoNetworkMod.Harmony;
+            MethodInfo target = typeof(SettingsTarget).GetMethod("Run");
+            fgn.Patch(target, prefix: new HarmonyMethod(typeof(FiresGhettoNetworkMod.ServerAuthorityPatches), "Prefix"));
+            fgn.Patch(target, postfix: new HarmonyMethod(typeof(FiresGhettoNetworkMod.NetworkKeep), "Postfix"));
+            var other = new Harmony("test.othermod");
+            other.Patch(target, postfix: new HarmonyMethod(typeof(SettingsTarget), "Other"));
+            Check(!FgnSessionSettings.Apply(assembly, original, true, true, true, true), "player-simulation mode never starts simulation, even with a scene scheduler");
+            Check(!FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerAuthority.Value && !FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive && FiresGhettoNetworkMod.FiresGhettoNetworkMod.Starts == 0, "already active and inactive simulation both become inactive");
+            Patches remaining = Harmony.GetPatchInfo(target);
+            Check(remaining.Prefixes.Count == 0 && remaining.Postfixes.Count == 2, "only simulation hooks removed; network and other mod hooks preserved");
+            Check(!FiresGhettoNetworkMod.CreatureOwnership.ServerOwnsCreatures && !FiresGhettoNetworkMod.HelmOwnership.ServerOwnsShips, "server creature/ship mode flags reset");
+            FgnSessionSettings.CreatureBalancing(assembly, original, false);
+            Check(!FiresGhettoNetworkMod.CreatureOwnership.ConfigEnabled.Value, "fallback policy disables duplicate native creature balancing");
+            original.Save(); Check(File.ReadAllText(path) == saved, "saved config unchanged after disabling simulation and balancing");
+            fgn.UnpatchSelf(); other.UnpatchSelf();
+        }
+        ZNet.instance = new object();
+        bool liveBlocked = false;
+        try { FgnSessionSettings.Apply(assembly, Setup(path, false, true), true, true, false, true); }
+        catch (NotSupportedException) { liveBlocked = true; }
+        ZNet.instance = null; Check(liveBlocked, "switching simulation while a world exists is refused");
         File.Delete(path);
         Console.WriteLine("PASS: " + checks + " startup session assertions using real BepInEx.ConfigFile and FGN startup doubles; saved values, repeated init, disabled AI, client scope and safety blocks checked. No Unity session.");
     }
@@ -112,22 +138,42 @@ namespace FiresGhettoNetworkMod
     {
         public static ConfigEntry<bool> ConfigEnableServerAuthority, ConfigEnableServerOwnership, ConfigEnableServerOwnershipSelective;
         internal static int Starts;
+        internal static Harmony Harmony { get; private set; }
+        static FiresGhettoNetworkMod() { Harmony = new Harmony("com.Fire.FiresGhettoNetworkMod"); }
         private static void ApplyServerSideSimulationPatches()
         {
             if (!ConfigEnableServerAuthority.Value || ConfigEnableServerOwnership.Value || ConfigEnableServerOwnershipSelective.Value ||
                 !StationRouter.ConfigEnabled.Value || CreatureOwnership.ServerOwnsCreatures || HelmOwnership.ServerOwnsShips)
                 throw new Exception("Native initialization received unsafe settings.");
             Starts++;
+            TryPatchAll(typeof(ShipFixesGroup)); TryPatchAll(typeof(ServerShipSimulationPatches)); TryPatchAll(typeof(ServerAuthorityPatches));
+            TryPatchAll(typeof(ServerStabilityPatches)); TryPatchAll(typeof(MonsterAIPatches)); TryPatchAll(typeof(ServerOwnershipPatches)); TryPatchAll(typeof(ServerOwnershipPatchesV3));
         }
+        private static void TryPatchAll(Type type) { }
     }
     internal static class StationRouter { public static ConfigEntry<bool> ConfigEnabled; }
     internal static class CreatureOwnership { public static ConfigEntry<bool> ConfigEnabled; internal static bool ServerOwnsCreatures; }
     internal static class HelmOwnership { internal static bool ServerOwnsShips; }
-    internal static class ServerAuthorityPatches { internal static bool SimulationActive; }
+    internal static class ServerAuthorityPatches { internal static bool SimulationActive; public static bool Prefix() { return false; } }
+    internal static class ShipFixesGroup { }
+    internal static class ServerShipSimulationPatches { }
+    internal static class ServerStabilityPatches { }
+    internal static class MonsterAIPatches { }
+    internal static class ServerOwnershipPatches { }
+    internal static class ServerOwnershipPatchesV3 { }
+    internal static class NetworkKeep { public static void Postfix() { } }
     internal static class ServerClientUtils { public static bool IsDedicatedServerDetected { get; set; } }
     internal static class ValheimCommunityPatchCompat
     {
         public static bool SchedulesSceneObjects { get; set; }
         public static void Detect() { }
     }
+}
+internal static class ZNet { internal static object instance; }
+internal static class ZNetScene { internal static readonly object instance = null; }
+internal static class SettingsTarget
+{
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    public static void Run() { }
+    public static void Other() { }
 }

@@ -16,7 +16,7 @@ foreach ($path in @($compiler) + $references) { if (!(Test-Path -LiteralPath $pa
 $arguments = @('/nologo', '/noconfig', '/nostdlib+', '/target:library', '/optimize+', '/warnaserror+', '/langversion:5',
     ('/out:' + (Join-Path $output 'TooManyLags.dll')))
 $arguments += $references | ForEach-Object { '/reference:' + $_ }
-$arguments += Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' | Select-Object -ExpandProperty FullName
+$arguments += Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' -Recurse | Select-Object -ExpandProperty FullName
 & $compiler @arguments
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 Get-Item -LiteralPath (Join-Path $output 'TooManyLags.dll') | Select-Object FullName,Length

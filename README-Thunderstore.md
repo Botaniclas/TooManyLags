@@ -1,12 +1,21 @@
-# TooManyLags - FGN Addon
+# TooManyLags - FiresGhettoNetworking Addon
 
 A FiresGhettoNetworking extension designed to make nearby interactions feel almost latency-free: locally owned objects are processed directly on your client, without waiting for another player's connection. In shared areas, the server takes over so each player primarily feels their own latency instead of someone else's lag. Includes ownership improvements for Hostile Mobs.
 
 ## Forced FiresGhettoNetworking settings
 
-TooManyLags applies required FiresGhettoNetworking settings at startup, including enabling **Server-Side Simulation** on the dedicated server. Their saved config values are ignored while TooManyLags is enabled; the config file stays unchanged. Other FGN settings and incompatible-mod safety blocks remain active.
+TooManyLags applies required FiresGhettoNetworking settings at startup, including enabling **Server-Side Simulation** on the dedicated server by default. Their saved config values are ignored while TooManyLags is enabled; the config file stays unchanged. Other FiresGhettoNetworking settings and incompatible-mod safety blocks remain active.
 
-**If Server-Side Simulation was previously off, enabling it adds CPU workload to the server.**
+**Quick start:** Install both mods on the dedicated server and every client, then play. FiresGhettoNetworking's default settings and Auto-Tune, combined with TooManyLags' defaults and required overrides, are intended to provide an optimal starting setup for almost all dedicated servers without manual configuration.
+
+**Server-Side Simulation adds CPU workload to the server.** For a weak or already overloaded server CPU, set `NoServerSideSimulation=true`. Objects and Hostile Mobs then stay player-owned; shared fields prefer the better-connected player. Server-owned buildings, default ownership and permanent station ownership are unavailable. Inventory, refilling and active-use safeguards remain; both owner clients need the mod for full handoffs. Shared interactions can still depend on the selected player's latency.
+
+| Your setup | Recommended edition and mode |
+|---|---|
+| Dedicated server, strong CPU | This addon with **Server-Side Simulation** (default). |
+| Dedicated server, weak CPU, with FiresGhettoNetworking | This addon with `NoServerSideSimulation=true`. |
+| Dedicated server, weak CPU, without FiresGhettoNetworking | **[TooManyLags - Standalone](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_Standalone/)**. |
+| Locally hosted multiplayer | **[TooManyLags - Standalone](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_Standalone/)**. |
 
 ## Why it helps
 
@@ -45,18 +54,19 @@ Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOw
 
 | Feature | Defaults and options |
 |---|---|
+| Simulation mode | `NoServerSideSimulation=false`: full Server-Side Simulation. Set true for weak server CPUs; transfers stay between players. |
 | Grid | 4-metre cells, rounded 7x7. Also 8/16 metres and square 3x3/rounded 5x5. 4 metres requires a rounded grid. |
 | Direction and delays | Camera direction; inner 0s, forward 0.2s, outer 3s. Full-grid mode uses 2s. Missing camera data uses character heading. |
 | Checks | Movement and camera each default to 0.1s. Camera checks support 0.05–5s, allowing up to 20 checks per second. Unchanged sectors create no new field requests or camera writes. Network delivery can add delay. |
 | Leaving fields | Keep ownership: on. In directional mode, when only one player remains, red fields transfer automatically; forward/outer fields keep their owner until that player's next cell or heading-sector change. Fully vacated fields retain ownership. Native release still applies. |
-| Categories and overrides | 24 object groups; separate static, default-interactive and permanent-refill server ownership. All three overrides default off. |
-| Hostile Mobs | AI ownership on; server fallback target ping 200ms, other-player distance 6 metres. Requires FiresGhettoNetworking creature balancing. |
+| Categories and overrides | 24 object groups; separate static, default-interactive and permanent-refill server ownership. All three overrides default off and are ignored with NoServerSideSimulation=true. |
+| Hostile Mobs | AI ownership on; server fallback target ping 200ms, other-player distance 6 metres. Without Server-Side Simulation, fallback uses a lower-latency nearby player. |
 
 ## Requirements and installation
 
 1. Install **BepInEx, FiresGhettoNetworking and the same mod version on the dedicated server and every client**. Copy `TooManyLags.dll` into `BepInEx/plugins/TooManyLags/`.
 2. Copy the supplied config into `BepInEx/config/`, or let first startup generate it. Keep `EnableAIOwnership` consistent across server and clients.
-3. Restart. **TooManyLags automatically applies all required FiresGhettoNetworking settings at startup; no manual FGN configuration is needed.** These overrides apply to the current session only. Your saved FGN config and other FGN settings remain unchanged.
+3. Restart. **TooManyLags automatically applies all required FiresGhettoNetworking settings at startup; no manual FiresGhettoNetworking configuration is needed.** These overrides apply to the current session only. Your saved FiresGhettoNetworking config and other FiresGhettoNetworking settings remain unchanged.
 
 **PUP FPS is optional.**
 

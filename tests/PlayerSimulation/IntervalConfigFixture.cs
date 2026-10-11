@@ -1,0 +1,8 @@
+namespace TooManyLags.PlayerSimulation
+{
+    internal static class IntervalConfig
+    {
+        internal const string Key = "MovementRotationCheckIntervalSeconds";
+        internal const float Default = .1f;
+    }
+}

@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.7.0")]
+[assembly: AssemblyVersion("1.0.8.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FGN Addon", "1.0.7")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.8")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.7", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.8", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -27,22 +27,25 @@ namespace TooManyLags
         private bool enabledMod;
         private CameraPublisher camera;
         private PluginInfo networkPlugin;
+        private bool playerSimulation;
         private void Awake()
         {
             instance = this;
-            bool enabled = Config.Bind("01 - General", "Enabled", true, "Enable TooManyLags on the dedicated server and clients. Required FiresGhettoNetworking settings are overridden for this session, including Server-Side Simulation on the dedicated server. This can increase server CPU usage. Restart after config changes.").Value;
+            bool enabled = Config.Bind("01 - General", "Enabled", true, "Enable TooManyLags on the dedicated server and clients. Required FiresGhettoNetworking settings are applied for this session. Restart after config changes.").Value;
+            bool noSimulation = Config.Bind("01 - General", "NoServerSideSimulation", false,
+                "Recommended for dedicated servers with a weak or already overloaded CPU. true: disable FiresGhettoNetworking Server-Side Simulation and keep simulation on players; shared fields prefer the player with lower latency. Functionality is limited: no server ownership, and server-owned building/default/refill options are ignored. Server setting; restart required. false: full Server-Side Simulation mode.").Value;
             logs = Config.Bind("01 - General", "EnableLogs", false, "Enable extra diagnostic messages. Startup failures are always reported.").Value;
             Diagnostics = logs;
-            bool buildings = Config.Bind("02 - Static Buildings", "ServerOwnedStaticBuildings", false, "Keep eligible non-interactive building pieces server-owned. Independent of the interactive grid.").Value;
+            bool buildings = Config.Bind("02 - Static Buildings", "ServerOwnedStaticBuildings", false, "Keep eligible non-interactive building pieces server-owned. Independent of the interactive grid. Ignored with NoServerSideSimulation=true.").Value;
             bool defaultInteractives = Config.Bind("03 - Default Ownership and Overrides", "ServerOwnedInteractivesByDefault", false,
-                "true: server default outside player coverage, with grid transfers nearby. false: vanilla ownership when players are alone or far apart. KeepOwnershipOnCellExit preserves ownership after a field is vacated.").Value;
+                "true: server default outside player coverage, with grid transfers nearby. false: vanilla ownership when players are alone or far apart. KeepOwnershipOnCellExit preserves ownership after a field is vacated. Ignored with NoServerSideSimulation=true.").Value;
             bool refillStations = Config.Bind("03 - Default Ownership and Overrides", "ServerOwnedRefillStations", false,
-                "Keep enabled refill stations server-owned, even inside player fields: smelters, cooking/fire stations, fermenters, shield generators and turrets. false: grid rules with 10 seconds of protection after observed refilling.").Value;
+                "Keep enabled refill stations server-owned, even inside player fields: smelters, cooking/fire stations, fermenters, shield generators and turrets. false: grid rules with 10 seconds of protection after observed refilling. Ignored with NoServerSideSimulation=true.").Value;
             int cellSize = Config.Bind("04 - Grid Settings", "GridCellSizeMeters", 4, new ConfigDescription(
                 "Cell size in metres: 4, 8 or 16. 4 metres requires Rounded5x5/Rounded7x7. Does not change vanilla/PUP loading distances.",
                 new AcceptableValueList<int>(4, 8, 16))).Value;
             string patternName = Config.Bind("04 - Grid Settings", "GridCoveragePattern", "Rounded7x7", new ConfigDescription(
-                "Base shape: Square3x3 is square; Rounded5x5/Rounded7x7 are rounded. Directional mode omits central and far rear fields. Fields covered by multiple players belong to the server.",
+                "Base shape: Square3x3 is square; Rounded5x5/Rounded7x7 are rounded. Directional mode omits central and far rear fields. Overlaps use the server, or a lower-latency player with NoServerSideSimulation=true.",
                 new AcceptableValueList<string>(cellSize == 4 ? new[] { "Rounded5x5", "Rounded7x7" } : new[] { "Rounded5x5", "Square3x3", "Rounded7x7" }))).Value;
             GridCoveragePattern pattern = patternName == "Rounded7x7" ? GridCoveragePattern.Rounded7x7 : patternName == "Rounded5x5" ? GridCoveragePattern.Rounded5x5 : GridCoveragePattern.Square3x3;
             bool directional = Config.Bind("05 - Directional Grid Mode", "DirectionalGridMode", true,
@@ -69,15 +72,16 @@ namespace TooManyLags
                 "Client camera check interval in seconds. Minimum 0.05 allows up to 20 checks per second. Only sector changes update player data; no extra camera RPC. Server grid timing is set in section 04.", new AcceptableValueRange<float>(.05f, 5f))).Value;
             if (!enabled) return;
             enabledMod = true;
+            playerSimulation = Application.isBatchMode && noSimulation;
             if (!Chainloader.PluginInfos.TryGetValue(FgnId, out networkPlugin) || !networkPlugin.Instance)
             { enabledMod = false; Logger.LogWarning("TooManyLags inactive: FiresGhettoNetworking is not loaded."); return; }
             try
             {
                 bool enableAI = Config.Bind("09 - AI Mob Ownership", "EnableAIOwnership", true,
-                    "Use the mob's active player target for FGN ownership. Requires two eligible nearby players. Attacks block transfers and retry after attack end. Install the same version on server and clients; restart required.").Value;
+                    "Use the mob's active player target for FiresGhettoNetworking ownership. Requires two eligible nearby players. Attacks block transfers and retry after attack end. Install the same version on server and clients; restart required.").Value;
                 bool activated = FgnSessionSettings.Apply(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config,
-                    Application.isBatchMode, enableAI, Chainloader.PluginInfos.ContainsKey("dev.ontrigger.vpo"));
-                if (activated) Logger.LogWarning("TooManyLags enabled FGN Server-Side Simulation for this session. This can increase server CPU usage; the saved FGN config is unchanged.");
+                    Application.isBatchMode, enableAI, Chainloader.PluginInfos.ContainsKey("dev.ontrigger.vpo"), playerSimulation);
+                if (activated) Logger.LogWarning("TooManyLags enabled FiresGhettoNetworking Server-Side Simulation for this session. This can increase server CPU usage; its saved config is unchanged.");
             }
             catch (Exception error)
             { enabledMod = false; Logger.LogWarning("TooManyLags inactive: required FGN session settings could not be applied. " + error.GetBaseException()); return; }
@@ -94,6 +98,7 @@ namespace TooManyLags
                 { camera = null; Cleanup(); Logger.LogWarning("Camera publication inactive; character heading remains available. " + error.GetBaseException()); }
                 return;
             }
+            if (playerSimulation) return;
             if (!buildings && kinds == Kinds.None) return;
             try
             {
@@ -106,7 +111,10 @@ namespace TooManyLags
                 Controller = new AuthorityController(kinds, delay, bridge, RuntimeFault, buildings, RequestFault, interval, defaultInteractives, refillStations, cellSize, pattern, keepOnExit, directional, innerDelay, outerDelay, forwardDelay);
                 OwnershipTranspiler.Rewrite(PatchProcessor.GetOriginalInstructions(AccessTools.Method(typeof(ZDOMan), "ReleaseNearbyZDOS")), AccessTools.Method(typeof(OwnershipPatch), "Persistent"));
                 PickableServerPatch.Rewrite(PatchProcessor.GetOriginalInstructions(AccessTools.Method(typeof(Pickable), "RPC_Pick")));
-                harmony = new Harmony(Id); harmony.PatchAll(typeof(Plugin).Assembly);
+                harmony = new Harmony(Id);
+                foreach (Type type in typeof(Plugin).Assembly.GetTypes())
+                    if (type.Namespace == typeof(Plugin).Namespace && Attribute.IsDefined(type, typeof(HarmonyPatch)))
+                        harmony.CreateClassProcessor(type).Patch();
                 FgnRpcIntegration.Install(harmony, fgn.Instance.GetType().Assembly);
                 if (logs) Logger.LogInfo("TooManyLags grid ready: cellSize=" + cellSize + "; pattern=" + pattern + "; check=" + interval + "; cameraDirected=" + directional + "; inner=" + innerDelay + "; forward=" + forwardDelay + "; outer=" + outerDelay + "; fullGridDelay=" + delay + "; defaultInteractives=" + defaultInteractives + "; keepOnExit=" + keepOnExit + "; refillStations=" + refillStations + "; " + bridge.State());
             }
@@ -131,13 +139,24 @@ namespace TooManyLags
             try
             {
                 bool duplicate = ExistingMobPolicy();
-                FgnCombatOwnership.Install(Config, networkPlugin.Instance.GetType().Assembly, networkPlugin.Metadata.Version, !duplicate);
+                FgnCombatOwnership.Install(Config, networkPlugin.Instance.GetType().Assembly, networkPlugin.Metadata.Version, !duplicate && !playerSimulation);
                 FgnCombatStatus.Register();
                 if (!String.IsNullOrEmpty(FgnCombatOwnership.StartupError)) Logger.LogWarning("TooManyLags AI ownership inactive: " + FgnCombatOwnership.StartupError);
+                ConfigEntry<bool> ai;
+                bool useMobs = !duplicate && Config.TryGetEntry<bool>(new ConfigDefinition("09 - AI Mob Ownership", "EnableAIOwnership"), out ai) && ai.Value;
+                if (playerSimulation && useMobs) FgnSessionSettings.CreatureBalancing(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config, false);
+                try { PlayerSimulation.Plugin.Initialize(Config, networkPlugin.Instance.GetType().Assembly, playerSimulation, useMobs); }
+                catch (Exception error)
+                {
+                    PlayerSimulation.Plugin.Stop();
+                    if (playerSimulation && useMobs) FgnSessionSettings.CreatureBalancing(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config, true);
+                    Logger.LogWarning("Player-simulation ownership mode inactive; native ownership retained. " + error.GetBaseException());
+                }
             }
             catch (Exception error)
-            { FgnCombatOwnership.Stop(); Logger.LogWarning("TooManyLags AI ownership inactive: " + error.GetBaseException()); }
+            { FgnCombatOwnership.Stop(); PlayerSimulation.Plugin.Stop(); Logger.LogWarning("TooManyLags optional ownership mode inactive: " + error.GetBaseException()); }
         }
+        private void Update() { if (enabledMod) PlayerSimulation.Plugin.Poll(); }
         private static bool ExistingMobPolicy()
         {
             PluginInfo pup;
@@ -153,6 +172,7 @@ namespace TooManyLags
         internal static void SampleCamera() { if (instance && instance.camera != null) instance.camera.Sample(Time.unscaledTime); }
         internal static void InvalidateCamera() { if (instance && instance.camera != null) instance.camera.Reset(true); }
         internal static void Warn(string message) { if (Diagnostics && instance) instance.Logger.LogWarning(message); }
+        internal static void Report(string message) { if (instance) instance.Logger.LogWarning(message); }
         private static string ObjectDescription(Kinds kind)
         {
             string name;
@@ -180,7 +200,7 @@ namespace TooManyLags
                 case Kinds.ShieldGenerators: name = "Shield generators"; break;
                 case Kinds.Pickables: name = "Pickable objects and feasts; excludes loose item drops"; break;
                 case Kinds.Offerings: name = "Offering altars"; break;
-                case Kinds.Vehicles: name = "Idle carts and vehicle controls; active users and ships managed by FiresGhettoNetworking are excluded"; break;
+                case Kinds.Vehicles: name = "Idle carts and vehicle controls; active users are protected; ships with FiresGhettoNetworking simulation are excluded"; break;
                 default: name = "Other compatible modded interactables"; break;
             }
             return name + ". true: managed by TooManyLags; false: vanilla/FiresGhettoNetworking.";
@@ -191,6 +211,7 @@ namespace TooManyLags
         private void OnDestroy()
         {
             FgnCombatOwnership.Stop(); FgnCombatStatus.Reset();
+            PlayerSimulation.Plugin.Stop();
             if (Controller != null) Controller.Reset(); Controller = null;
             if (camera != null) camera.Reset(true); camera = null;
             Native = null; Cleanup(); if (ReferenceEquals(instance, this)) instance = null;

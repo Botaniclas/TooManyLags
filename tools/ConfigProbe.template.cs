@@ -73,7 +73,7 @@ namespace TooManyLags
             reloaded.Config.SaveOnConfigSet = false;
             reloaded.Bind(); VerifyDefaults(reloaded.Config); reloaded.Config.Save();
             if (File.ReadAllText(path) != generated) throw new Exception("Generated config changed during actual BepInEx reload/save.");
-            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 42 settings in nine ordered English feature sections.");
+            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 43 settings in nine ordered English feature sections.");
             Console.WriteLine("PASS: original 38 defaults unchanged; camera interval=0.1, EnableAIOwnership=true, ServerFallbackPingMs=200, ServerFallbackRadius=6.");
             Console.WriteLine("PASS: actual BepInEx camera range accepts 0.05 seconds and clamps to 0.05-5; server movement minimum remains 0.1.");
         }
@@ -93,7 +93,7 @@ namespace TooManyLags
             AcceptableValueRange<float> movementRange = movement.Description.AcceptableValues as AcceptableValueRange<float>;
             if (movementRange == null || movementRange.MinValue != .1f) throw new Exception("Server movement interval minimum changed.");
             Dictionary<string, string> expected = new Dictionary<string, string> {
-                {"01 - General/Enabled", "true"}, {"01 - General/EnableLogs", "false"},
+                {"01 - General/Enabled", "true"}, {"01 - General/NoServerSideSimulation", "false"}, {"01 - General/EnableLogs", "false"},
                 {"02 - Static Buildings/ServerOwnedStaticBuildings", "false"},
                 {"03 - Default Ownership and Overrides/ServerOwnedInteractivesByDefault", "false"},
                 {"03 - Default Ownership and Overrides/ServerOwnedRefillStations", "false"},
@@ -111,7 +111,7 @@ namespace TooManyLags
                 "SapCollectors", "Wards", "MapTables", "Wisplights", "TamedAnimals", "Containers", "ItemStands", "Signs",
                 "Portals", "Fermenters", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables"
             }) expected.Add("07 - Object Categories/" + category, "true");
-            if (config.Count != 42) throw new Exception("Expected 42 config entries; found " + config.Count + ".");
+            if (config.Count != 43) throw new Exception("Expected 43 config entries; found " + config.Count + ".");
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> entry in config) {
                 string key = entry.Key.Section + "/" + entry.Key.Key, value = Convert.ToString(entry.Value.BoxedValue, CultureInfo.InvariantCulture), wanted;
                 if (entry.Value.BoxedValue is bool) value = value.ToLowerInvariant();

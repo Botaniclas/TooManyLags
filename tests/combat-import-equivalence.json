@@ -1,12 +1,12 @@
 {
   "source": "BotanicPupPatch-2.1.0",
-  "target": "TooManyLags-FGNAddon-1.0.6",
+  "target": "TooManyLags-FGNAddon-1.0.8",
   "original_source_preserved": true,
   "files": [
     {
       "file": "FgnCombatOwnership.cs",
       "source_sha256": "1EEEA58FF57EBBB0E8CC3A271A45D2D43C82BE94D97AEE1B579C6C87CBD70C14",
-      "import_sha256": "DE261174740418CE00A7A7319F9E17E1B47D6DE6366FCAE2CC0DCE2302B0C433",
+      "import_sha256": "45C91375B9533F96EA6C1FC26330DB972050C21A814EAF7B2829FAC38FF8B8A3",
       "namespace_branding_protocol_only": false,
       "additional_changes": [
         "Config section/descriptions/default adapted for required FGN and 09 - AI Mob Ownership.",
@@ -14,7 +14,8 @@
         "ServerReady distinguishes explicit absent PUP from invalid present PUP; native readiness at canonical and differing live poses, finite checks, original loaded-instance and final eligibility proof retained.",
         "Runtime failure comment now describes independent modules.",
         "1.0.3 adds the narrow non-player Character.Faction.Players exclusion to AI eligibility/watches/reports/queued handoff veto/server loading/lease cleanup/late-hit forwarding. Current-player-only targets and original protections/caps remain unchanged.",
-        "1.0.3 uses weak cached loaded actor references for current live faction and a scene-scoped 1024-entry FIFO cache of prefab Character references for unloaded ZDO classification. Missing prefabs are retried; session/fault/scene lifecycle clears caches; current cached faction is read instead of storing an immutable boolean."
+        "1.0.3 uses weak cached loaded actor references for current live faction and a scene-scoped 1024-entry FIFO cache of prefab Character references for unloaded ZDO classification. Missing prefabs are retried; session/fault/scene lifecycle clears caches; current cached faction is read instead of storing an immutable boolean.",
+        "1.0.8 changes only configuration descriptions in this imported module: expands FiresGhettoNetworking and Server-Side Simulation, and explains the player-simulation fallback. Runtime AI logic unchanged."
       ]
     },
     {

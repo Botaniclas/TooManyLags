@@ -1,0 +1,99 @@
+{
+  "source": "TooManyLags Standalone 1.0.1",
+  "target": "TooManyLags FiresGhettoNetworking Addon 1.0.8 player-simulation mode",
+  "files": [
+    {
+      "file": "AuthorityGrid.cs",
+      "sourceSha256": "B667E68848F45839385F614EE055DEE50118D88222213F160112642494347727",
+      "importSha256": "2FF0D3378BE2077B9A0F5E2EA047065475F00B673CBCB02CDCAC43C3268C84E4",
+      "namespaceOnly": true
+    },
+    {
+      "file": "FieldReader.cs",
+      "sourceSha256": "9BFB8AE5D4B0A99B212F27165D16223E1703A0A35B715FCDF35256BC70BAAC18",
+      "importSha256": "0DDE64CDDABF5F9C91C42F696C55D45A4E5DD94310F2D0E6DB7A0779FB7CC75C",
+      "namespaceOnly": true
+    },
+    {
+      "file": "FriendlyCreatures.cs",
+      "sourceSha256": "F555C392B46B5E704A24398F2101FEF5440015B113D09A2405C1F70CFA16AA5D",
+      "importSha256": "456F242049508EE9C44376F529CEE5F14298A0B2C10225F5E58BBF5CA387E035",
+      "namespaceOnly": true
+    },
+    {
+      "file": "Handoffs.cs",
+      "sourceSha256": "F32A6FA398051BFC8FFF2EC592B582036A2ED1C10F682858521DEE33A48AD6DF",
+      "importSha256": "09D80417430BC893B6366B01E961D5B439026E0EB948CED22474EA58497957EC",
+      "namespaceOnly": true
+    },
+    {
+      "file": "HandoffTransaction.cs",
+      "sourceSha256": "284305B48ACCFCD2D9F5014D26D922592C8B4A32136D076685D5FE2B91B70B45",
+      "importSha256": "6FE7AD7E93D61DC27ACB26362584908BAF1E340FD99851ADF0085817D5464526",
+      "namespaceOnly": true
+    },
+    {
+      "file": "LocalAgent.cs",
+      "sourceSha256": "A0739588EA520BFF2D2607BA8657D4E15B97ABB6CB1AD4319D2E328A6533F4E2",
+      "importSha256": "3B4BDDDD55E86D794573489E6B35DA52ACF538D504E4EE549AB2B17410187702",
+      "namespaceOnly": true
+    },
+    {
+      "file": "NativeHooks.cs",
+      "sourceSha256": "91361079E92A6D9ED3F3C04A1BD99C21A6DCE4354AA1FE6017261212BB0358BB",
+      "importSha256": "38A48EFB2625921AC02995A4774C0E808EA979CB331EEA71E627D45C6CC09CB0",
+      "namespaceOnly": true
+    },
+    {
+      "file": "NativeOwnership.cs",
+      "sourceSha256": "5F684FDE0498CE46A9EBD60F64FC4D343398F4AF4CFE1547C897E2D009B71C67",
+      "importSha256": "C5DC43E279571DFDC9D34A87BA9BEAD1E866247D72E2B1E58D8C1E0975B13559",
+      "namespaceOnly": true
+    },
+    {
+      "file": "ObjectCatalog.cs",
+      "sourceSha256": "BC22602762B90BC39EB72C12AE503407A2795DAA8D85B0AED2CBF487992B9827",
+      "importSha256": "D7D31BAD53A5565B2C8A81146322E6C2F6854F648731AF65C008C12598BCC08B",
+      "namespaceOnly": true
+    },
+    {
+      "file": "OwnershipCadence.cs",
+      "sourceSha256": "E130889D600B77B1D8E6A2B54775DA3F054B5F24847AC60EF71D11EB86E21234",
+      "importSha256": "7113CEA6F161EB03857168E36967FD3294D84A8EFA8E5D61E1526BCEAF88D84E",
+      "namespaceOnly": true
+    },
+    {
+      "file": "RegionContentionGate.cs",
+      "sourceSha256": "506ADF541AD385AD1A8EDBC0BF363C96489EAF961F0695DF6AAC599433D41011",
+      "importSha256": "85D6D2F6E5C7BD2DEF9840CACC451C59C4A42ECA0AAB24FDE0DAFF6201061991",
+      "namespaceOnly": true
+    },
+    {
+      "file": "RequestRouter.cs",
+      "sourceSha256": "2EB36A804222EC66A2A2BDE8543DD6DEDFD7AE346D620BDF033522E0857EA99F",
+      "importSha256": "B7E008D72A81FDD080F8154283AFDC3450FA31A8039B92B386ECFE42205B28FB",
+      "namespaceOnly": true
+    },
+    {
+      "file": "TargetEvents.cs",
+      "sourceSha256": "E0516BC71E70E541CD9C5FBDCFC7535274877BE47B0D67232B22AB9182E02DD8",
+      "importSha256": "65E1515614D5D2416281F6003243A5D8C54F56547BB2FA85DDB24F9329C8CF44",
+      "namespaceOnly": true
+    },
+    {
+      "file": "AuthorityController.cs",
+      "sourceSha256": "961FFE21CA94DC6864766DFB9F53BD168A08B11049CE43255139A971D2CB120B",
+      "importSha256": "F9D7F1BAD892CE24151B6FFCC9F345364B27D45C3DB80E045B11789011E0CEFB",
+      "namespaceOnly": true
+    }
+  ],
+  "adaptations": [
+    "Settings read the existing addon config rather than introducing a second config.",
+    "Camera heading reuses the addon publisher and session key.",
+    "Network protocol announces server mode, uses FiresGhettoNetworking matching/RTT and disables its own ping probing.",
+    "A dedicated server never becomes an eligible simulated owner.",
+    "MobPolicy adds the existing addon 250ms relative threshold when the configured ping limit is zero.",
+    "NativeContracts uses equivalent plain reflection for startup-only validation.",
+    "FiresGhettoNetworking dispatcher and held station hooks reach the unchanged handoff request router."
+  ]
+}

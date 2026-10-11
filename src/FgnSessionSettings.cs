@@ -12,7 +12,7 @@ namespace TooManyLags
     {
         private const BindingFlags Static = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
 
-        internal static bool Apply(Assembly assembly, ConfigFile original, bool dedicated, bool enableAI, bool sceneConflict)
+        internal static bool Apply(Assembly assembly, ConfigFile original, bool dedicated, bool enableAI, bool sceneConflict, bool noSimulation = false)
         {
             Type plugin = assembly.GetType("FiresGhettoNetworkMod.FiresGhettoNetworkMod", true);
             List<FieldInfo> fields = new List<FieldInfo>(5);
@@ -32,16 +32,17 @@ namespace TooManyLags
                     throw new NotSupportedException("FGN did not detect a dedicated server; simulation settings were not overridden.");
                 Type compatibility = assembly.GetType("FiresGhettoNetworkMod.ValheimCommunityPatchCompat", true);
                 Method(compatibility, "Detect").Invoke(null, null);
-                if (sceneConflict || ReadBool(compatibility, "SchedulesSceneObjects"))
+                if (!noSimulation && (sceneConflict || ReadBool(compatibility, "SchedulesSceneObjects")))
                     throw new NotSupportedException("FGN Server-Side Simulation conflicts with the installed scene scheduler; its safety block remains active.");
 
-                Add(fields, values, plugin, "ConfigEnableServerAuthority", true);
+                Add(fields, values, plugin, "ConfigEnableServerAuthority", !noSimulation);
                 Add(fields, values, assembly.GetType("FiresGhettoNetworkMod.StationRouter", true), "ConfigEnabled", true);
                 simulation = Field(assembly.GetType("FiresGhettoNetworkMod.ServerAuthorityPatches", true), "SimulationActive", typeof(bool));
                 creatureOwner = Field(creatures, "ServerOwnsCreatures", typeof(bool));
                 shipOwner = Field(assembly.GetType("FiresGhettoNetworkMod.HelmOwnership", true), "ServerOwnsShips", typeof(bool));
                 initialize = Method(plugin, "ApplyServerSideSimulationPatches");
                 wasActive = (bool)simulation.GetValue(null);
+                if (noSimulation) FgnSimulationStartup.Validate(initialize);
             }
 
             // Binding against an isolated, non-saving ConfigFile preserves entry
@@ -56,6 +57,9 @@ namespace TooManyLags
                 replacements[i] = session.Bind(previous.Definition, (bool)previous.DefaultValue, previous.Description);
                 replacements[i].Value = values[i];
             }
+            // Remove only simulation hooks, before a world exists. Changing the
+            // flag alone would leave already-installed simulation patches active.
+            if (dedicated && noSimulation) FgnSimulationStartup.Remove(assembly);
             for (int i = 0; i < fields.Count; i++) fields[i].SetValue(null, replacements[i]);
             if (!dedicated) return false;
 
@@ -63,6 +67,7 @@ namespace TooManyLags
             // and pass through. Clear their startup-only ownership mode flags.
             creatureOwner.SetValue(null, false);
             shipOwner.SetValue(null, false);
+            if (noSimulation) { simulation.SetValue(null, false); return false; }
             if (!wasActive)
             {
                 // Use the same initializer and completion flag as FGN's Awake.
@@ -71,6 +76,15 @@ namespace TooManyLags
                 simulation.SetValue(null, true);
             }
             return !wasActive;
+        }
+
+        internal static void CreatureBalancing(Assembly assembly, ConfigFile original, bool enabled)
+        {
+            FieldInfo field = Field(assembly.GetType("FiresGhettoNetworkMod.CreatureOwnership", true), "ConfigEnabled", typeof(ConfigEntry<bool>));
+            ConfigEntry<bool> previous = (ConfigEntry<bool>)field.GetValue(null);
+            ConfigFile session = new ConfigFile(original.ConfigFilePath, false) { SaveOnConfigSet = false };
+            ConfigEntry<bool> replacement = session.Bind(previous.Definition, (bool)previous.DefaultValue, previous.Description);
+            replacement.Value = enabled; field.SetValue(null, replacement);
         }
 
         private static void Add(List<FieldInfo> fields, List<bool> values, Type type, string name, bool value)

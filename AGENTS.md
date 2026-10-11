@@ -7,7 +7,7 @@
 # Local Git workflow
 
 - Use Git locally by default. Commit local work as appropriate.
-- Push to GitHub only when the user explicitly requests it. Do not create remote branches, pull requests or releases without an explicit request.
+- Publishing a version also authorizes pushing its source and finalized changelog to GitHub. Push as part of publication; keep ordinary development local unless the user requests a push. Do not create remote branches or pull requests without an explicit request.
 
 # Changelogs for BotanicPupPatch and TooManyLags
 

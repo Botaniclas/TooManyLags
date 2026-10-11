@@ -9,6 +9,7 @@ namespace TooManyLags.PlayerSimulation
     {
         private readonly Settings settings;
         private readonly OwnershipCadence cadence;
+        private readonly TooManyLags.CameraWake cameras = new TooManyLags.CameraWake();
         private readonly ObjectCatalog catalog;
         private readonly AuthorityWorld index;
         private readonly RegionContentionGate regions = new RegionContentionGate();
@@ -57,7 +58,7 @@ namespace TooManyLags.PlayerSimulation
             try
             {
                 Plugin.Network.Players(Players); Players.Sort(delegate(PlayerPeer a, PlayerPeer b) { return a.Uid.CompareTo(b.Uid); });
-                regionPeers.Clear(); gridPeers.Clear(); mobPeers = 0;
+                regionPeers.Clear(); gridPeers.Clear(); cameras.Clear(); mobPeers = 0;
                 foreach (PlayerPeer peer in Players)
                 {
                     if (settings.Mobs && Plugin.Network.MobCapable(peer.Uid)) mobPeers++;
@@ -69,7 +70,7 @@ namespace TooManyLags.PlayerSimulation
                 {
                     if (!regions.Shared(peer.Uid)) continue;
                     Cell cell; Vector3 point = peer.Character.GetPosition();
-                    if (Cell.At(point.x, point.z, settings.CellSize, out cell)) gridPeers.Add(new GridPeer(peer.Uid, cell, settings.Directional ? CameraHeading.Read(peer.Character, peer.Uid, Plugin.Network.Capable(peer.Uid)) : 0));
+                    if (Cell.At(point.x, point.z, settings.CellSize, out cell)) gridPeers.Add(GridPeer.Covered(peer.Uid, cell, settings.Directional ? CameraHeading.Read(peer.Character, peer.Uid, Plugin.Network.Capable(peer.Uid), cameras) : 0));
                 }
                 if (ranks != Plugin.Network.RankVersion) { ranks = Plugin.Network.RankVersion; index.Grid.RanksChanged(); Mobs.RanksChanged(); }
                 index.Tick(gridPeers, now);
@@ -113,6 +114,7 @@ namespace TooManyLags.PlayerSimulation
         internal void Changed(ZDO data)
         {
             if (!Active || data == null || !data.IsValid()) return;
+            if (cameras.Changed(data)) cadence.Request();
             Handoffs.Observe(data); Mobs.Changed(data);
             Node node; Vector2s zone = data.GetSector(); Cell sector = new Cell(zone.x, zone.y);
             if (!interest.Contains(sector)) { if (nodes.TryGetValue(data.m_uid, out node)) Remove(node); return; }
@@ -159,7 +161,7 @@ namespace TooManyLags.PlayerSimulation
         internal void Rejected(ZDOID id)
         { Node node; if (nodes.TryGetValue(id, out node)) { node.RejectedOwner = node.Data.GetOwner(); node.RejectedRevision = node.Data.OwnerRevision; } Mobs.Forget(id); }
         internal void Stop()
-        { failed = true; Handoffs.Clear(); Mobs.Clear(); nodes.Clear(); sectors.Clear(); interest.Clear(); regions.Clear(); Players.Clear(); gridPeers.Clear(); regionPeers.Clear(); }
+        { failed = true; Handoffs.Clear(); Mobs.Clear(); nodes.Clear(); sectors.Clear(); interest.Clear(); regions.Clear(); cameras.Clear(); Players.Clear(); gridPeers.Clear(); regionPeers.Clear(); }
         internal static bool Finite(Vector3 value) { return !(Single.IsNaN(value.x) || Single.IsNaN(value.y) || Single.IsNaN(value.z) || Single.IsInfinity(value.x) || Single.IsInfinity(value.y) || Single.IsInfinity(value.z)); }
         private sealed class Node : AuthorityNode
         {

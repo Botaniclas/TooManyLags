@@ -34,6 +34,7 @@ namespace TooManyLags
         private readonly Dictionary<OwnerCell, bool> available = new Dictionary<OwnerCell, bool>();
         private readonly List<GridPeer> peers = new List<GridPeer>();
         private readonly HashSet<long> peerIds = new HashSet<long>();
+        private readonly CameraWake cameras = new CameraWake();
         private readonly RegionContentionGate regions = new RegionContentionGate();
         private readonly List<RegionPeer> regionPeers = new List<RegionPeer>();
         private readonly List<ZDO> characters = new List<ZDO>();
@@ -96,6 +97,7 @@ namespace TooManyLags
         {
             try
             {
+                cameras.Clear();
                 active = Context() && compatibility.Enabled();
                 if (!active) { Router.Flush(); return; }
                 bool useCoarse = !defaultInteractives && ZoneSystem.instance.m_zoneSize == 64f;
@@ -131,7 +133,7 @@ namespace TooManyLags
                     bool valid = Cell.At(position.x, position.z, cellSize, out cell);
                     if (valid)
                     {
-                        peers.Add(new GridPeer(peer.m_uid, cell, !coarseEnabled && directional ? CameraHeading.Read(player, peer.m_uid) : 0f));
+                        peers.Add(GridPeer.Covered(peer.m_uid, cell, !coarseEnabled && directional ? CameraHeading.Read(player, peer.m_uid, cameras) : 0));
                         if (coarseEnabled) characters.Add(player);
                     }
                     if (coarseEnabled)
@@ -153,7 +155,7 @@ namespace TooManyLags
                     {
                         GridPeer peer = peers[i];
                         if (!regions.Shared(peer.Uid)) continue;
-                        if (directional) peer.Yaw = CameraHeading.Read(characters[i], peer.Uid);
+                        if (directional) peer.Coverage = CameraHeading.Read(characters[i], peer.Uid, cameras);
                         peers[kept++] = peer;
                     }
                     if (kept != peers.Count) peers.RemoveRange(kept, peers.Count - kept);
@@ -225,6 +227,7 @@ namespace TooManyLags
             if (failed || indexed == null) return;
             try
             {
+                if (active && ReferenceEquals(world, ZDOMan.instance) && cameras.Changed(data)) cadence.Request();
                 NativeNode node;
                 if (nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data))
                 {
@@ -339,7 +342,7 @@ namespace TooManyLags
             active = false; primed = false; coarseEnabled = false;
             if (Inventory != null) Inventory.Clear(); if (Cooperative != null) Cooperative.Clear();
             Inventory = null; Cooperative = null; nodes.Clear(); views = new ConditionalWeakTable<ZNetView, NativeNode>();
-            readiness.Clear(); available.Clear(); peers.Clear(); peerIds.Clear(); regionPeers.Clear(); characters.Clear(); regions.Clear(); Router.Clear();
+            readiness.Clear(); available.Clear(); peers.Clear(); peerIds.Clear(); cameras.Clear(); regionPeers.Clear(); characters.Clear(); regions.Clear(); Router.Clear();
             indexed = null; catalog = null; statics = null; scene = null; network = null; world = null; epoch = 0;
         }
         private void Fail(Exception error) { failed = true; Reset(); try { fault(error); } catch { } }

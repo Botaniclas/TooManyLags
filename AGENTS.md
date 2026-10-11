@@ -2,6 +2,7 @@
 
 - Keep current release files directly in `outputs`; archive older versions in `outputs/Versions/<Mod>/<Version>/` and other files in `outputs/Others/`.
 - `package.ps1` runs `organize-outputs.ps1` automatically. Preserve archived contents and never overwrite collisions.
+- Keep Object Categories last in generated configs; explain shared category scope, toggles and safeguards once.
 
 # Local Git workflow
 

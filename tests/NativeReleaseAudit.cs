@@ -98,7 +98,7 @@ internal static class NativeReleaseAudit
         TypeDefinition interval=authority.MainModule.GetType("TooManyLags.IntervalConfig");
         Check(interval!=null,"Movement interval constants missing");
         foreach(MethodDefinition method in interval.Methods)Check(method.Name!="LegacyDefault","Obsolete config migration retained");
-        foreach(string section in new[]{"01 - General","02 - Static Buildings","03 - Default Ownership and Overrides","04 - Grid Settings","05 - Directional Grid Mode","06 - Full Grid Mode","07 - Object Categories"})
+        foreach(string section in new[]{"01 - General","02 - Static Buildings","03 - Default Ownership and Overrides","04 - Grid Settings","05 - Directional Grid Mode","06 - Full Grid Mode","10 - Object Categories"})
         {
             bool configured=false;foreach(var instruction in awake.Body.Instructions)if(Object.Equals(instruction.Operand,section))configured=true;
             Check(configured,"Generated config section missing: "+section);
@@ -394,7 +394,7 @@ internal static class NativeReleaseAudit
     {
         var config=authority.MainModule.GetType("TooManyLags.IntervalConfig");FieldDefinition fallback=null;
         foreach(var field in config.Fields)if(field.Name=="Default")fallback=field;
-        Check(fallback!=null&&fallback.HasConstant&&Convert.ToSingle(fallback.Constant)==.1f,"Actual movement cadence must default to 0.1 seconds");
+        Check(fallback!=null&&fallback.HasConstant&&Convert.ToSingle(fallback.Constant)==.05f,"Actual movement cadence must default to 0.05 seconds");
         var manager=native.MainModule.GetType("ZDOMan");MethodDefinition update=null,release=null;
         foreach(var method in manager.Methods){if(method.Name=="Update")update=method;if(method.Name=="ReleaseZDOS")release=method;}
         Check(update!=null&&update.HasBody&&release!=null&&release.HasBody,"Native cadence dispatch bodies missing");
@@ -414,7 +414,7 @@ internal static class NativeReleaseAudit
             var target=instruction.Operand as MethodReference;if(target!=null&&target.Name=="SetRotation")callsSetRotation=true;
         }
         Check(directRotation&&!callsSetRotation,"Incoming rotation is assigned directly; SetRotation alone is not a complete remote movement hook");
-        Console.WriteLine("PASS: actual default 0.1; native per-update cadence hook keeps two-second vanilla release timer; received rotations bypass SetRotation.");
+        Console.WriteLine("PASS: actual default 0.05; native per-update cadence hook keeps two-second vanilla release timer; received rotations bypass SetRotation.");
     }
     private static void GridChoiceClamp()
     {

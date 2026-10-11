@@ -41,7 +41,7 @@ Thanks for helping improve the mod. Have fun, and enjoy smoother adventures toge
 ## How it works
 
 - A camera-directed grid covers nearby interactive objects and idle tamed animals. One player's fields go to that player; overlapping fields go to the server. Stationary players still count.
-- Cell or camera-sector changes request updates. Transfer delays, completed-field caching and unloading cleanup avoid repeated work. Isolated players use vanilla ownership by default.
+- Each camera direction covers ±37.5°, giving adjacent directions 30° of overlap. Cell or camera-coverage changes request updates. Received camera changes trigger the next server pass immediately; unchanged coverage does no field work. Transfer delays, caching and unloading cleanup avoid repeated work. Isolated players use vanilla ownership by default.
 - Hostile Mobs use AI target ownership with attack protection, consent, retries and safe server fallback. Hostile summons follow the same rules. Friendly magic summons, including skeletons, spirit animals and roots, stay outside both the grid and mob ownership policy. Ordinary tamed animals still use the grid; bosses and active controls retain their safeguards.
 - Open inventories, active users and refilling remain protected. Local PUP collision/stability guards remain a separate feature.
 
@@ -59,7 +59,7 @@ https://github.com/user-attachments/assets/8555a985-7696-4cc6-865a-5115c3695f72
 
 ## Configuration
 
-Configure ownership rules, the grid, delays, ping limits and **camera check timing on the server** in `BepInEx/config/botanic.toomanylags.fgnaddon.cfg`. The server sends camera timing to all clients. Client copies of these settings are ignored. `Enabled` and `EnableAIOwnership` must be enabled consistently on the server and clients; `EnableLogs` affects only the installation where it is changed. Each config entry states its scope.
+Configure ownership rules, the grid, delays, ping limits and **camera check timing on the server** in `BepInEx/config/botanic.toomanylags.fgnaddon.cfg`. The server sends camera timing to all clients. Client copies of these settings are ignored. `Enabled` and `EnableAIOwnership` must be enabled consistently on the server and clients; `EnableLogs` affects only the installation where it is changed. Config descriptions state their scope; object categories share one note at the bottom.
 
 **Console:** `tml_config list` lists settings; `tml_config <Key>` reads one; `tml_config <Key> <Value>` saves a change. Only admins can change server settings.
 
@@ -72,7 +72,7 @@ Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOw
 | Simulation mode | `NoServerSideSimulation=false`: full Server-Side Simulation. Set true for weak server CPUs; transfers stay between players. |
 | Grid | 4-metre cells, rounded 7x7. Also 8/16 metres and square 3x3/rounded 5x5. 4 metres requires a rounded grid. |
 | Direction and delays | Camera direction; inner 0s, forward 0.2s, outer 3s. Full-grid mode uses 2s. Missing camera data uses character heading. |
-| Checks | Movement and camera each default to 0.1s. Camera checks support 0.05–5s, allowing up to 20 checks per second. Unchanged sectors create no new field requests or camera writes. Network delivery can add delay. |
+| Checks | Movement and camera each default to 0.05s; both support 0.05–5s. Changed camera coverage gets send priority and wakes the next server pass, without another interval wait. Network delivery and protected handoffs can still add delay. |
 | Leaving fields | Keep ownership: on. In directional mode, when only one player remains, red fields transfer automatically; forward/outer fields keep their owner until that player's next cell or heading-sector change. Fully vacated fields retain ownership. Native release still applies. |
 | Categories and overrides | 24 object groups; separate static, default-interactive and permanent-refill server ownership. All three overrides default off and are ignored with NoServerSideSimulation=true. |
 | Hostile Mobs | AI ownership on; server fallback target ping 200ms, other-player distance 6 metres. Without Server-Side Simulation, fallback uses a lower-latency nearby player. |
@@ -82,6 +82,8 @@ Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOw
 1. Install **BepInEx, FiresGhettoNetworking and the same mod version on the dedicated server and every client**. Copy `TooManyLags.dll` into `BepInEx/plugins/TooManyLags/`.
 2. Copy the supplied config into `BepInEx/config/`, or let first startup generate it. Keep `EnableAIOwnership` consistent across server and clients.
 3. Restart. **TooManyLags automatically applies all required FiresGhettoNetworking settings at startup; no manual FiresGhettoNetworking configuration is needed.** These overrides apply to the current session only. Your saved FiresGhettoNetworking config and other FiresGhettoNetworking settings remain unchanged.
+
+**Updating:** Object categories now use `10 - Object Categories`. Use the supplied config and reapply your custom values. Existing configs retain their saved check intervals; set both to `0.05` to use the new defaults. Update all clients too.
 
 **PUP FPS is optional.**
 

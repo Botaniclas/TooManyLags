@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.11.0")]
+[assembly: AssemblyVersion("1.0.12.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.11")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.12")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.11", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.12", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -57,7 +57,7 @@ namespace TooManyLags
             }
             GridCoveragePattern pattern = patternName == "Rounded7x7" ? GridCoveragePattern.Rounded7x7 : patternName == "Rounded5x5" ? GridCoveragePattern.Rounded5x5 : GridCoveragePattern.Square3x3;
             bool directional = Config.Bind("05 - Directional Grid Mode", "DirectionalGridMode", true,
-                "Server only; restart required. true: camera-directed grid with the three timers below. false: full grid from section 06. Clients publish their camera's eight heading sectors. Missing camera data falls back to character heading. Stationary players still count towards overlaps.").Value;
+                "Server only; restart required. true: camera-directed grid with the timers below. Each direction covers +/-37.5 degrees, giving adjacent directions 30 degrees of overlap. false: full grid from section 06. Missing camera data uses character heading. Stationary players still count.").Value;
             float innerDelay = Config.Bind("05 - Directional Grid Mode", "InnerTransitionDelaySeconds", 0f, new ConfigDescription(
                 "Server only; live console supported. Red: six inner fields, your three-cell row and the row ahead. Delay in seconds for new requests; 0 allowed. Handoff protection remains active.", new AcceptableValueRange<float>(0f, 30f))).Value;
             float forwardDelay = Config.Bind("05 - Directional Grid Mode", "ForwardTransitionDelaySeconds", .2f, new ConfigDescription(
@@ -68,16 +68,16 @@ namespace TooManyLags
                 "Server only; live console supported. Only with DirectionalGridMode=false: one delay in seconds for new full-grid requests. Active use and safe handoffs may require more time.", new AcceptableValueRange<float>(1f, 30f))).Value;
             if (Single.IsNaN(delay) || Single.IsInfinity(delay)) delay = 2f;
             float interval = Config.Bind("04 - Grid Settings", IntervalConfig.Key, IntervalConfig.Default, new ConfigDescription(
-                "Server only; live console supported. Check interval in seconds for cell changes and, in directional mode, changes between eight 45-degree heading sectors. Only changes request fields. Existing timers/handoffs also progress while standing.", new AcceptableValueRange<float>(.1f, 5f))).Value;
+                "Server only; live console supported. Check interval in seconds for movement and fallback heading. Received camera-coverage changes request an immediate pass. Only changed coverage requests fields; existing timers/handoffs also progress while standing.", new AcceptableValueRange<float>(.05f, 5f))).Value;
             if (Single.IsNaN(interval) || Single.IsInfinity(interval)) interval = IntervalConfig.Default;
             bool keepOnExit = Config.Bind("04 - Grid Settings", "KeepOwnershipOnCellExit", true,
                 "Server only; restart required. true: keep ownership after everyone leaves. In directional mode, when one player remains, only red fields transfer automatically; orange/yellow wait for that player's next cell/heading change. Completed player fields are cached until relevant changes/unloading. false: normal departure transfers, no cache. Native release and pinned stations still apply.").Value;
             Kinds kinds = Kinds.None;
             foreach (Kinds kind in Enum.GetValues(typeof(Kinds)))
-                if (kind != Kinds.None && kind != Kinds.Incinerators && Config.Bind("07 - Object Categories", kind.ToString(), true,
+                if (kind != Kinds.None && kind != Kinds.Incinerators && Config.Bind("10 - Object Categories", kind.ToString(), true,
                     ObjectDescription(kind)).Value) kinds |= kind;
-            float cameraInterval = Config.Bind("08 - Camera Heading", "CameraHeadingCheckIntervalSeconds", .1f, new ConfigDescription(
-                "Server only; live console supported. Camera check interval in seconds, sent to all clients on join and when changed by console. Client config value is ignored. Minimum 0.05 allows up to 20 checks per second. Only sector changes update player data. Server grid timing is set in section 04.", new AcceptableValueRange<float>(.05f, 5f))).Value;
+            float cameraInterval = Config.Bind("08 - Camera Heading", "CameraHeadingCheckIntervalSeconds", .05f, new ConfigDescription(
+                "Server only; live console supported. Camera check interval in seconds, sent to all clients. Client value is ignored. 0.05 allows up to 20 checks per second; only coverage changes are sent. Server grid timing is in section 04.", new AcceptableValueRange<float>(.05f, 5f))).Value;
             if (!enabled) return;
             enabledMod = true;
             playerSimulation = Application.isBatchMode && noSimulation;
@@ -207,8 +207,8 @@ namespace TooManyLags
         internal static void ApplyCameraInterval(float interval) { if (instance && instance.camera != null) instance.camera.Configure(interval); }
         internal static float CameraInterval()
         {
-            float interval = instance ? instance.ConfigValue<float>("08 - Camera Heading", "CameraHeadingCheckIntervalSeconds") : .1f;
-            return Single.IsNaN(interval) || Single.IsInfinity(interval) ? .1f : Math.Max(.05f, Math.Min(5f, interval));
+            float interval = instance ? instance.ConfigValue<float>("08 - Camera Heading", "CameraHeadingCheckIntervalSeconds") : .05f;
+            return Single.IsNaN(interval) || Single.IsInfinity(interval) ? .05f : Math.Max(.05f, Math.Min(5f, interval));
         }
         internal static void InvalidateCamera() { if (instance && instance.camera != null) instance.camera.Reset(true); }
         internal static void Warn(string message) { if (Diagnostics && instance) instance.Logger.LogWarning(message); }
@@ -271,8 +271,8 @@ namespace TooManyLags
                 case Kinds.Wards: name = "Wards"; break;
                 case Kinds.MapTables: name = "Cartography tables"; break;
                 case Kinds.Wisplights: name = "Wisp fountains"; break;
-                case Kinds.TamedAnimals: name = "Idle tamed animals; friendly magic summons excluded; riding and following remain protected"; break;
-                case Kinds.Containers: name = "Public chests and inventories; open inventories remain protected"; break;
+                case Kinds.TamedAnimals: name = "Idle tamed animals; friendly magic summons excluded"; break;
+                case Kinds.Containers: name = "Public chests and inventories"; break;
                 case Kinds.ItemStands: name = "Item and armour stands"; break;
                 case Kinds.Signs: name = "Signs"; break;
                 case Kinds.Portals: name = "Portals"; break;
@@ -281,10 +281,10 @@ namespace TooManyLags
                 case Kinds.ShieldGenerators: name = "Shield generators"; break;
                 case Kinds.Pickables: name = "Pickable objects and feasts; excludes loose item drops"; break;
                 case Kinds.Offerings: name = "Offering altars"; break;
-                case Kinds.Vehicles: name = "Idle carts and vehicle controls; active users are protected; ships with FiresGhettoNetworking simulation are excluded"; break;
+                case Kinds.Vehicles: name = "Idle carts and vehicle controls; FiresGhettoNetworking-simulated ships excluded"; break;
                 default: name = "Other compatible modded interactables"; break;
             }
-            return "Server only; restart required. " + name + ". true: managed by TooManyLags; false: vanilla/FiresGhettoNetworking.";
+            return (kind == Kinds.Doors ? "All categories below: server only; restart required. true: managed by TooManyLags; false: vanilla/FiresGhettoNetworking. Open inventories, refilling, riding, following and other active use remain protected.\n" : "") + name + ".";
         }
         private void RuntimeFault(Exception error) { if (logs) Logger.LogWarning("TooManyLags grid inactive; native ownership retained. " + error.GetBaseException()); }
         private void RequestFault(Exception error) { if (logs) Logger.LogWarning("Native object request failed; not replayed. " + error.GetBaseException()); }

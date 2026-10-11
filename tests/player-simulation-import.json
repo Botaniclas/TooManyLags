@@ -1,11 +1,11 @@
 {
   "source": "TooManyLags Standalone 1.0.1",
-  "target": "TooManyLags FiresGhettoNetworking Addon 1.0.11 player-simulation mode",
+  "target": "TooManyLags FiresGhettoNetworking Addon 1.0.12 player-simulation mode",
   "files": [
     {
       "file": "AuthorityGrid.cs",
       "sourceSha256": "B667E68848F45839385F614EE055DEE50118D88222213F160112642494347727",
-      "importSha256": "922E69DA6C8DCE40F3E9BEF0AFF05B36A457AF072FAC3F4612D909BFEF0219C0",
+      "importSha256": "25A1D6204D00FDCEEC3F38DA92F7F5ADAD55C34D0711FFA2B9EADA654BD9F9FD",
       "namespaceOnly": false
     },
     {
@@ -59,7 +59,7 @@
     {
       "file": "OwnershipCadence.cs",
       "sourceSha256": "E130889D600B77B1D8E6A2B54775DA3F054B5F24847AC60EF71D11EB86E21234",
-      "importSha256": "3CDF6C1010C984238FEB4F6CF2752140555EEB25FE09F7A57B3F71EB36359D5A",
+      "importSha256": "308A80A94100BC54460C5582A04B622B65EFF099BDFA976F145994D9A97F2FED",
       "namespaceOnly": false
     },
     {
@@ -83,7 +83,7 @@
     {
       "file": "AuthorityController.cs",
       "sourceSha256": "961FFE21CA94DC6864766DFB9F53BD168A08B11049CE43255139A971D2CB120B",
-      "importSha256": "96B4FBB1F40AE7A4F5205AE6236BAFCC1C1AB8005BB442115F53CCB7E36C2E94",
+      "importSha256": "12AD5325B1AF441676CCADAB21FE9BC1C1B60F2C0D06C68F58B506BFDF8898DC",
       "namespaceOnly": false
     }
   ],
@@ -95,6 +95,7 @@
     "MobPolicy adds the existing addon 250ms relative threshold when the configured ping limit is zero.",
     "NativeContracts uses equivalent plain reflection for startup-only validation.",
     "FiresGhettoNetworking dispatcher and held station hooks reach the unchanged handoff request router.",
-    "1.0.10 adds command-only timing setters to AuthorityGrid, OwnershipCadence and AuthorityController. Existing object indexes, guards, request deadlines, cache receipts and handoffs are retained. Settings snapshots expose live timer and fallback fields; no new polling is installed."
+    "1.0.10 adds command-only timing setters to AuthorityGrid, OwnershipCadence and AuthorityController. Existing object indexes, guards, request deadlines, cache receipts and handoffs are retained. Settings snapshots expose live timer and fallback fields; no new polling is installed.",
+    "1.0.12 adds precomputed adjacent camera-mask unions with symmetric +/-37.5-degree sectors and a new session advisory key. Changed owned-player camera receipts wake the existing cadence through a bounded current-peer value cache; source consent, handoffs and latency arbitration remain unchanged. Camera and movement cadence defaults/minima are 0.05 seconds, and categories read the final section 10."
   ]
 }

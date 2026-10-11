@@ -22,7 +22,7 @@ namespace TooManyLags.PlayerSimulation
             string shape = Read(config, "04 - Grid Settings", "GridCoveragePattern", "Rounded7x7");
             Pattern = shape == "Rounded7x7" ? GridCoveragePattern.Rounded7x7 : shape == "Rounded5x5" ? GridCoveragePattern.Rounded5x5 : GridCoveragePattern.Square3x3;
             if (CellSize == 4 && Pattern == GridCoveragePattern.Square3x3) throw new ArgumentException("4-metre cells require a rounded grid.");
-            Interval = Number(config, "04 - Grid Settings", "MovementRotationCheckIntervalSeconds", .1f);
+            Interval = Number(config, "04 - Grid Settings", "MovementRotationCheckIntervalSeconds", .05f);
             Keep = Read(config, "04 - Grid Settings", "KeepOwnershipOnCellExit", true);
             Directional = Read(config, "05 - Directional Grid Mode", "DirectionalGridMode", true);
             Inner = Number(config, "05 - Directional Grid Mode", "InnerTransitionDelaySeconds", 0);
@@ -34,7 +34,7 @@ namespace TooManyLags.PlayerSimulation
             MobRadius = Number(config, "09 - AI Mob Ownership", "ServerFallbackRadius", 6);
             Kinds kinds = Kinds.None;
             foreach (Kinds kind in Enum.GetValues(typeof(Kinds)))
-                if (kind != Kinds.None && kind != Kinds.Incinerators && Read(config, "07 - Object Categories", kind.ToString(), true)) kinds |= kind;
+                if (kind != Kinds.None && kind != Kinds.Incinerators && Read(config, "10 - Object Categories", kind.ToString(), true)) kinds |= kind;
             Categories = kinds;
         }
         private static T Read<T>(ConfigFile config, string section, string key, T fallback)

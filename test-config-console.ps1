@@ -22,4 +22,12 @@ foreach ($mode in @('ServerSimulation','PlayerSimulation')) {
     if ($LASTEXITCODE -ne 0) { throw ('Live timing compile failed: ' + $mode) }
     & $taskTiming
     if ($LASTEXITCODE -ne 0) { throw ('Live timing preservation failed: ' + $mode) }
+    $taskCadence = 'src/OwnershipCadence.cs'
+    if ($mode -eq 'PlayerSimulation') { $taskCadence = 'src/PlayerSimulation/OwnershipCadence.cs' }
+    $taskWake = Join-Path $taskOutput ($mode + 'CameraWakeTests.exe')
+    $taskWakeSources = @('src/AuthorityGrid.cs','src/CameraHeading.cs','src/IntervalConfig.cs',$taskCadence,'tests/CameraWakeTests.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ }
+    & $taskCompiler /nologo /target:exe /optimize+ /langversion:5 /warnaserror+ /nowarn:0649 $taskDefine ('/reference:'+(Join-Path $taskCore '0Harmony.dll')) ('/out:'+$taskWake) $taskWakeSources
+    if ($LASTEXITCODE -ne 0) { throw ('Camera wake compile failed: ' + $mode) }
+    & $taskWake
+    if ($LASTEXITCODE -ne 0) { throw ('Camera wake regression failed: ' + $mode) }
 }

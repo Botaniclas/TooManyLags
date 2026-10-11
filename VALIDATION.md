@@ -1,3 +1,20 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.12 release validation
+
+## Directional overlap and config defaults
+
+Each of the eight fixed directions covers +/-37.5 degrees, widening the previous +/-22.5-degree sector by 15 degrees on each side. North/northeast overlap from 7.5 through 37.5 degrees; reverse turns and wraparound use the same symmetric membership rule. The current angle selects one direction or an adjacent pair directly, without turn history, intermediate masks or a retained trail. Character-heading fallback uses the same pure quantizer. Invalid data retains the existing grid's finite-heading fallback.
+
+Eight adjacent-mask unions are precomputed once alongside the original masks. Shared cells contribute once per player, keeping inner/forward priority and valid timer history. Only changed coverage touches cell policies. The 7x7 union is bounded at 29 cells; 5x5 at 18 and 3x3 at seven. Settled stationary fixtures produce no additional neighbor evaluations, timer visits or player updates. Pool capacity and loaded-object cache cleanup remain bounded; no new world-cell cache, physics hook, camera RPC or peer dictionary is added.
+
+The changed coverage is one integer in a new session-only player ZDO key, separate from the old eight-sector advisory. Only the owned player's valid data is accepted; missing/invalid data and unmodded player-mode clients use character heading. All clients must update for camera coverage. Changed publication and camera-loss invalidation use native ForceSendZDO once. The audited FiresGhettoNetworking 1.5.41 SendScheduler recognizes the force queue immediately while still enforcing LinkController.HasRoom and the configured frame budget; unchanged camera coverage adds no writes or force entries. This avoids the idle backoff (up to a 0.2-second scheduled interval in that source), without flushing sockets or bypassing congestion safeguards.
+
+A bounded CameraWake value map contains only the characters participating in the latest directional grid sample. The existing ZDO.Deserialize/Changed event does one ID lookup for unrelated objects, with no additional key/owner reads or new records. Changed current-world, valid, correctly owned camera data requests the next existing controller poll without waiting for its interval. Duplicate receipts are coalesced. The callback performs no grid work or ownership write; it waits until native packet processing has returned. Poll sampling replaces the map, and reset/stop clears it, retaining no ZDO references or departed-world entries. In native solo bypass and full-grid mode it is empty. Zero-delay inner fields are queued and attempted in the requested poll, with all inventory, refill, active-use, source-consent and collision protections retained. Outgoing ownership already uses native send priority. No network latency or live frame-time guarantee is made.
+
+Both camera and movement check defaults/minima are now 0.05 seconds; the other 41 defaults are unchanged. Object categories move to section 10 at the bottom, with shared scope/protection instructions once. Existing config values are not rewritten: use the generated config or reapply old custom category values under section 10, and explicitly set stored intervals if the new defaults are desired.
+
+Both simulation modes run the same angle/union fixtures, including independent +/-37.5-degree membership, boundaries, wraparound, reversals, fast turns, timing priorities, genuine second-player overlap, idle work and departure cleanup. Receipt/cadence fixtures check unrelated-traffic cost, unchanged data, invalid/foreign/stale sources, coalescing and bounded lifecycle with both production cadence classes. Full-controller fixtures cover immediate receipt wake and zero-delay handoff execution without duplicate field work. Full regression results and exact artifact hashes are recorded in verification.json. No live Unity multiplayer session has been tested.
+
+---
 # TooManyLags - FiresGhettoNetworking Addon 1.0.11 release validation
 
 ## Live console configuration and camera timing

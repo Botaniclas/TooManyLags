@@ -1,28 +1,46 @@
 using System;
+using System.Collections.Generic;
 
 namespace TooManyLags
 {
     // One owned-player ZDO integer uses native replication; no extra RPC,
-    // per-peer dictionary, timestamps or camera objects on the server.
+    // timestamps or camera objects on the server.
     internal static class CameraHeading
     {
-        internal static readonly int Key = (Plugin.Id + ".cameraSector").GetStableHashCode();
-        internal static int Sector(float yaw)
-        {
-            if (Single.IsNaN(yaw) || Single.IsInfinity(yaw)) return -1;
-            yaw %= 360f; if (yaw < 0f) yaw += 360f;
-            return (int)((yaw + 22.5f) / 45f) & 7;
-        }
-        internal static int Sector(float x, float z)
+        internal static readonly int Key = (Plugin.Id + ".cameraCoverage75").GetStableHashCode();
+        internal static int Coverage(float yaw) { return AuthorityGrid.HeadingCoverage(yaw); }
+        internal static int Coverage(float x, float z)
         {
             if (Single.IsNaN(x) || Single.IsNaN(z) || Single.IsInfinity(x) || Single.IsInfinity(z) ||
                 (double)x * x + (double)z * z < .000001d) return -1;
-            return Sector((float)(Math.Atan2(x, z) * (180d / Math.PI)));
+            return Coverage((float)(Math.Atan2(x, z) * (180d / Math.PI)));
         }
-        internal static float Read(ZDO player, long peer)
+        internal static int Read(ZDO player, long peer, CameraWake wake = null)
         {
-            int heading = player.GetOwner() == peer ? player.GetInt(Key, -1) : -1;
-            return heading >= 0 && heading < 8 ? heading * 45f : player.GetRotation().eulerAngles.y;
+            bool owned = player.GetOwner() == peer;
+            int heading = owned ? player.GetInt(Key, -1) : -1;
+            if (wake != null && owned) wake.Track(player.m_uid, peer, heading);
+            return heading >= 0 && heading < 16 ? heading : Coverage(player.GetRotation().eulerAngles.y);
         }
+    }
+
+    // At most one value record per currently sampled player. Packet events do
+    // one ID lookup; only changed owned-player camera data wakes a grid pass.
+    internal sealed class CameraWake
+    {
+        private struct Stamp { internal long Peer; internal int Coverage; }
+        private readonly Dictionary<ZDOID, Stamp> players = new Dictionary<ZDOID, Stamp>();
+        private static int Valid(int value) { return value >= 0 && value < 16 ? value : -1; }
+        internal void Clear() { players.Clear(); }
+        internal void Track(ZDOID id, long peer, int coverage) { players[id] = new Stamp { Peer = peer, Coverage = Valid(coverage) }; }
+        internal bool Changed(ZDO data)
+        {
+            Stamp old;
+            if (data == null || !players.TryGetValue(data.m_uid, out old) || data.GetOwner() != old.Peer || !data.IsValid() || ZDOMan.instance == null || !ReferenceEquals(ZDOMan.instance.GetZDO(data.m_uid), data)) return false;
+            int coverage = Valid(data.GetInt(CameraHeading.Key, -1));
+            if (coverage == old.Coverage) return false;
+            old.Coverage = coverage; players[data.m_uid] = old; return true;
+        }
+        internal int Count { get { return players.Count; } }
     }
 }

@@ -33,7 +33,10 @@ namespace TooManyLags.PlayerSimulation
         internal long Uid;
         internal Cell Cell;
         internal float Yaw;
-        internal GridPeer(long uid, Cell cell, float yaw = 0f) { Uid = uid; Cell = cell; Yaw = yaw; }
+        internal int Coverage;
+        internal GridPeer(long uid, Cell cell, float yaw = 0f, int coverage = -1) { Uid = uid; Cell = cell; Yaw = yaw; Coverage = coverage; }
+        internal static GridPeer Covered(long uid, Cell cell, int coverage)
+        { return new GridPeer(uid, cell, Single.NaN, coverage); }
     }
 
     // Pure selection state. No Unity queries, network writes or object iteration.
@@ -59,8 +62,8 @@ namespace TooManyLags.PlayerSimulation
         private struct Offset { internal Cell Cell; internal FieldTier Tier; internal Offset(int x, int z, FieldTier tier) { Cell = new Cell(x, z); Tier = tier; } }
         private readonly Dictionary<Cell, Policy> policies = new Dictionary<Cell, Policy>();
         // Reuse empty policy objects without retaining a world cell or owner.
-        // 1024 covers the old/new footprints of twelve peers even at 37 cells.
-        // Larger peer counts remain supported; only this allocation pool is capped.
+        // Only the allocation pool is capped; larger footprints/peer counts
+        // remain supported without retaining departed world cells.
         private readonly Stack<Policy> reusable = new Stack<Policy>();
         private readonly Dictionary<long, PeerState> previous = new Dictionary<long, PeerState>();
         // Only loaded object buckets may certify a completed exclusive request.
@@ -72,8 +75,8 @@ namespace TooManyLags.PlayerSimulation
         private readonly List<Cell> due = new List<Cell>();
         internal readonly List<Cell> Changes = new List<Cell>();
         private readonly long server;
-        private readonly Offset[][] footprints = new Offset[8][];
-        private readonly Dictionary<Cell, FieldTier>[] maskTypes = new Dictionary<Cell, FieldTier>[8];
+        private readonly Offset[][] footprints = new Offset[16][];
+        private readonly Dictionary<Cell, FieldTier>[] maskTypes = new Dictionary<Cell, FieldTier>[16];
         internal readonly HashSet<Cell> Accelerations = new HashSet<Cell>();
         private readonly bool directional;
         private readonly bool discardVacant;
@@ -128,6 +131,31 @@ namespace TooManyLags.PlayerSimulation
                 foreach (Offset offset in footprint) types.Add(offset.Cell, offset.Tier);
                 maskTypes[heading] = types;
             }
+            // Adjacent camera directions are one request per player/cell.
+            // Build their unions once, retaining the inner/forward priorities.
+            for (int heading = 0; heading < 8; heading++)
+            {
+                if (!directional) { footprints[8 + heading] = footprints[heading]; maskTypes[8 + heading] = maskTypes[heading]; continue; }
+                var types = new Dictionary<Cell, FieldTier>(maskTypes[heading]);
+                foreach (Offset offset in footprints[(heading + 1) & 7])
+                {
+                    FieldTier old;
+                    if (!types.TryGetValue(offset.Cell, out old) || offset.Tier == FieldTier.Inner || (old == FieldTier.Outer && offset.Tier == FieldTier.Forward))
+                        types[offset.Cell] = offset.Tier;
+                }
+                var footprint = new List<Offset>(types.Count);
+                foreach (var pair in types) footprint.Add(new Offset(pair.Key.X, pair.Key.Z, pair.Value));
+                footprints[8 + heading] = footprint.ToArray(); maskTypes[8 + heading] = types;
+            }
+        }
+        internal static int HeadingCoverage(float yaw)
+        {
+            if (Single.IsNaN(yaw) || Single.IsInfinity(yaw)) return -1;
+            yaw %= 360f; if (yaw < 0f) yaw += 360f;
+            int heading = (int)(yaw / 45f); float phase = yaw - heading * 45f;
+            // Each direction covers +/-37.5 degrees: adjacent masks overlap
+            // over 30 degrees. No turn history or intermediate masks needed.
+            return phase < 7.5f ? heading : phase <= 37.5f ? 8 + heading : (heading + 1) & 7;
         }
         private static float SafeDelay(float value, float fallback)
         { return Single.IsNaN(value) || Single.IsInfinity(value) ? fallback : Math.Max(0f, Math.Min(30f, value)); }
@@ -342,7 +370,8 @@ namespace TooManyLags.PlayerSimulation
                 bool exists = previous.TryGetValue(peer.Uid, out state);
                 if (exists) state.Refreshed = false;
                 float yaw = Yaw(peer.Yaw, exists ? state.Yaw : 0f);
-                int heading = directional ? ((int)((yaw + 22.5f) / 45f) & 7) : 0;
+                int heading = !directional ? 0 : peer.Coverage >= 0 && peer.Coverage < 16 ? peer.Coverage :
+                    exists && (Single.IsNaN(peer.Yaw) || Single.IsInfinity(peer.Yaw)) ? state.Heading : ((int)((yaw + 22.5f) / 45f) & 7);
                 if (!exists || !state.Cell.Equals(peer.Cell) || state.Heading != heading)
                 {
                     if (exists) MoveContribution(peer.Uid, state, peer.Cell, heading, now);

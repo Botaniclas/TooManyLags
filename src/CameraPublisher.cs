@@ -24,6 +24,7 @@ namespace TooManyLags
             if (!view || !view.IsValid() || !view.IsOwner()) { Reset(); return; }
             ZDO data = view.GetZDO();
             if (data == null || !data.IsValid() || data.m_uid.IsNone() || !ReferenceEquals(ZDOMan.instance.GetZDO(data.m_uid), data)) { Reset(); return; }
+            bool fresh = !ReferenceEquals(previous, data) || !ReferenceEquals(network, current) || !ReferenceEquals(world, ZDOMan.instance);
             // Horizontal projection ignores pitch and roll. Missing/vertical
             // camera direction restores the server's character-heading fallback.
             GameCamera camera = GameCamera.instance;
@@ -31,18 +32,26 @@ namespace TooManyLags
             if (camera && !GameCamera.InFreeFly())
             {
                 Vector3 forward = camera.transform.forward;
-                heading = CameraHeading.Sector(forward.x, forward.z);
+                heading = CameraHeading.Coverage(forward.x, forward.z);
             }
-            bool fresh = !ReferenceEquals(previous, data) || !ReferenceEquals(network, current) || !ReferenceEquals(world, ZDOMan.instance);
             if (fresh) ZDOExtraData.AddSessionHash(CameraHeading.Key);
-            if (fresh || data.GetInt(CameraHeading.Key, -1) != heading) data.Set(CameraHeading.Key, heading);
+            if (fresh || data.GetInt(CameraHeading.Key, -1) != heading)
+            {
+                data.Set(CameraHeading.Key, heading);
+                // Existing native priority wakes FiresGhettoNetworking's idle
+                // sender; its send window and frame budget remain in control.
+                ZDOMan.instance.ForceSendZDO(data.m_uid);
+            }
             previous = data; network = current; world = ZDOMan.instance;
         }
         internal void Reset(bool invalidate = false)
         {
             if (invalidate && previous != null && ReferenceEquals(network, ZNet.instance) && ReferenceEquals(world, ZDOMan.instance) &&
-                previous.IsValid() && previous.GetOwner() == ZDOMan.GetSessionID() && ReferenceEquals(world.GetZDO(previous.m_uid), previous))
+                previous.IsValid() && previous.GetOwner() == ZDOMan.GetSessionID() && ReferenceEquals(world.GetZDO(previous.m_uid), previous) && previous.GetInt(CameraHeading.Key, -1) != -1)
+            {
                 previous.Set(CameraHeading.Key, -1);
+                world.ForceSendZDO(previous.m_uid);
+            }
             previous = null; network = null; world = null;
         }
     }
@@ -50,7 +59,7 @@ namespace TooManyLags
     internal static class CameraSamplePatch
     {
         // The native camera has finished positioning/rotation/shake. Sampling
-        // runs last among Harmony postfixes and writes only changed sectors.
+        // runs last among Harmony postfixes and writes only changed coverage.
         [HarmonyPostfix, HarmonyPriority(Priority.Last)]
         private static void Postfix() { Plugin.SampleCamera(); }
     }

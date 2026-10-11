@@ -262,24 +262,22 @@ internal static class IntegrationTests
     }
     private static void CameraPublication()
     {
-        Check("camera sector wraps north",CameraHeading.Sector(0)==0&&CameraHeading.Sector(360)==0&&CameraHeading.Sector(-360)==0);
-        Check("camera exact half-sector boundaries",CameraHeading.Sector(22.49f)==0&&CameraHeading.Sector(22.5f)==1&&CameraHeading.Sector(337.5f)==0&&CameraHeading.Sector(-22.5f)==0);
-        for(int i=0;i<8;i++)Check("eight camera directions",CameraHeading.Sector(i*45f)==i);
-        Check("invalid camera directions rejected",CameraHeading.Sector(float.NaN)==-1&&CameraHeading.Sector(float.PositiveInfinity)==-1&&CameraHeading.Sector(0,0)==-1&&CameraHeading.Sector(float.NaN,1)==-1);
+        Check("initial north has one raster",CameraHeading.Coverage(0,1)==0);
+        Check("invalid camera directions rejected",CameraHeading.Coverage(0,0)==-1&&CameraHeading.Coverage(float.NaN,1)==-1);
         Fresh(Kinds.Doors);ZNet.instance.Dedicated=false;ZNet.instance.ServerPeer=new ZNetPeer{Uid=99};
         var root=new GameObject();var player=root.Add(new Player());var view=root.Add(new ZNetView());
         var data=new ZDO{m_uid=new ZDOID{ID=next++},PersistentValue=false};data.SetOwner(ZDOMan.GetSessionID());view.Data=data;ZDOMan.instance.Objects.Add(data);
         Player.m_localPlayer=player;var cameraRoot=new GameObject();var camera=cameraRoot.Add(new GameCamera());GameCamera.instance=camera;GameCamera.FreeFly=false;
         var publisher=new CameraPublisher(.1f);publisher.Sample(0);
-        Check("first owned camera heading publishes through ZDO",data.GetInt(CameraHeading.Key,-1)==0&&data.IntWrites==1&&ZDOExtraData.SessionHashes.Contains(CameraHeading.Key));
+        Check("first owned camera coverage publishes through prioritized ZDO",data.GetInt(CameraHeading.Key,-1)==0&&data.IntWrites==1&&ZDOMan.instance.Forced==1&&ZDOExtraData.SessionHashes.Contains(CameraHeading.Key));
         for(int i=1;i<=100;i++)publisher.Sample(i*.01f);
-        Check("unchanged camera writes no repeated network state",data.IntWrites==1);
+        Check("unchanged camera writes no repeated network state or send priority",data.IntWrites==1&&ZDOMan.instance.Forced==1);
         camera.transform.forward=new Vector3(1,0,0);publisher.Sample(2);
-        Check("stationary camera turn changes sector without body rotation",data.GetInt(CameraHeading.Key,-1)==2&&data.Yaw==0&&data.IntWrites==2);
+        Check("stationary camera turn changes coverage without body rotation",data.GetInt(CameraHeading.Key,-1)==2&&data.Yaw==0&&data.IntWrites==2);
         GameCamera.FreeFly=true;publisher.Sample(3);publisher.Sample(4);
         Check("freefly publishes one fallback sentinel",data.GetInt(CameraHeading.Key,-2)==-1&&data.IntWrites==3);
         GameCamera.FreeFly=false;camera.transform.forward=new Vector3(-1,0,0);publisher.Sample(5);
-        Check("leaving freefly restores current camera heading",data.GetInt(CameraHeading.Key,-1)==6&&data.IntWrites==4);
+        Check("leaving freefly restores current camera coverage",data.GetInt(CameraHeading.Key,-1)==6&&data.IntWrites==4);
         publisher.Reset(true);Check("camera/plugin destruction clears current owned heading",data.GetInt(CameraHeading.Key,-2)==-1&&data.IntWrites==5);
         publisher.Sample(6);data.SetOwner(7);int writes=data.IntWrites;publisher.Reset(true);
         Check("cleanup does not write after ownership changed",data.IntWrites==writes);
@@ -297,15 +295,24 @@ internal static class IntegrationTests
         publisher.Sample(16);Check("stale player view absent from current world cannot publish",data.IntWrites==writes);
         var replacement=new ZDO{m_uid=new ZDOID{ID=next++},PersistentValue=false};replacement.SetOwner(ZDOMan.GetSessionID());view.Data=replacement;ZDOMan.instance.Objects.Add(replacement);publisher.Sample(17);
         Check("new player ZDO republishes immediately",replacement.GetInt(CameraHeading.Key,-1)==2&&replacement.IntWrites==1&&data.IntWrites==writes);
-        ZNet.instance=new ZNet{Dedicated=false};publisher.Sample(18);Check("disconnected client cannot publish",replacement.IntWrites==1);
+        publisher.Reset();camera.transform.forward=new Vector3(0,0,1);publisher.Sample(18);
+        int initialWrites=replacement.IntWrites,initialSends=ZDOMan.instance.Forced;
+        float[] turns={7.4f,7.6f,22.5f,37.4f,37.6f};int[] coverage={0,8,8,8,1};int[] changed={0,1,1,1,2};
+        for(int step=0;step<turns.Length;step++) {
+            double angle=turns[step]*Math.PI/180;camera.transform.forward=new Vector3((float)Math.Sin(angle),0,(float)Math.Cos(angle));publisher.Sample(19+step);
+            Check("real camera turn publishes only changed widened masks",replacement.GetInt(CameraHeading.Key,-1)==coverage[step]&&replacement.IntWrites==initialWrites+changed[step]&&ZDOMan.instance.Forced==initialSends+changed[step]);
+        }
+        int sendsBeforeLoss=ZDOMan.instance.Forced;publisher.Reset(true);publisher.Reset(true);
+        Check("camera destruction prioritizes fallback once",replacement.GetInt(CameraHeading.Key,-2)==-1&&ZDOMan.instance.Forced==sendsBeforeLoss+1);
+        writes=replacement.IntWrites;ZNet.instance=new ZNet{Dedicated=false};publisher.Sample(25);Check("disconnected client cannot publish",replacement.IntWrites==writes);
         publisher.Reset();Player.m_localPlayer=null;GameCamera.instance=null;GameCamera.FreeFly=false;
     }
     private static void CameraFastCadence()
     {
         Check("camera cadence accepts twentieth-second minimum",new OwnershipCadence(.05f,.05f).Interval==.05f);
         Check("camera cadence clamps supported bounds",new OwnershipCadence(.01f,.05f).Interval==.05f&&new OwnershipCadence(30,.05f).Interval==5f);
-        Check("invalid camera cadence retains tenth-second default",new OwnershipCadence(float.NaN,.05f).Interval==.1f&&new OwnershipCadence(float.PositiveInfinity,.05f).Interval==.1f);
-        Check("camera minimum does not lower server movement minimum",new OwnershipCadence(.05f).Interval==.1f);
+        Check("invalid camera cadence retains twentieth-second default",new OwnershipCadence(float.NaN,.05f).Interval==.05f&&new OwnershipCadence(float.PositiveInfinity,.05f).Interval==.05f);
+        Check("server movement cadence accepts twentieth-second minimum",new OwnershipCadence(.05f).Interval==.05f);
         Fresh(Kinds.Doors);ZNet.instance.Dedicated=false;ZNet.instance.ServerPeer=new ZNetPeer{Uid=99};
         var root=new GameObject();var player=root.Add(new Player());var view=root.Add(new ZNetView());
         var data=new ZDO{m_uid=new ZDOID{ID=next++},PersistentValue=false};data.SetOwner(ZDOMan.GetSessionID());view.Data=data;ZDOMan.instance.Objects.Add(data);
@@ -317,7 +324,7 @@ internal static class IntegrationTests
             publisher.Sample(now);Check("fast camera publishes every twentieth second",data.IntWrites==tick+1&&data.GetInt(CameraHeading.Key,-1)==(tick%2==0?0:2));
         }
         for(int sample=1;sample<=1000;sample++)publisher.Sample(now+sample*.001f);
-        Check("fast stable camera adds no repeated network writes",data.IntWrites==21);
+        Check("fast stable camera adds no repeated network writes or send priority",data.IntWrites==21&&ZDOMan.instance.Forced==21);
         publisher.Reset();Player.m_localPlayer=null;GameCamera.instance=null;GameCamera.FreeFly=false;
     }
     private static void CameraDirectedController()
@@ -332,8 +339,21 @@ internal static class IntegrationTests
         Check("stable camera sector repeats no field request",controller.FieldUpdates==updates+1);
         player.Set(CameraHeading.Key,-1);player.Yaw=180;Tick(3);
         Check("camera sentinel follows current body heading",controller.FieldUpdates==updates+2&&player.RotationReads>0);
-        foreach(int invalid in new[]{-1,8,int.MaxValue}){player.Set(CameraHeading.Key,invalid);Check("invalid advisory falls back",CameraHeading.Read(player,1)==180);}
-        player.Set(CameraHeading.Key,0);player.SetOwner(2);Check("foreign owner advisory is ignored",CameraHeading.Read(player,1)==180);
+        foreach(int invalid in new[]{-1,16,int.MaxValue}){player.Set(CameraHeading.Key,invalid);Check("invalid advisory falls back",CameraHeading.Read(player,1)==4);}
+        player.Set(CameraHeading.Key,0);player.SetOwner(2);Check("foreign owner advisory is ignored",CameraHeading.Read(player,1)==4);
+
+        Fresh(Kinds.Doors,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true,checkIntervalSeconds:.05f);
+        peer=Peer(1);player=ZDOMan.instance.GetZDO(peer.m_characterID);player.SetOwner(1);player.Set(CameraHeading.Key,0);
+        var northOnly=Object(typeof(Door),-3,1);var diagonalOnly=Object(typeof(Door),5,-3);
+        controller.Poll(0);Check("one initial raster with instant inner fields",northOnly.GetOwner()==1&&diagonalOnly.GetOwner()==99);
+        player.Set(CameraHeading.Key,8);Time.time=Time.unscaledTime=.001f;controller.DataChanged(player);controller.Poll(.001f);
+        Check("received changed camera bypasses remaining server interval for zero-delay fields",northOnly.GetOwner()==1&&diagonalOnly.GetOwner()==1&&failures==0);
+        updates=controller.FieldUpdates;Time.time=Time.unscaledTime=.1f;controller.Poll(.1f);
+        Check("unchanged overlap starts no duplicate field work",controller.FieldUpdates==updates);
+        player.Set(CameraHeading.Key,1);Time.time=Time.unscaledTime=.101f;controller.DataChanged(player);controller.DataChanged(player);controller.Poll(.101f);Cell northCell;
+        Check("valid physical field",Cell.At(-3,1,4,out northCell));
+        Check("old raster leaves coverage while sticky owner stays",Index().Grid.Candidate(northCell)==0&&northOnly.GetOwner()==1&&diagonalOnly.GetOwner()==1);
+
         Fresh(Kinds.Doors,nativeSolo:true,directional:true);peer=Peer(1);player=ZDOMan.instance.GetZDO(peer.m_characterID);player.SetOwner(1);player.Set(CameraHeading.Key,2);Tick(0);
         Check("solo vanilla bypass still skips heading work",controller.FieldUpdates==0&&player.RotationReads==0);
     }
@@ -738,8 +758,8 @@ internal static class IntegrationTests
     }
     private static void QuarterSecondCadence()
     {
-        Check("invalid cadence falls back to configured tenth-second default",new OwnershipCadence(Single.NaN).Interval==.1f&&new OwnershipCadence(Single.PositiveInfinity).Interval==.1f);
-        Check("supported cadence bounds unchanged",new OwnershipCadence(0).Interval==.1f&&new OwnershipCadence(30).Interval==5f);
+        Check("invalid cadence falls back to configured twentieth-second default",new OwnershipCadence(Single.NaN).Interval==.05f&&new OwnershipCadence(Single.PositiveInfinity).Interval==.05f);
+        Check("supported cadence bounds",new OwnershipCadence(0).Interval==.05f&&new OwnershipCadence(30).Interval==5f);
         var cadence=new OwnershipCadence(.25f);
         Check("first cadence sample is immediate",cadence.Due(0));
         Check("no early movement check",!cadence.Due(.249f));

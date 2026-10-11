@@ -61,7 +61,7 @@ namespace TooManyLags
             string[] sections = {
                 "01 - General", "02 - Static Buildings", "03 - Default Ownership and Overrides",
                 "04 - Grid Settings", "05 - Directional Grid Mode", "06 - Full Grid Mode",
-                "07 - Object Categories", "08 - Camera Heading", "09 - AI Mob Ownership"
+                "08 - Camera Heading", "09 - AI Mob Ownership", "10 - Object Categories"
             };
             int found = 0;
             foreach (string line in File.ReadAllLines(path)) if (line.StartsWith("[", StringComparison.Ordinal)) {
@@ -74,8 +74,8 @@ namespace TooManyLags
             reloaded.Bind(); VerifyDefaults(reloaded.Config); reloaded.Config.Save();
             if (File.ReadAllText(path) != generated) throw new Exception("Generated config changed during actual BepInEx reload/save.");
             Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 43 settings in nine ordered English feature sections.");
-            Console.WriteLine("PASS: original 38 defaults unchanged; camera interval=0.1, EnableAIOwnership=true, ServerFallbackPingMs=200, ServerFallbackRadius=6.");
-            Console.WriteLine("PASS: actual BepInEx camera range accepts 0.05 seconds and clamps to 0.05-5; server movement minimum remains 0.1.");
+            Console.WriteLine("PASS: only camera/movement defaults change to 0.05; remaining 41 values unchanged; object categories are last with one shared explanation.");
+            Console.WriteLine("PASS: actual BepInEx camera and server movement ranges accept 0.05 seconds and clamp to 0.05-5.");
         }
         private static void VerifyDefaults(ConfigFile config)
         {
@@ -91,18 +91,18 @@ namespace TooManyLags
             camera.Value = (float)camera.DefaultValue;
             ConfigEntry<float> movement = (ConfigEntry<float>)config[new ConfigDefinition("04 - Grid Settings", "MovementRotationCheckIntervalSeconds")];
             AcceptableValueRange<float> movementRange = movement.Description.AcceptableValues as AcceptableValueRange<float>;
-            if (movementRange == null || movementRange.MinValue != .1f) throw new Exception("Server movement interval minimum changed.");
+            if (movementRange == null || movementRange.MinValue != .05f) throw new Exception("Unexpected server movement interval minimum.");
             Dictionary<string, string> expected = new Dictionary<string, string> {
                 {"01 - General/Enabled", "true"}, {"01 - General/NoServerSideSimulation", "false"}, {"01 - General/EnableLogs", "false"},
                 {"02 - Static Buildings/ServerOwnedStaticBuildings", "false"},
                 {"03 - Default Ownership and Overrides/ServerOwnedInteractivesByDefault", "false"},
                 {"03 - Default Ownership and Overrides/ServerOwnedRefillStations", "false"},
                 {"04 - Grid Settings/GridCellSizeMeters", "4"}, {"04 - Grid Settings/GridCoveragePattern", "Rounded7x7"},
-                {"04 - Grid Settings/MovementRotationCheckIntervalSeconds", "0.1"}, {"04 - Grid Settings/KeepOwnershipOnCellExit", "true"},
+                {"04 - Grid Settings/MovementRotationCheckIntervalSeconds", "0.05"}, {"04 - Grid Settings/KeepOwnershipOnCellExit", "true"},
                 {"05 - Directional Grid Mode/DirectionalGridMode", "true"}, {"05 - Directional Grid Mode/InnerTransitionDelaySeconds", "0"},
                 {"05 - Directional Grid Mode/ForwardTransitionDelaySeconds", "0.2"}, {"05 - Directional Grid Mode/OuterTransitionDelaySeconds", "3"},
                 {"06 - Full Grid Mode/TransitionDelaySeconds", "2"},
-                {"08 - Camera Heading/CameraHeadingCheckIntervalSeconds", "0.1"},
+                {"08 - Camera Heading/CameraHeadingCheckIntervalSeconds", "0.05"},
                 {"09 - AI Mob Ownership/EnableAIOwnership", "true"}, {"09 - AI Mob Ownership/ServerFallbackPingMs", "200"},
                 {"09 - AI Mob Ownership/ServerFallbackRadius", "6"}
             };
@@ -110,8 +110,9 @@ namespace TooManyLags
                 "Doors", "Seats", "Beds", "Workstations", "Smelters", "CookingStations", "Fireplaces", "Beehives",
                 "SapCollectors", "Wards", "MapTables", "Wisplights", "TamedAnimals", "Containers", "ItemStands", "Signs",
                 "Portals", "Fermenters", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables"
-            }) expected.Add("07 - Object Categories/" + category, "true");
+            }) expected.Add("10 - Object Categories/" + category, "true");
             if (config.Count != 43) throw new Exception("Expected 43 config entries; found " + config.Count + ".");
+            int categoryNotes = 0;
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> entry in config) {
                 string key = entry.Key.Section + "/" + entry.Key.Key, value = Convert.ToString(entry.Value.BoxedValue, CultureInfo.InvariantCulture), wanted;
                 if (entry.Value.BoxedValue is bool) value = value.ToLowerInvariant();
@@ -121,10 +122,14 @@ namespace TooManyLags
                 if (defaultValue != wanted) throw new Exception("Binding default differs: " + key);
                 if (String.IsNullOrEmpty(entry.Value.Description.Description)) throw new Exception("Missing setting description: " + key);
                 string scope = entry.Key.Key == "Enabled" || entry.Key.Key == "EnableAIOwnership" ? "Server and" : entry.Key.Key == "EnableLogs" ? "Local" : "Server only";
-                if (!entry.Value.Description.Description.StartsWith(scope, StringComparison.Ordinal)) throw new Exception("Incorrect/missing setting scope: " + key);
+                if (entry.Key.Section == "10 - Object Categories") {
+                    if (entry.Value.Description.Description.StartsWith("All categories below:", StringComparison.Ordinal)) categoryNotes++;
+                    else if (entry.Value.Description.Description.Contains("restart required") || entry.Value.Description.Description.Contains("true:")) throw new Exception("Repeated category instructions: " + key);
+                } else if (!entry.Value.Description.Description.StartsWith(scope, StringComparison.Ordinal)) throw new Exception("Incorrect/missing setting scope: " + key);
                 expected.Remove(key);
             }
             if (expected.Count != 0) throw new Exception("Missing expected config settings.");
+            if (categoryNotes != 1) throw new Exception("Expected exactly one shared category explanation.");
         }
     }
 }

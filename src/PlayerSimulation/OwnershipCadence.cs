@@ -8,12 +8,15 @@ namespace TooManyLags.PlayerSimulation
     // timer and release behavior stay untouched; Authority has no own Update.
     internal sealed class OwnershipCadence
     {
-        internal readonly float Interval;
+        internal float Interval { get; private set; }
         private float next, previous;
         private bool started;
         internal OwnershipCadence(float interval, float minimum = .1f)
+        { Configure(interval, minimum); }
+        internal void Configure(float interval, float minimum = .1f)
         {
             Interval = Single.IsNaN(interval) || Single.IsInfinity(interval) ? IntervalConfig.Default : Math.Max(minimum, Math.Min(5f, interval));
+            started = false;
         }
         internal bool Due(float now)
         {

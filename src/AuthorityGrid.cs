@@ -77,8 +77,8 @@ namespace TooManyLags
         internal readonly HashSet<Cell> Accelerations = new HashSet<Cell>();
         private readonly bool directional;
         private readonly bool discardVacant;
-        private readonly float innerDelay, outerDelay, forwardDelay;
-        internal readonly float Delay;
+        private float innerDelay, outerDelay, forwardDelay;
+        internal float Delay;
         private float lastTime, nextDue = Single.PositiveInfinity;
         private int deferredCells;
         internal int Rebuilds, NeighborReads, PlayerUpdates, TimerVisits;
@@ -130,6 +130,10 @@ namespace TooManyLags
         }
         private static float SafeDelay(float value, float fallback)
         { return Single.IsNaN(value) || Single.IsInfinity(value) ? fallback : Math.Max(0f, Math.Min(30f, value)); }
+        // Command-only tuning: keep requests, deadlines, overlap coverage and
+        // completed-field receipts. New requests use the new delays.
+        internal void ConfigureDelays(float full, float inner, float forward, float outer)
+        { Delay = SafeDelay(full, 2f); innerDelay = SafeDelay(inner, 0f); forwardDelay = SafeDelay(forward, .2f); outerDelay = SafeDelay(outer, 3f); }
         private static float Yaw(float value, float fallback)
         { if (Single.IsNaN(value) || Single.IsInfinity(value)) return fallback; value %= 360f; return value < 0 ? value + 360f : value; }
         internal long Owner(Cell cell) { Policy p; return policies.TryGetValue(cell, out p) ? p.Owner : 0L; }

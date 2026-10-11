@@ -11,6 +11,7 @@ namespace TooManyLags
         private ZNet network;
         private ZDOMan world;
         internal CameraPublisher(float interval) { cadence = new OwnershipCadence(interval, .05f); }
+        internal void Configure(float interval) { cadence.Configure(interval, .05f); }
         internal void Sample(float now)
         {
             if (!cadence.Due(now)) return;

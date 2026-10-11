@@ -1,3 +1,16 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.10 release validation
+
+## Live console configuration and camera timing
+
+`tml_config` reads server-owned settings and changes only nine explicitly supported tuning entries: movement/camera intervals, four grid delays, two mob fallback thresholds and local diagnostics. Remote requests use the connected socket's native `ZNet.IsAdmin` identity check, not a claimed player name or object owner. Endpoints run only on console requests, connection setup and peer readiness; there is no new frame/physics polling, config watcher or global ownership scan. Each connection accepts at most four requests per second; command/reply lengths and reply tickets are bounded. Only the current server connection may supply camera timing. Server and client settings are marked in every generated config description; all 43 original defaults remain unchanged.
+
+Camera publication waits for the server's interval. A postfix on native `ZNet.RPC_PeerInfo` sends it once when a peer becomes ready; live camera changes broadcast once to ready clients. Camera sector publication continues through the existing session-only player ZDO key, without periodic camera RPCs. The interval supports 0.05–5 seconds. Existing clients must update to this version; no automatic mutation of their config files occurs.
+
+Live timing setters retain object indexes, coverage, completed-field receipts, cooperative ownership transfers, inventory consent, refill/active-use protection and collision guards. They never call Reset/Stop or reinstall gameplay hooks. Stationary requests retain their scheduled deadline; subsequent player activity uses updated delays. Native release/world lifecycle and mob arbitration are unchanged. Mode, geometry, categories and feature switches are refused by the live command because changing them would require rebuilding or re-negotiating state.
+
+New fixtures pass 40 config/endpoint assertions using real BepInEx.ConfigFile, plus nine timing/cache assertions in each simulation mode. Coverage includes persistence/rollback, invalid and out-of-range values, scope, unchanged-value shortcuts, native identity authorization, rate limits, stale connections/tickets, camera synchronization and pending-deadline preservation. The actual Valheim assembly exposes the public admin-list check and expected connection-ready signature. Full regression results and DLL hashes are in verification.json. No live Unity multiplayer session has been tested.
+
+---
 # TooManyLags - FiresGhettoNetworking Addon 1.0.9 release validation
 
 ## Mob policy precedence

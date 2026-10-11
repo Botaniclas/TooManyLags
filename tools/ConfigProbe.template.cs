@@ -120,6 +120,8 @@ namespace TooManyLags
                 if (entry.Value.DefaultValue is bool) defaultValue = defaultValue.ToLowerInvariant();
                 if (defaultValue != wanted) throw new Exception("Binding default differs: " + key);
                 if (String.IsNullOrEmpty(entry.Value.Description.Description)) throw new Exception("Missing setting description: " + key);
+                string scope = entry.Key.Key == "Enabled" || entry.Key.Key == "EnableAIOwnership" ? "Server and" : entry.Key.Key == "EnableLogs" ? "Local" : "Server only";
+                if (!entry.Value.Description.Description.StartsWith(scope, StringComparison.Ordinal)) throw new Exception("Incorrect/missing setting scope: " + key);
                 expected.Remove(key);
             }
             if (expected.Count != 0) throw new Exception("Missing expected config settings.");

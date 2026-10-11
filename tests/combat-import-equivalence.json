@@ -1,12 +1,12 @@
 {
   "source": "BotanicPupPatch-2.1.0",
-  "target": "TooManyLags-FGNAddon-1.0.9",
+  "target": "TooManyLags-FGNAddon-1.0.10",
   "original_source_preserved": true,
   "files": [
     {
       "file": "FgnCombatOwnership.cs",
       "source_sha256": "1EEEA58FF57EBBB0E8CC3A271A45D2D43C82BE94D97AEE1B579C6C87CBD70C14",
-      "import_sha256": "45C91375B9533F96EA6C1FC26330DB972050C21A814EAF7B2829FAC38FF8B8A3",
+      "import_sha256": "A53D1E79B8FFA137EE9697023F9741A1D03845ED2E0C13827A906FBCC45546B6",
       "namespace_branding_protocol_only": false,
       "additional_changes": [
         "Config section/descriptions/default adapted for required FGN and 09 - AI Mob Ownership.",
@@ -15,7 +15,8 @@
         "Runtime failure comment now describes independent modules.",
         "1.0.3 adds the narrow non-player Character.Faction.Players exclusion to AI eligibility/watches/reports/queued handoff veto/server loading/lease cleanup/late-hit forwarding. Current-player-only targets and original protections/caps remain unchanged.",
         "1.0.3 uses weak cached loaded actor references for current live faction and a scene-scoped 1024-entry FIFO cache of prefab Character references for unloaded ZDO classification. Missing prefabs are retried; session/fault/scene lifecycle clears caches; current cached faction is read instead of storing an immutable boolean.",
-        "1.0.8 changes only configuration descriptions in this imported module: expands FiresGhettoNetworking and Server-Side Simulation, and explains the player-simulation fallback. Runtime AI logic unchanged."
+        "1.0.8 changes only configuration descriptions in this imported module: expands FiresGhettoNetworking and Server-Side Simulation, and explains the player-simulation fallback. Runtime AI logic unchanged.",
+        "1.0.10 adds server/client scope and live-console descriptions; executable AI logic remains unchanged. Threshold entries were already read dynamically."
       ]
     },
     {

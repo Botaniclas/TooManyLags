@@ -171,6 +171,7 @@ internal static class NativeReleaseAudit
         Check(dependencies == 1, "Exactly one plugin dependency required");
         foreach (AssemblyNameReference reference in authority.MainModule.AssemblyReferences)
             Check(reference.Name.IndexOf("pup", StringComparison.OrdinalIgnoreCase) < 0, "Unexpected Pup assembly dependency");
+        int configRegistrations = 0, configAdminChecks = 0;
         foreach (TypeDefinition type in AllTypes(authority.MainModule.Types))
         {
             // Imported AI contracts and optional direct PUP readiness have their
@@ -190,8 +191,28 @@ internal static class NativeReleaseAudit
                     if (called != null)
                     {
                         Check(called.DeclaringType.FullName != "System.Version", "Runtime numeric version gate remains");
+                        bool configEndpoint = type.FullName == "TooManyLags.ConfigConsole" && method.Name == "Connect";
+                        if (called.DeclaringType.FullName == "ZRpc" && called.Name == "Register" && configEndpoint)
+                        {
+                            string endpoint = null;
+                            for (int i = method.Body.Instructions.IndexOf(instruction) - 1; i >= 0; i--)
+                                if (method.Body.Instructions[i].OpCode == Mono.Cecil.Cil.OpCodes.Ldstr)
+                                { endpoint = (string)method.Body.Instructions[i].Operand; break; }
+                            Check(endpoint == "TooManyLags_Config_1" || endpoint == "TooManyLags_ConfigReply_1" || endpoint == "TooManyLags_CameraInterval_1", "Only isolated config/camera RPC names may be registered");
+                            configRegistrations++;
+                        }
+                        if (type.FullName.StartsWith("TooManyLags.ConfigConsole/", StringComparison.Ordinal) && called.DeclaringType.FullName == "ZNet" && called.Name == "IsAdmin")
+                        {
+                            bool executesAfterAuthorization = false;
+                            for (int i = method.Body.Instructions.IndexOf(instruction) + 1; i < method.Body.Instructions.Count; i++)
+                            {
+                                MethodReference later = method.Body.Instructions[i].Operand as MethodReference;
+                                if (later != null && later.DeclaringType.FullName == "TooManyLags.Plugin" && later.Name == "ConfigCommand") executesAfterAuthorization = true;
+                            }
+                            Check(executesAfterAuthorization, "Remote setting execution follows native admin identity check"); configAdminChecks++;
+                        }
                         Check(!((called.DeclaringType.FullName == "ZRpc" || called.DeclaringType.FullName == "ZRoutedRpc") &&
-                            called.Name == "Register") || (type.FullName == "TooManyLags.PlayerSimulation.Network" && method.Name == "Register"), "Authority registers/replaces a native client RPC callback");
+                            called.Name == "Register") || configEndpoint || (type.FullName == "TooManyLags.PlayerSimulation.Network" && method.Name == "Register"), "Authority registers/replaces a native client RPC callback");
                         Check(!(called.DeclaringType.FullName == "System.Reflection.FieldInfo" && called.Name == "SetValue") ||
                             (type.FullName == "TooManyLags.FgnSessionSettings" && (method.Name == "Apply" || method.Name == "CreatureBalancing")),
                             "Reflection writes must be confined to approved FGN startup settings; native gameplay fields remain untouched");
@@ -203,6 +224,14 @@ internal static class NativeReleaseAudit
                 }
             }
         }
+        Check(configRegistrations == 3 && configAdminChecks == 1, "Three private config/camera endpoints and one remote admin check required");
+        TypeDefinition net = native.MainModule.GetType("ZNet"); MethodDefinition admin = null, ready = null;
+        foreach (MethodDefinition method in net.Methods) { if (method.Name == "IsAdmin") admin = method; if (method.Name == "RPC_PeerInfo") ready = method; }
+        Check(admin != null && admin.IsPublic && admin.Parameters.Count == 1 && admin.Parameters[0].ParameterType.FullName == "System.String" && admin.ReturnType.FullName == "System.Boolean", "Native public admin-list wrapper changed");
+        bool nativeList = false;
+        foreach (var instruction in admin.Body.Instructions) { MethodReference called = instruction.Operand as MethodReference; if (called != null && called.Name == "ListContainsId") nativeList = true; }
+        Check(nativeList, "Config authorization uses vanilla admin list");
+        Check(ready != null && ready.Parameters.Count == 2 && ready.Parameters[0].Name == "rpc" && ready.Parameters[0].ParameterType.FullName == "ZRpc" && ready.Parameters[1].ParameterType.FullName == "ZPackage", "Native peer-ready callback changed");
     }
     private static IEnumerable<TypeDefinition> AllTypes(IEnumerable<TypeDefinition> source)
     {
@@ -303,6 +332,7 @@ internal static class NativeReleaseAudit
     }
     private static void Targets(AssemblyDefinition authority, AssemblyDefinition native, Assembly runtime, Assembly game)
     {
+        int configTargets = 0;
         foreach (TypeDefinition type in authority.MainModule.Types)
         {
             CustomAttribute patch = null;
@@ -339,6 +369,11 @@ internal static class NativeReleaseAudit
                     }
                 }
                 Check(owner != null && name != null, "Unrecognized declarative Harmony target");
+                if (type.FullName == "TooManyLags.ConfigConnectionPatch" || type.FullName == "TooManyLags.ConfigShutdownPatch" || type.FullName == "TooManyLags.ConfigReadyPatch")
+                {
+                    string expected = type.Name == "ConfigConnectionPatch" ? "OnNewConnection" : type.Name == "ConfigReadyPatch" ? "RPC_PeerInfo" : "Shutdown";
+                    Check(owner == "ZNet" && name == expected, "Config hooks must remain connection/ready/shutdown events only"); configTargets++;
+                }
                 TypeDefinition nativeType = native.MainModule.GetType(owner);
                 MethodDefinition target = null; int matches = 0;
                 if (nativeType != null)
@@ -351,7 +386,7 @@ internal static class NativeReleaseAudit
                 PatchParameters(type, target); targets++;
             }
         }
-        Check(targets == 40, "Unexpected Harmony target count: " + targets);
+        Check(configTargets == 3 && targets == 43, "Unexpected Harmony target count: " + targets);
     }
     private static MethodDefinition ByToken(TypeDefinition type, int token)
     { foreach (MethodDefinition method in type.Methods) if (method.MetadataToken.ToInt32() == token) return method; return null; }

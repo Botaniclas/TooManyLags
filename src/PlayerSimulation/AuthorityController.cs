@@ -38,6 +38,9 @@ namespace TooManyLags.PlayerSimulation
             Handoffs = new Handoffs(this); Mobs = new MobPolicy(this); index.AfterGridUpdate = SyncInterest;
         }
         internal bool Active { get { return !failed && ZNet.instance && ZNet.instance.IsServer() && ZDOMan.instance != null; } }
+        internal void ConfigureInterval(float interval) { cadence.Configure(interval); }
+        internal void ConfigureDelays(float full, float inner, float forward, float outer)
+        { index.Grid.ConfigureDelays(full, inner, forward, outer); }
         internal bool Shared(long uid) { return Active && regions.Shared(uid); }
         internal bool WatchMobs(long uid) { return mobPeers > 1 && Shared(uid); }
         internal bool NativeTransferSafe(ZDO data) { return catalog.NativeTransferSafe(data.GetPrefab()); }

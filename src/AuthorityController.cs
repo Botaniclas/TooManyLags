@@ -18,7 +18,7 @@ namespace TooManyLags
             public override int GetHashCode() { return Owner.GetHashCode() ^ Cell.GetHashCode() ^ Center.GetHashCode(); }
         }
         private readonly Kinds kinds;
-        private readonly float delay;
+        private float delay;
         private readonly OwnershipCadence cadence;
         private readonly CompatibilityBridge compatibility;
         private readonly Action<Exception> fault, requestFault;
@@ -26,7 +26,7 @@ namespace TooManyLags
         private readonly int cellSize;
         private readonly GridCoveragePattern pattern;
         private readonly bool directional;
-        private readonly float innerDelay, outerDelay, forwardDelay;
+        private float innerDelay, outerDelay, forwardDelay;
         private StaticBuildings statics;
         private readonly Dictionary<ZDOID, NativeNode> nodes = new Dictionary<ZDOID, NativeNode>();
         private ConditionalWeakTable<ZNetView, NativeNode> views = new ConditionalWeakTable<ZNetView, NativeNode>();
@@ -86,6 +86,12 @@ namespace TooManyLags
             return indexed != null;
         }
         internal void Poll(float now) { if (cadence.Due(now)) Tick(); }
+        internal void ConfigureInterval(float interval) { cadence.Configure(interval); }
+        internal void ConfigureDelays(float full, float inner, float forward, float outer)
+        {
+            delay = full; innerDelay = inner; forwardDelay = forward; outerDelay = outer;
+            if (indexed != null) indexed.Grid.ConfigureDelays(full, inner, forward, outer);
+        }
         internal void Tick()
         {
             try

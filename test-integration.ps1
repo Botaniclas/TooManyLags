@@ -11,7 +11,7 @@ $authorityGridExe=Join-Path $authorityTestOutput 'GridTests.exe'
 if($LASTEXITCODE -ne 0){throw 'Grid compile failed.'}
 & $authorityGridExe
 if($LASTEXITCODE -ne 0){throw 'Grid tests failed.'}
-$authoritySources=Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' | Where-Object { $_.Name -notin @('Plugin.cs','FgnSessionSettings.cs','MobPolicyHandoff.cs','FgnCombatOwnership.cs','FgnCombatBridge.cs','FgnCombatStatus.cs','FgnTargetEvents.cs','FgnAttackRetry.cs','FieldReader.cs','NativePup.cs','CellReadiness.cs') } | Select-Object -ExpandProperty FullName
+$authoritySources=Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' | Where-Object { $_.Name -notin @('Plugin.cs','ConfigCommands.cs','ConfigConsole.cs','FgnSessionSettings.cs','MobPolicyHandoff.cs','FgnCombatOwnership.cs','FgnCombatBridge.cs','FgnCombatStatus.cs','FgnTargetEvents.cs','FgnAttackRetry.cs','FieldReader.cs','NativePup.cs','CellReadiness.cs') } | Select-Object -ExpandProperty FullName
 $authorityFixtures=@('RuntimeFixtures.cs','ExtraFixtures.cs','InteractionFixtures.cs','FgnRpcFixtures.cs','IntegrationTests.cs') | ForEach-Object {Join-Path $PSScriptRoot ('tests\'+$_)}
 $authorityIntegrationExe=Join-Path $authorityTestOutput 'IntegrationTests.exe'
 & $authorityCompiler /nologo /optimize+ /warnaserror+ /langversion:5 ('/reference:'+$authorityHarmony) ('/out:'+$authorityIntegrationExe) @authoritySources @authorityFixtures

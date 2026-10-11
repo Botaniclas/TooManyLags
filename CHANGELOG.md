@@ -1,5 +1,11 @@
 # Changelog
 
+**Unreleased**
+```
+- Adds admin-only in-game tuning of ownership check intervals, transition delays and Hostile Mob fallback thresholds without restarting. Preserves pending handoffs and usage safeguards; grid layout, categories and simulation mode still require a restart.
+- Camera check timing is now controlled by the server and synchronized to clients on join and live changes. Client config values no longer control it.
+```
+
 **1.0.9**
 ```
 - Fixes Hostile Mob ownership being disabled by another installed target-ownership feature. Keeps collision protection active and restores the previous target policy if startup fails.

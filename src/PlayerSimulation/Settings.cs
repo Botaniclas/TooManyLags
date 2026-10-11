@@ -6,10 +6,13 @@ namespace TooManyLags.PlayerSimulation
     // Read the addon's existing settings, not a second standalone config.
     internal sealed class Settings
     {
-        internal readonly bool Logs, Directional, Keep;
+        internal bool Logs;
+        internal readonly bool Directional, Keep;
         internal bool Mobs;
-        internal readonly int CellSize, HighPing;
-        internal readonly float Interval, Inner, Forward, Outer, Full, PingInterval, Margin, MobRadius;
+        internal readonly int CellSize;
+        internal int HighPing;
+        internal float Interval, Inner, Forward, Outer, Full, MobRadius;
+        internal readonly float PingInterval, Margin;
         internal readonly GridCoveragePattern Pattern;
         internal readonly Kinds Categories;
         internal Settings(ConfigFile config, bool mobs)

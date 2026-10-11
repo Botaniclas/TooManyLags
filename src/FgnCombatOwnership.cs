@@ -56,11 +56,11 @@ namespace TooManyLags
         internal static void Install(ConfigFile config, Assembly assembly, System.Version version, bool allowInstall = true)
         {
             configured = config.Bind("09 - AI Mob Ownership", "EnableAIOwnership", true,
-                "Use the mob's active player target for FiresGhettoNetworking ownership. Requires two eligible nearby players. Attacks block transfers and retry after attack end. Install the same version on server and clients; restart required.");
+                "Server and all clients; use the same value; restart required. Use the mob's active player target for FiresGhettoNetworking ownership. Requires two eligible nearby players. Attacks block transfers and retry after attack end. Install the same version on server and clients.");
             maximumPing = config.Bind("09 - AI Mob Ownership", "ServerFallbackPingMs", 200,
-                new ConfigDescription("Target ping limit in milliseconds for server fallback with Server-Side Simulation, or a lower-latency nearby player with NoServerSideSimulation=true. Requires another eligible FiresGhettoNetworking player within ServerFallbackRadius. 0: target ping must exceed the best other candidate by 250 ms. Server setting.", new AcceptableValueRange<int>(0, 2000)));
+                new ConfigDescription("Server only; live console supported. Target ping limit in milliseconds for server fallback with Server-Side Simulation, or a lower-latency nearby player with NoServerSideSimulation=true. Requires another eligible FiresGhettoNetworking player within ServerFallbackRadius. 0: target ping must exceed the best other candidate by 250 ms.", new AcceptableValueRange<int>(0, 2000)));
             nearbyRadius = config.Bind("09 - AI Mob Ownership", "ServerFallbackRadius", 6f,
-                new ConfigDescription("Distance in metres to another eligible FiresGhettoNetworking player for high-ping fallback. With Server-Side Simulation the server takes over; otherwise a lower-latency nearby player. The candidate must have the mob in its active area. Server setting.", new AcceptableValueRange<float>(1f, 100f)));
+                new ConfigDescription("Server only; live console supported. Distance in metres to another eligible FiresGhettoNetworking player for high-ping fallback. With Server-Side Simulation the server takes over; otherwise a lower-latency nearby player. The candidate must have the mob in its active area.", new AcceptableValueRange<float>(1f, 100f)));
             StartupError = null;
             detectedVersion = version;
             InstallationStatus = assembly == null ? "FGN absent" : "disabled in config";

@@ -1,12 +1,12 @@
 {
   "source": "TooManyLags Standalone 1.0.1",
-  "target": "TooManyLags FiresGhettoNetworking Addon 1.0.9 player-simulation mode",
+  "target": "TooManyLags FiresGhettoNetworking Addon 1.0.10 player-simulation mode",
   "files": [
     {
       "file": "AuthorityGrid.cs",
       "sourceSha256": "B667E68848F45839385F614EE055DEE50118D88222213F160112642494347727",
-      "importSha256": "2FF0D3378BE2077B9A0F5E2EA047065475F00B673CBCB02CDCAC43C3268C84E4",
-      "namespaceOnly": true
+      "importSha256": "922E69DA6C8DCE40F3E9BEF0AFF05B36A457AF072FAC3F4612D909BFEF0219C0",
+      "namespaceOnly": false
     },
     {
       "file": "FieldReader.cs",
@@ -59,8 +59,8 @@
     {
       "file": "OwnershipCadence.cs",
       "sourceSha256": "E130889D600B77B1D8E6A2B54775DA3F054B5F24847AC60EF71D11EB86E21234",
-      "importSha256": "7113CEA6F161EB03857168E36967FD3294D84A8EFA8E5D61E1526BCEAF88D84E",
-      "namespaceOnly": true
+      "importSha256": "3CDF6C1010C984238FEB4F6CF2752140555EEB25FE09F7A57B3F71EB36359D5A",
+      "namespaceOnly": false
     },
     {
       "file": "RegionContentionGate.cs",
@@ -83,8 +83,8 @@
     {
       "file": "AuthorityController.cs",
       "sourceSha256": "961FFE21CA94DC6864766DFB9F53BD168A08B11049CE43255139A971D2CB120B",
-      "importSha256": "F9D7F1BAD892CE24151B6FFCC9F345364B27D45C3DB80E045B11789011E0CEFB",
-      "namespaceOnly": true
+      "importSha256": "96B4FBB1F40AE7A4F5205AE6236BAFCC1C1AB8005BB442115F53CCB7E36C2E94",
+      "namespaceOnly": false
     }
   ],
   "adaptations": [
@@ -94,6 +94,7 @@
     "A dedicated server never becomes an eligible simulated owner.",
     "MobPolicy adds the existing addon 250ms relative threshold when the configured ping limit is zero.",
     "NativeContracts uses equivalent plain reflection for startup-only validation.",
-    "FiresGhettoNetworking dispatcher and held station hooks reach the unchanged handoff request router."
+    "FiresGhettoNetworking dispatcher and held station hooks reach the unchanged handoff request router.",
+    "1.0.10 adds command-only timing setters to AuthorityGrid, OwnershipCadence and AuthorityController. Existing object indexes, guards, request deadlines, cache receipts and handoffs are retained. Settings snapshots expose live timer and fallback fields; no new polling is installed."
   ]
 }

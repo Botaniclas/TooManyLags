@@ -26,7 +26,7 @@ namespace TooManyLags
         private readonly int cellSize;
         private readonly GridCoveragePattern pattern;
         private readonly bool directional;
-        private float innerDelay, outerDelay, forwardDelay, overlapReleaseDelay;
+        private float innerDelay, outerDelay, forwardDelay, overlapCooldown;
         private StaticBuildings statics;
         private readonly Dictionary<ZDOID, NativeNode> nodes = new Dictionary<ZDOID, NativeNode>();
         private ConditionalWeakTable<ZNetView, NativeNode> views = new ConditionalWeakTable<ZNetView, NativeNode>();
@@ -54,7 +54,7 @@ namespace TooManyLags
         internal AuthorityController(Kinds kinds, float delay, CompatibilityBridge compatibility,
             Action<Exception> fault, bool staticEnabled, Action<Exception> requestFault, float checkIntervalSeconds,
             bool defaultInteractives, bool refillStations, int cellSize, GridCoveragePattern pattern, bool keepOnExit,
-            bool directional = false, float innerDelay = 0f, float outerDelay = 3f, float forwardDelay = .2f, float overlapReleaseDelay = 0f)
+            bool directional = false, float innerDelay = 0f, float outerDelay = 3f, float forwardDelay = .2f, float overlapCooldown = 0f)
         {
             this.kinds = kinds; this.delay = delay; cadence = new OwnershipCadence(checkIntervalSeconds);
             this.compatibility = compatibility; this.fault = fault; this.requestFault = requestFault; this.staticEnabled = staticEnabled;
@@ -62,7 +62,7 @@ namespace TooManyLags
             this.keepOnExit = keepOnExit;
             this.cellSize = cellSize == 4 || cellSize == 16 ? cellSize : 8;
             this.directional = directional; this.innerDelay = innerDelay; this.outerDelay = outerDelay; this.forwardDelay = forwardDelay;
-            this.overlapReleaseDelay = overlapReleaseDelay;
+            this.overlapCooldown = overlapCooldown;
             this.pattern = pattern == GridCoveragePattern.Rounded5x5 || pattern == GridCoveragePattern.Rounded7x7 ? pattern : GridCoveragePattern.Square3x3;
             if (this.cellSize == 4 && this.pattern == GridCoveragePattern.Square3x3)
                 throw new ArgumentException("4-metre cells require Rounded5x5 or Rounded7x7.");
@@ -81,7 +81,7 @@ namespace TooManyLags
                 Reset(); world = ZDOMan.instance; network = ZNet.instance; scene = ZNetScene.instance; server = ZDOMan.GetSessionID();
                 if (server == 0) return false;
                 coarseEnabled = !defaultInteractives && ZoneSystem.instance.m_zoneSize == 64f;
-                catalog = new ObjectCatalog(kinds); indexed = new AuthorityWorld(server, delay, pattern, keepOnExit, directional, innerDelay, outerDelay, cellSize == 4, forwardDelay, overlapReleaseDelay);
+                catalog = new ObjectCatalog(kinds); indexed = new AuthorityWorld(server, delay, pattern, keepOnExit, directional, innerDelay, outerDelay, cellSize == 4, forwardDelay, overlapCooldown);
                 statics = staticEnabled ? new StaticBuildings(delegate { return active; }) : null;
                 Inventory = new NativeInventoryHandoff(server); Cooperative = new FgnOwnerHandoff(compatibility.Assembly, server);
             }
@@ -89,10 +89,10 @@ namespace TooManyLags
         }
         internal void Poll(float now) { if (cadence.Due(now)) Tick(); }
         internal void ConfigureInterval(float interval) { cadence.Configure(interval); }
-        internal void ConfigureOverlapRelease(float seconds)
+        internal void ConfigureOverlapCooldown(float seconds)
         {
-            overlapReleaseDelay = seconds;
-            if (indexed != null) indexed.Grid.ConfigureOverlapRelease(seconds);
+            overlapCooldown = seconds;
+            if (indexed != null) indexed.Grid.ConfigureOverlapCooldown(seconds);
         }
         internal void ConfigureDelays(float full, float inner, float forward, float outer)
         {

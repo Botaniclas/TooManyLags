@@ -7,8 +7,8 @@ $authorityExe=Join-Path $authorityOutput 'DirectionalGridTests.exe'
 if($LASTEXITCODE -ne 0){throw 'Directional compile failed.'}
 & $authorityExe
 if($LASTEXITCODE -ne 0){throw 'Directional tests failed.'}
-$taskOverlapExe = Join-Path $authorityOutput 'CameraOverlapTests.exe'
-& $authorityCompiler /nologo /optimize+ /warnaserror+ /langversion:5 ('/out:'+$taskOverlapExe) (Join-Path $PSScriptRoot 'src/AuthorityGrid.cs') (Join-Path $PSScriptRoot 'tests/CameraOverlapTests.cs')
+$taskOverlapExe = Join-Path $authorityOutput 'ServerOverlapCooldownTests.exe'
+& $authorityCompiler /nologo /optimize+ /warnaserror+ /langversion:5 ('/out:'+$taskOverlapExe) (Join-Path $PSScriptRoot 'src/AuthorityGrid.cs') (Join-Path $PSScriptRoot 'tests/ServerOverlapCooldownTests.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Camera overlap compilation failed.' }
 & $taskOverlapExe
 if ($LASTEXITCODE -ne 0) { throw 'Camera overlap regression failed.' }

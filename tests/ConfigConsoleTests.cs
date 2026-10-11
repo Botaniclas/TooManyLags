@@ -81,7 +81,7 @@ internal static class ConfigConsoleTests
         ConfigFile config = new ConfigFile(path, false); config.SaveOnConfigSet = false;
         ConfigEntry<float> outer = config.Bind("05", "OuterTransitionDelaySeconds", 3f, new ConfigDescription("Server only", new AcceptableValueRange<float>(0, 30)));
         ConfigEntry<float> camera = config.Bind("08", "CameraHeadingCheckIntervalSeconds", .1f, new ConfigDescription("Server only", new AcceptableValueRange<float>(.05f, 5)));
-        ConfigEntry<float> overlap = config.Bind("05", "CameraOverlapReleaseDelaySeconds", 1f, new ConfigDescription("Server only", new AcceptableValueRange<float>(0, 30)));
+        ConfigEntry<float> overlap = config.Bind("05", "ServerOverlapCooldownSeconds", 1f, new ConfigDescription("Server only", new AcceptableValueRange<float>(0, 30)));
         ConfigEntry<bool> logs = config.Bind("01", "EnableLogs", false, "Local");
         ConfigEntry<int> ping = config.Bind("09", "ServerFallbackPingMs", 200, new ConfigDescription("Server only", new AcceptableValueRange<int>(0, 2000)));
         ConfigEntry<int> size = config.Bind("04", "GridCellSizeMeters", 4, new ConfigDescription("Server only; restart required", new AcceptableValueList<int>(4, 8, 16)));
@@ -135,12 +135,12 @@ internal static class ConfigConsoleTests
         ConfigEntry<bool> toggle = cannotSave.Bind("07", "Doors", true, "Server only; restart required");
         ConfigCommands saveFailure = new ConfigCommands(cannotSave, delegate(string key) { throw new Exception("Restart setting must never apply."); });
         Check(saveFailure.Execute("Doors false", true).Contains("failed") && toggle.Value && !saveFailure.Execute("Doors", true).Contains("restart pending"), "failed restart save restores value and pending state without invoking live callback");
-        Check(commands.Execute("CameraOverlapReleaseDelaySeconds 0", true).Contains("applied") && overlap.Value == 0 && changed == overlap.Definition.Key,
-            "server can disable new overlap holds live");
-        Check(commands.Execute("CameraOverlapReleaseDelaySeconds 1", false).Contains("Wrong setting scope") && overlap.Value == 0,
+        Check(commands.Execute("ServerOverlapCooldownSeconds 0", true).Contains("applied") && overlap.Value == 0 && changed == overlap.Definition.Key,
+            "server can disable new overlap cooldowns live");
+        Check(commands.Execute("ServerOverlapCooldownSeconds 1", false).Contains("Wrong setting scope") && overlap.Value == 0,
             "client cannot change server overlap buffer locally");
         foreach (string bad in new[] { "-1", "31", "NaN", "Infinity" })
-            Check(commands.Execute("CameraOverlapReleaseDelaySeconds " + bad, true).Contains("Invalid value") && overlap.Value == 0,
+            Check(commands.Execute("ServerOverlapCooldownSeconds " + bad, true).Contains("Invalid value") && overlap.Value == 0,
                 "invalid overlap buffer is rejected");
         Check(new ConfigFile(path, false).Bind("05", overlap.Definition.Key, 1f, "").Value == 0, "live overlap buffer persists");
     }

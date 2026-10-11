@@ -46,9 +46,8 @@ namespace TooManyLags
         {
             internal long Candidate, Owner, Uids;
             internal int Count, FastCount, ForwardCount;
-            internal float Since, Wait, Deadline, ReleaseUntil;
-            internal bool Deferred, Shared;
-            internal byte Removals;
+            internal float Since, Wait, Deadline, CooldownUntil;
+            internal bool Deferred;
             internal Request First;
             // Most fields have one requester: no per-field list allocation.
             // Only actual overlaps need the additional, usually tiny list.
@@ -81,7 +80,7 @@ namespace TooManyLags
         internal readonly HashSet<Cell> Accelerations = new HashSet<Cell>();
         private readonly bool directional;
         private readonly bool discardVacant;
-        private float innerDelay, outerDelay, forwardDelay, overlapReleaseDelay;
+        private float innerDelay, outerDelay, forwardDelay, overlapCooldown;
         internal float Delay;
         private float lastTime, nextDue = Single.PositiveInfinity;
         private int deferredCells;
@@ -89,14 +88,14 @@ namespace TooManyLags
         internal int PolicyAllocations;
         internal AuthorityGrid(long server, float delay, GridCoveragePattern pattern = GridCoveragePattern.Square3x3,
             bool directional = false, float innerDelay = 0f, float outerDelay = 3f, bool discardVacant = false,
-            bool forward = false, float forwardDelay = .2f, float overlapReleaseDelay = 0f)
+            bool forward = false, float forwardDelay = .2f, float overlapCooldown = 0f)
         {
             this.server = server; Delay = delay;
             this.directional = directional;
             this.discardVacant = discardVacant;
             this.innerDelay = SafeDelay(innerDelay, 0f); this.outerDelay = SafeDelay(outerDelay, 3f);
             this.forwardDelay = SafeDelay(forwardDelay, .2f);
-            this.overlapReleaseDelay = SafeDelay(overlapReleaseDelay, 1f);
+            this.overlapCooldown = SafeDelay(overlapCooldown, 1f);
             int radius = pattern == GridCoveragePattern.Rounded7x7 ? 3 : pattern == GridCoveragePattern.Rounded5x5 ? 2 : 1;
             forward = directional && forward && radius > 1;
             int[] fx = { 0, 1, 1, 1, 0, -1, -1, -1 }, fz = { 1, 1, 0, -1, -1, -1, 0, 1 };
@@ -164,8 +163,8 @@ namespace TooManyLags
         // completed-field receipts. New requests use the new delays.
         internal void ConfigureDelays(float full, float inner, float forward, float outer)
         { Delay = SafeDelay(full, 2f); innerDelay = SafeDelay(inner, 0f); forwardDelay = SafeDelay(forward, .2f); outerDelay = SafeDelay(outer, 3f); }
-        internal void ConfigureOverlapRelease(float seconds)
-        { overlapReleaseDelay = SafeDelay(seconds, 1f); }
+        internal void ConfigureOverlapCooldown(float seconds)
+        { overlapCooldown = SafeDelay(seconds, 1f); }
         private static float Yaw(float value, float fallback)
         { if (Single.IsNaN(value) || Single.IsInfinity(value)) return fallback; value %= 360f; return value < 0 ? value + 360f : value; }
         internal long Owner(Cell cell) { Policy p; return policies.TryGetValue(cell, out p) ? p.Owner : 0L; }
@@ -198,7 +197,7 @@ namespace TooManyLags
             foreach (Offset offset in footprints[peer.Heading])
                 Contribution(uid, new Cell(peer.Cell.X + offset.Cell.X, peer.Cell.Z + offset.Cell.Z), offset.Tier, add, now);
         }
-        private void Contribution(long uid, Cell cell, FieldTier tier, bool add, float now, bool headingOnly = false)
+        private void Contribution(long uid, Cell cell, FieldTier tier, bool add, float now)
         {
             Policy policy; NeighborReads++;
             if (!policies.TryGetValue(cell, out policy))
@@ -208,7 +207,6 @@ namespace TooManyLags
                 policies.Add(cell, policy);
             }
             policy.Count += add ? 1 : -1; policy.Uids ^= uid;
-            if (!add) policy.Removals |= (byte)(headingOnly ? 1 : 2);
             if (tier == FieldTier.Inner) policy.FastCount += add ? 1 : -1;
             else if (tier == FieldTier.Forward) policy.ForwardCount += add ? 1 : -1;
             if (add)
@@ -241,7 +239,6 @@ namespace TooManyLags
         }
         private void MoveContribution(long uid, PeerState old, Cell next, int heading, float now)
         {
-            bool headingOnly = old.Cell.Equals(next);
             // Stable overlap with the same timer class does not touch policies.
             // These mask lookups use immutable maps prepared once per world.
             foreach (Offset offset in footprints[old.Heading])
@@ -251,12 +248,12 @@ namespace TooManyLags
                 if (maskTypes[heading].TryGetValue(new Cell(cell.X - next.X, cell.Z - next.Z), out tier))
                 {
                     if (tier != offset.Tier) Reclassify(uid, cell, offset.Tier, tier);
-                    // Only a real update of the remaining player releases a
-                    // deferred field, including unchanged parts of its footprint.
+                    // A real update revisits deferred fields and expired server
+                    // cooldowns, including unchanged parts of its footprint.
                     else if (deferredCells != 0 && policies[cell].Deferred) dirty.Add(cell);
                     continue;
                 }
-                Contribution(uid, cell, offset.Tier, false, now, headingOnly);
+                Contribution(uid, cell, offset.Tier, false, now);
             }
             foreach (Offset offset in footprints[heading])
             {
@@ -268,14 +265,21 @@ namespace TooManyLags
         private void Commit(Cell cell, Policy policy)
         {
             pending.Remove(cell);
-            policy.ReleaseUntil = 0f;
-            if (policy.Owner != policy.Candidate) { policy.Owner = policy.Candidate; Changes.Add(cell); }
+            if (policy.Owner != policy.Candidate)
+            {
+                policy.Owner = policy.Candidate; Changes.Add(cell);
+                if (directional && policy.Owner == server && policy.Count > 1 && overlapCooldown > 0f)
+                {
+                    policy.CooldownUntil = lastTime + overlapCooldown;
+                    SetDeferred(policy, true);
+                }
+            }
             if (policy.Count == 0 && policy.Owner == 0 && policies.Remove(cell) && discardVacant && reusable.Count < 1024)
             {
                 policy.Candidate = policy.Owner = policy.Uids = 0;
                 policy.Count = policy.FastCount = policy.ForwardCount = 0;
                 policy.Since = policy.Wait = policy.Deadline = 0;
-                policy.Shared = false; policy.Removals = 0;
+                policy.CooldownUntil = 0f;
                 policy.First = default(Request);
                 if (policy.Others != null) policy.Others.Clear();
                 reusable.Push(policy);
@@ -284,21 +288,20 @@ namespace TooManyLags
         private void Evaluate(Cell cell, float now)
         {
             Policy policy = policies[cell];
-            bool wasShared = policy.Shared;
-            policy.Shared = policy.Count > 1;
-            byte removals = policy.Removals; policy.Removals = 0;
-            // Debounce an actual server overlap disappearing through heading
-            // only. Coverage remains current, so a returning peer cancels the
-            // release without any intermediate object ownership write.
-            if (policy.Count != 1 || (removals & 2) != 0) policy.ReleaseUntil = 0f;
-            else if (directional && overlapReleaseDelay > 0f && wasShared &&
-                policy.Owner == server && (removals & 1) != 0)
-                policy.ReleaseUntil = now + overlapReleaseDelay;
             // No physical ownership return is requested with keep-on-exit.
             // An empty logical policy therefore needs no retirement timer.
             // Loaded object certificates and in-flight native RPCs are separate.
             if (discardVacant && policy.Count == 0)
             { SetDeferred(policy, false); policy.Candidate = 0; Commit(cell, policy); return; }
+            // Coverage bookkeeping stays current while new field decisions are
+            // locked. Expiry alone never queues a timer or an object handoff:
+            // only the next actual player update may evaluate this field again.
+            if (policy.CooldownUntil != 0f)
+            {
+                if (policy.Count != 0 && now < policy.CooldownUntil)
+                { policy.Candidate = server; pending.Remove(cell); return; }
+                policy.CooldownUntil = 0f;
+            }
             if (directional && discardVacant && policy.Count == 1 && policy.First.Tier != FieldTier.Inner &&
                 (policy.Deferred || policy.Candidate == server))
             {
@@ -309,7 +312,6 @@ namespace TooManyLags
                     // owner and cancels its field timer. No departure job/RPC.
                     // Pending handoff safety remains owned by the native bridge.
                     SetDeferred(policy, true); policy.Candidate = policy.Owner;
-                    policy.ReleaseUntil = 0f;
                     policy.Wait = FieldWait(policy); pending.Remove(cell); return;
                 }
             }
@@ -338,7 +340,6 @@ namespace TooManyLags
                 if (policy.Others != null) foreach (Request request in policy.Others)
                     policy.Deadline = Math.Min(policy.Deadline, RequestDeadline(request, policy.Since, now));
             }
-            if (policy.ReleaseUntil != 0f) policy.Deadline = Math.Max(policy.Deadline, policy.ReleaseUntil);
             if (now >= policy.Deadline) Commit(cell, policy);
             else { pending.Add(cell); nextDue = Math.Min(nextDue, policy.Deadline); }
         }
@@ -359,11 +360,12 @@ namespace TooManyLags
                 foreach (Cell cell in pending)
                 {
                     Policy p = policies[cell]; p.Since = now; p.Deadline = now + p.Wait;
-                    if (p.ReleaseUntil != 0f) { p.ReleaseUntil = now + overlapReleaseDelay; p.Deadline = Math.Max(p.Deadline, p.ReleaseUntil); }
                     p.First.Since = now;
                     if (p.Others != null) for (int i = 0; i < p.Others.Count; i++) { Request request = p.Others[i]; request.Since = now; p.Others[i] = request; }
                     nextDue = Math.Min(nextDue, p.Deadline);
                 }
+                foreach (Policy p in policies.Values)
+                    if (p.CooldownUntil != 0f) p.CooldownUntil = now + overlapCooldown;
             }
             bool changed = false;
             foreach (GridPeer peer in peers)
@@ -444,8 +446,8 @@ namespace TooManyLags
         internal int Attempts;
         internal int SkippedCells;
         internal AuthorityWorld(long server, float delay, GridCoveragePattern pattern = GridCoveragePattern.Square3x3, bool keepOnExit = true,
-            bool directional = false, float innerDelay = 0f, float outerDelay = 3f, bool forward = false, float forwardDelay = .2f, float overlapReleaseDelay = 0f)
-        { Grid = new AuthorityGrid(server, delay, pattern, directional, innerDelay, outerDelay, keepOnExit, forward, forwardDelay, overlapReleaseDelay); this.keepOnExit = keepOnExit; this.server = server; }
+            bool directional = false, float innerDelay = 0f, float outerDelay = 3f, bool forward = false, float forwardDelay = .2f, float overlapCooldown = 0f)
+        { Grid = new AuthorityGrid(server, delay, pattern, directional, innerDelay, outerDelay, keepOnExit, forward, forwardDelay, overlapCooldown); this.keepOnExit = keepOnExit; this.server = server; }
         internal void Add(AuthorityNode node, float now, bool schedule = true)
         {
             node.Removed = false;

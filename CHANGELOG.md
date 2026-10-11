@@ -2,7 +2,7 @@
 
 **Unreleased**
 ```
-- Adds a 1s camera-overlap release buffer to prevent server/player ownership churn when nearby players briefly turn away and back. CameraOverlapReleaseDelaySeconds supports live server tuning; 0 disables it. New fields, movement and existing handoff safeguards are unchanged.
+- Adds ServerOverlapCooldownSeconds (default 1s, 0 disables): overlapping directional fields assigned to the server temporarily ignore new grid ownership decisions. After expiry, only a new movement/heading update may request a change; there is no automatic player return. Supports live server tuning and preserves existing usage safeguards.
 ```
 
 **1.0.12**

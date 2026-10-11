@@ -92,7 +92,7 @@ namespace TooManyLags
             ConfigEntry<float> movement = (ConfigEntry<float>)config[new ConfigDefinition("04 - Grid Settings", "MovementRotationCheckIntervalSeconds")];
             AcceptableValueRange<float> movementRange = movement.Description.AcceptableValues as AcceptableValueRange<float>;
             if (movementRange == null || movementRange.MinValue != .05f) throw new Exception("Unexpected server movement interval minimum.");
-            ConfigEntry<float> overlap = (ConfigEntry<float>)config[new ConfigDefinition("05 - Directional Grid Mode", "CameraOverlapReleaseDelaySeconds")];
+            ConfigEntry<float> overlap = (ConfigEntry<float>)config[new ConfigDefinition("05 - Directional Grid Mode", "ServerOverlapCooldownSeconds")];
             AcceptableValueRange<float> overlapRange = overlap.Description.AcceptableValues as AcceptableValueRange<float>;
             if (overlapRange == null || overlapRange.MinValue != 0f || overlapRange.MaxValue != 30f) throw new Exception("Unexpected camera overlap buffer bounds.");
             overlap.Value = 0f;
@@ -107,7 +107,7 @@ namespace TooManyLags
                 {"04 - Grid Settings/MovementRotationCheckIntervalSeconds", "0.05"}, {"04 - Grid Settings/KeepOwnershipOnCellExit", "true"},
                 {"05 - Directional Grid Mode/DirectionalGridMode", "true"}, {"05 - Directional Grid Mode/InnerTransitionDelaySeconds", "0"},
                 {"05 - Directional Grid Mode/ForwardTransitionDelaySeconds", "0.2"}, {"05 - Directional Grid Mode/OuterTransitionDelaySeconds", "3"},
-                {"05 - Directional Grid Mode/CameraOverlapReleaseDelaySeconds", "1"},
+                {"05 - Directional Grid Mode/ServerOverlapCooldownSeconds", "1"},
                 {"06 - Full Grid Mode/TransitionDelaySeconds", "2"},
                 {"08 - Camera Heading/CameraHeadingCheckIntervalSeconds", "0.05"},
                 {"09 - AI Mob Ownership/EnableAIOwnership", "true"}, {"09 - AI Mob Ownership/ServerFallbackPingMs", "200"},

@@ -64,8 +64,8 @@ namespace TooManyLags
                 "Server only; live console supported. Orange: one extra three-cell row ahead of red. Active only with 4-metre cells and Rounded5x5/Rounded7x7. Delay in seconds for new requests; 0 allowed. The farthest 7x7 row stays yellow.", new AcceptableValueRange<float>(0f, 30f))).Value;
             float outerDelay = Config.Bind("05 - Directional Grid Mode", "OuterTransitionDelaySeconds", 3f, new ConfigDescription(
                 "Server only; live console supported. Yellow: remaining active fields. Delay in seconds for new requests. White rear fields make no request. Overlaps use the earliest still-valid request deadline.", new AcceptableValueRange<float>(0f, 30f))).Value;
-            float overlapReleaseDelay = Config.Bind("05 - Directional Grid Mode", "CameraOverlapReleaseDelaySeconds", 1f, new ConfigDescription(
-                "Server only; live console supported. Keep an overlapping server-owned field on the server for this many seconds after a direction-only change leaves one player. Turning back cancels the release. Movement/departure and new fields are unchanged. 0 disables; ignored without Server-Side Simulation. New releases use the updated value.", new AcceptableValueRange<float>(0f, 30f))).Value;
+            float overlapCooldown = Config.Bind("05 - Directional Grid Mode", "ServerOverlapCooldownSeconds", 1f, new ConfigDescription(
+                "Server only; live console supported. After a directional-grid overlap assigns a field to the server, ignore new grid ownership decisions for this many seconds. Expiry alone causes no transfer; the next movement/heading update can request the field again. 0 disables. Empty fields/native release and usage protection remain unchanged. Ignored without Server-Side Simulation. New cooldowns use the updated value.", new AcceptableValueRange<float>(0f, 30f))).Value;
             float delay = Config.Bind("06 - Full Grid Mode", "TransitionDelaySeconds", 2f, new ConfigDescription(
                 "Server only; live console supported. Only with DirectionalGridMode=false: one delay in seconds for new full-grid requests. Active use and safe handoffs may require more time.", new AcceptableValueRange<float>(1f, 30f))).Value;
             if (Single.IsNaN(delay) || Single.IsInfinity(delay)) delay = 2f;
@@ -118,7 +118,7 @@ namespace TooManyLags
                 // Bind required client protocol signatures before installing
                 // any hooks; changed APIs are reported even when logs are off.
                 new FgnOwnerHandoff(bridge.Assembly, 1L);
-                Controller = new AuthorityController(kinds, delay, bridge, RuntimeFault, buildings, RequestFault, interval, defaultInteractives, refillStations, cellSize, pattern, keepOnExit, directional, innerDelay, outerDelay, forwardDelay, overlapReleaseDelay);
+                Controller = new AuthorityController(kinds, delay, bridge, RuntimeFault, buildings, RequestFault, interval, defaultInteractives, refillStations, cellSize, pattern, keepOnExit, directional, innerDelay, outerDelay, forwardDelay, overlapCooldown);
                 OwnershipTranspiler.Rewrite(PatchProcessor.GetOriginalInstructions(AccessTools.Method(typeof(ZDOMan), "ReleaseNearbyZDOS")), AccessTools.Method(typeof(OwnershipPatch), "Persistent"));
                 PickableServerPatch.Rewrite(PatchProcessor.GetOriginalInstructions(AccessTools.Method(typeof(Pickable), "RPC_Pick")));
                 harmony = new Harmony(Id);
@@ -245,8 +245,8 @@ namespace TooManyLags
             { if (options != null) options.HighPing = ConfigValue<int>("09 - AI Mob Ownership", key); }
             else if (key == "ServerFallbackRadius")
             { if (options != null) options.MobRadius = ConfigValue<float>("09 - AI Mob Ownership", key); }
-            else if (key == "CameraOverlapReleaseDelaySeconds")
-            { if (Controller != null) Controller.ConfigureOverlapRelease(ConfigValue<float>("05 - Directional Grid Mode", key)); }
+            else if (key == "ServerOverlapCooldownSeconds")
+            { if (Controller != null) Controller.ConfigureOverlapCooldown(ConfigValue<float>("05 - Directional Grid Mode", key)); }
             else
             {
                 float full = ConfigValue<float>("06 - Full Grid Mode", "TransitionDelaySeconds");

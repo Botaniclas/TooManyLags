@@ -27,7 +27,7 @@ namespace TooManyLags
             {
                 case "EnableLogs": case "CameraHeadingCheckIntervalSeconds": case "MovementRotationCheckIntervalSeconds":
                 case "InnerTransitionDelaySeconds": case "ForwardTransitionDelaySeconds": case "OuterTransitionDelaySeconds":
-                case "CameraOverlapReleaseDelaySeconds":
+                case "ServerOverlapCooldownSeconds":
                 case "TransitionDelaySeconds": case "ServerFallbackPingMs": case "ServerFallbackRadius": return true;
                 default: return false;
             }

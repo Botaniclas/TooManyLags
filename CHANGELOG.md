@@ -6,6 +6,7 @@
 - Removes only FiresGhettoNetworking simulation hooks at startup in this mode; saved settings and unrelated networking patches remain unchanged.
 - Adds a quick-start guide combining FiresGhettoNetworking defaults and Auto-Tune with TooManyLags defaults and required session overrides.
 - Clarifies that all clients need the mod for full handoffs in the mode without Server-Side Simulation.
+- Adds a GitHub issue-reporting guide with isolated baseline tests and a notice about limited real-world testing.
 ```
 
 **1.0.7**

@@ -27,6 +27,17 @@ Hostile Mobs prefer their current player target as owner. A high-ping target can
 
 This shares client workload more fairly, especially in large bases. Server ownership can increase **server CPU usage**. Server overload and protected ownership transitions can still cause delays; this is not a guarantee of zero lag.
 
+### Help find problems
+
+Real-world testing is still limited. Please share bugs and ideas through [GitHub Issues](https://github.com/Botaniclas/TooManyLags/issues).
+
+Before reporting a bug, test on a separate copy of your server and world:
+
+1. Run only BepInEx and FiresGhettoNetworking, without this mod or other mods. Repeat the steps that caused the problem. If it still happens, please report it to the relevant project rather than here.
+2. Add this mod to that isolated setup and repeat the same steps. If the problem appears only with this mod, open an issue with a detailed description, steps to reproduce, mod versions, relevant settings and logs.
+
+Thanks for helping improve the mod. Have fun, and enjoy smoother adventures together!
+
 ## How it works
 
 - A camera-directed grid covers nearby interactive objects and idle tamed animals. One player's fields go to that player; overlapping fields go to the server. Stationary players still count.

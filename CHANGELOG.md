@@ -2,41 +2,20 @@
 
 **1.0.8**
 ```
-- Adds optional NoServerSideSimulation mode for weak dedicated-server CPUs: shared fields and high-ping Hostile Mobs select a lower-latency player; server ownership overrides are unavailable. Keeps guarded inventory, refill and active-use handoffs.
-- Removes only FiresGhettoNetworking simulation hooks at startup in this mode; saved settings and unrelated networking patches remain unchanged.
-- Adds a quick-start guide combining FiresGhettoNetworking defaults and Auto-Tune with TooManyLags defaults and required session overrides; other FiresGhettoNetworking settings remain available for manual fine-tuning.
-- Clarifies that all clients need the mod for full handoffs in the mode without Server-Side Simulation.
-- Adds a GitHub issue-reporting guide with isolated baseline tests and a notice about limited real-world testing.
-- Keeps only current files in the output folder after packaging; archives older versions under Versions and other files under Others.
-```
-
-**1.0.7**
-```
-- Clarifies that installation requires no manual FiresGhettoNetworking configuration; required settings are applied automatically for the current session.
+- Adds NoServerSideSimulation for weak dedicated servers: overlapping fields and high-ping Hostile Mobs prefer a better-connected player. Server ownership is disabled in this mode.
 ```
 
 **1.0.6**
 ```
-- Applies required FiresGhettoNetworking settings for the current session without changing its saved config: dedicated-server simulation and station routing on, broad/selective server ownership off, creature balancing on when AI ownership is enabled.
-- Starts previously disabled server simulation through FGN's native initializer, retaining its incompatible-mod safety blocks. Adds a prominent warning about the extra server CPU demand.
-- Revises the package summary to emphasize no noticeable latency whenever possible, and minimum latency otherwise, for every player.
-- Adds two ownership-grid demonstrations: playable videos on GitHub and animated GIFs on Thunderstore.
-```
-
-**1.0.5**
-```
-- Adds the GitHub project link to the package metadata. Ownership behavior and configuration defaults are unchanged.
+- Automatically applies required FiresGhettoNetworking settings, including Server-Side Simulation, without editing the saved config. Server CPU usage may increase.
 ```
 
 **1.0.4**
 ```
-- With KeepOwnershipOnCellExit enabled in directional mode, only inner/red fields transfer automatically when one player remains after an overlap ends.
-- Forward/outer fields retain their settled owner until the remaining player's next cell or heading-sector change, without repeated field jobs while stationary. Existing handoff protections remain active.
-- Adds a simple 256x256 icon showing LAGS crossed out with a red X.
+- With KeepOwnershipOnCellExit enabled in directional mode, only inner/red fields transfer after an overlap ends. Other fields wait for the remaining player's next cell or direction-sector change.
 ```
 
 **1.0.3**
 ```
 - CameraHeadingCheckIntervalSeconds now accepts 0.05–5 seconds, allowing up to 20 camera-direction checks per second. The default remains 0.1 seconds.
-- Faster camera checks still send updates only when the direction sector changes. Server grid checks keep their existing cadence; network delivery can still delay ownership updates.
 ```

@@ -14,7 +14,8 @@ These rules apply only to BotanicPupPatch and TooManyLags projects, including ve
 
 - Maintain a project-root `CHANGELOG.md` during work and before every release. Include it in the install and source ZIPs; include these instructions in the source ZIP.
 - Use English, matching the current READMEs. Format like ValheimCommunityPatch: `# Changelog`, newest version first, a bold version number, then a plain fenced block containing `-` bullets.
-- Keep entries short: usually 2–6 bullets, one or two sentences each. A small fix may need only one bullet. Avoid long nested lists and repeating the feature list from the README.
+- Keep entries short: usually 1–3 bullets, one or two sentences each. Avoid long nested lists and repeating the feature list from the README.
+- Include only relevant changes to gameplay, performance, config behavior, compatibility, dependencies or required migration. Omit README/wording edits, guides, media, icons, validation reports, release chores and personal folder/build organization. Omit versions with no relevant behavior changes rather than inventing an entry.
 - Lead with the observable change: the situation affected and what now happens. Use concrete verbs such as "Fixes", "Adds", "Reduces", "Removes" or "Restores". Avoid vague "improvements" and "optimizations".
 - Include concise technical detail when another modder needs it: affected mod/API, relevant dependency version, config key/default, ownership/readiness rule, compatibility fallback or disabled overlap. Mark client/server scope when it matters.
 - Explicitly record removed behavior, changed defaults, dependencies and required migration actions. Do not hide these under "cleanup" or "performance".

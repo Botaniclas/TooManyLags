@@ -1,5 +1,10 @@
 # Changelog
 
+**Unreleased**
+```
+- Adds a 1s camera-overlap release buffer to prevent server/player ownership churn when nearby players briefly turn away and back. CameraOverlapReleaseDelaySeconds supports live server tuning; 0 disables it. New fields, movement and existing handoff safeguards are unchanged.
+```
+
 **1.0.12**
 ```
 - Adds admin-only in-game tuning of ownership check intervals, transition delays and Hostile Mob fallback thresholds without restarting. Preserves pending handoffs and usage safeguards. Other settings can be saved for the next restart, with pending and active values shown in the console.

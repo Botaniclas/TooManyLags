@@ -40,7 +40,7 @@ internal static class IntegrationTests
     private static bool loadingObserver;
     private static ZNetPeer observer;
     private static void Check(string label,bool result){checks++;if(!result)throw new Exception(label);}
-    private static void Fresh(Kinds kinds,bool statics=false,bool defaultInteractives=false,bool refillStations=false,int cellSize=8,GridCoveragePattern pattern=GridCoveragePattern.Square3x3,bool keepOnExit=true,bool directional=false,float innerDelay=0,float outerDelay=3,float checkIntervalSeconds=1,float forwardDelay=.2f,bool nativeSolo=false)
+    private static void Fresh(Kinds kinds,bool statics=false,bool defaultInteractives=false,bool refillStations=false,int cellSize=8,GridCoveragePattern pattern=GridCoveragePattern.Square3x3,bool keepOnExit=true,bool directional=false,float innerDelay=0,float outerDelay=3,float checkIntervalSeconds=1,float forwardDelay=.2f,bool nativeSolo=false,float overlapReleaseDelay=0)
     {
         if(controller!=null)controller.Reset();
         next=1;failures=0;Time.time=Time.unscaledTime=0;
@@ -55,7 +55,7 @@ internal static class IntegrationTests
         FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=true;
         FiresGhettoNetworkMod.HelmOwnership.ServerOwnsShips=false;
         var fgn=new FiresGhettoNetworkMod.FiresGhettoNetworkMod();
-        controller=new AuthorityController(kinds,2,new CompatibilityBridge(fgn),delegate{failures++;},statics,delegate{failures++;},checkIntervalSeconds,defaultInteractives,refillStations,cellSize,pattern,keepOnExit,directional,innerDelay,outerDelay,forwardDelay);
+        controller=new AuthorityController(kinds,2,new CompatibilityBridge(fgn),delegate{failures++;},statics,delegate{failures++;},checkIntervalSeconds,defaultInteractives,refillStations,cellSize,pattern,keepOnExit,directional,innerDelay,outerDelay,forwardDelay,overlapReleaseDelay);
         Plugin.Controller=controller;
     }
     private static void Tick(float now){Time.time=Time.unscaledTime=now;controller.Tick();Check("controller active",controller.IsActive&&failures==0);}
@@ -356,6 +356,25 @@ internal static class IntegrationTests
 
         Fresh(Kinds.Doors,nativeSolo:true,directional:true);peer=Peer(1);player=ZDOMan.instance.GetZDO(peer.m_characterID);player.SetOwner(1);player.Set(CameraHeading.Key,2);Tick(0);
         Check("solo vanilla bypass still skips heading work",controller.FieldUpdates==0&&player.RotationReads==0);
+    }
+    private static void CameraOverlapController()
+    {
+        Fresh(Kinds.Doors,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true,overlapReleaseDelay:1);
+        var a=Peer(1);var b=Peer(2,0,8);
+        var first=ZDOMan.instance.GetZDO(a.m_characterID);var second=ZDOMan.instance.GetZDO(b.m_characterID);
+        first.SetOwner(1);second.SetOwner(2);first.Set(CameraHeading.Key,0);second.Set(CameraHeading.Key,4);
+        var door=Object(typeof(Door),1,5);Tick(0);
+        Check("controller overlap settles on server",door.GetOwner()==99);
+        int writes=door.Writes;
+        second.Set(CameraHeading.Key,0);Tick(20);Tick(20.5f);
+        Check("real camera advisory starts hold without a native ownership write",door.GetOwner()==99&&door.Writes==writes);
+        second.Set(CameraHeading.Key,4);Tick(20.75f);Tick(21.5f);
+        Check("camera return cancels native door churn",door.GetOwner()==99&&door.Writes==writes);
+        second.Set(CameraHeading.Key,0);Tick(22);Tick(23);
+        Check("stable camera departure eventually restores player ownership",door.GetOwner()==1&&door.Writes==writes+1);
+        controller.ConfigureOverlapRelease(0);
+        second.Set(CameraHeading.Key,4);Tick(24);second.Set(CameraHeading.Key,0);Tick(25);
+        Check("live buffer disable reaches controller grid",door.GetOwner()==1&&door.Writes==writes+3);
     }
     private static void SummonedCompanions()
     {
@@ -909,7 +928,7 @@ internal static class IntegrationTests
     {
         try {
         Fields();Inventories();StationsAndActors();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
-        SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();InnerOnlyDepartureController();
+        SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();
         Console.WriteLine("PASS: "+checks+" full-controller/grid/router fixture assertions; no PUP/PupPatch plugin in fixture.");
         Console.WriteLine("LIMIT: simulated transport and Unity registry; no live multiplayer test.");
         } catch(Exception error){Console.Error.WriteLine(error);Environment.ExitCode=1;}

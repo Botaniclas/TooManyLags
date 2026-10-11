@@ -73,8 +73,8 @@ namespace TooManyLags
             reloaded.Config.SaveOnConfigSet = false;
             reloaded.Bind(); VerifyDefaults(reloaded.Config); reloaded.Config.Save();
             if (File.ReadAllText(path) != generated) throw new Exception("Generated config changed during actual BepInEx reload/save.");
-            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 43 settings in nine ordered English feature sections.");
-            Console.WriteLine("PASS: only camera/movement defaults change to 0.05; remaining 41 values unchanged; object categories are last with one shared explanation.");
+            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 44 settings in nine ordered English feature sections.");
+            Console.WriteLine("PASS: camera/movement defaults remain 0.05; new overlap buffer defaults to 1s; all 43 previous settings are preserved; object categories stay last.");
             Console.WriteLine("PASS: actual BepInEx camera and server movement ranges accept 0.05 seconds and clamp to 0.05-5.");
         }
         private static void VerifyDefaults(ConfigFile config)
@@ -92,6 +92,12 @@ namespace TooManyLags
             ConfigEntry<float> movement = (ConfigEntry<float>)config[new ConfigDefinition("04 - Grid Settings", "MovementRotationCheckIntervalSeconds")];
             AcceptableValueRange<float> movementRange = movement.Description.AcceptableValues as AcceptableValueRange<float>;
             if (movementRange == null || movementRange.MinValue != .05f) throw new Exception("Unexpected server movement interval minimum.");
+            ConfigEntry<float> overlap = (ConfigEntry<float>)config[new ConfigDefinition("05 - Directional Grid Mode", "CameraOverlapReleaseDelaySeconds")];
+            AcceptableValueRange<float> overlapRange = overlap.Description.AcceptableValues as AcceptableValueRange<float>;
+            if (overlapRange == null || overlapRange.MinValue != 0f || overlapRange.MaxValue != 30f) throw new Exception("Unexpected camera overlap buffer bounds.");
+            overlap.Value = 0f;
+            if (overlap.Value != 0f) throw new Exception("Actual config rejected disabled overlap buffer.");
+            overlap.Value = (float)overlap.DefaultValue;
             Dictionary<string, string> expected = new Dictionary<string, string> {
                 {"01 - General/Enabled", "true"}, {"01 - General/NoServerSideSimulation", "false"}, {"01 - General/EnableLogs", "false"},
                 {"02 - Static Buildings/ServerOwnedStaticBuildings", "false"},
@@ -101,6 +107,7 @@ namespace TooManyLags
                 {"04 - Grid Settings/MovementRotationCheckIntervalSeconds", "0.05"}, {"04 - Grid Settings/KeepOwnershipOnCellExit", "true"},
                 {"05 - Directional Grid Mode/DirectionalGridMode", "true"}, {"05 - Directional Grid Mode/InnerTransitionDelaySeconds", "0"},
                 {"05 - Directional Grid Mode/ForwardTransitionDelaySeconds", "0.2"}, {"05 - Directional Grid Mode/OuterTransitionDelaySeconds", "3"},
+                {"05 - Directional Grid Mode/CameraOverlapReleaseDelaySeconds", "1"},
                 {"06 - Full Grid Mode/TransitionDelaySeconds", "2"},
                 {"08 - Camera Heading/CameraHeadingCheckIntervalSeconds", "0.05"},
                 {"09 - AI Mob Ownership/EnableAIOwnership", "true"}, {"09 - AI Mob Ownership/ServerFallbackPingMs", "200"},
@@ -111,7 +118,7 @@ namespace TooManyLags
                 "SapCollectors", "Wards", "MapTables", "Wisplights", "TamedAnimals", "Containers", "ItemStands", "Signs",
                 "Portals", "Fermenters", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables"
             }) expected.Add("10 - Object Categories/" + category, "true");
-            if (config.Count != 43) throw new Exception("Expected 43 config entries; found " + config.Count + ".");
+            if (config.Count != 44) throw new Exception("Expected 44 config entries; found " + config.Count + ".");
             int categoryNotes = 0;
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> entry in config) {
                 string key = entry.Key.Section + "/" + entry.Key.Key, value = Convert.ToString(entry.Value.BoxedValue, CultureInfo.InvariantCulture), wanted;

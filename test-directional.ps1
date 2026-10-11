@@ -7,6 +7,11 @@ $authorityExe=Join-Path $authorityOutput 'DirectionalGridTests.exe'
 if($LASTEXITCODE -ne 0){throw 'Directional compile failed.'}
 & $authorityExe
 if($LASTEXITCODE -ne 0){throw 'Directional tests failed.'}
+$taskOverlapExe = Join-Path $authorityOutput 'CameraOverlapTests.exe'
+& $authorityCompiler /nologo /optimize+ /warnaserror+ /langversion:5 ('/out:'+$taskOverlapExe) (Join-Path $PSScriptRoot 'src/AuthorityGrid.cs') (Join-Path $PSScriptRoot 'tests/CameraOverlapTests.cs')
+if ($LASTEXITCODE -ne 0) { throw 'Camera overlap compilation failed.' }
+& $taskOverlapExe
+if ($LASTEXITCODE -ne 0) { throw 'Camera overlap regression failed.' }
 foreach ($mode in @('ServerSimulation','PlayerSimulation')) {
     $taskGrid = 'src/AuthorityGrid.cs'; $taskDefine = '/define:SERVER_SIMULATION'
     if ($mode -eq 'PlayerSimulation') { $taskGrid = 'src/PlayerSimulation/AuthorityGrid.cs'; $taskDefine = '/define:PLAYER_SIMULATION' }

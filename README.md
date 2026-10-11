@@ -72,6 +72,7 @@ Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOw
 | Simulation mode | `NoServerSideSimulation=false`: full Server-Side Simulation. Set true for weak server CPUs; transfers stay between players. |
 | Grid | 4-metre cells, rounded 7x7. Also 8/16 metres and square 3x3/rounded 5x5. 4 metres requires a rounded grid. |
 | Direction and delays | Camera direction; inner 0s, forward 0.2s, outer 3s. Full-grid mode uses 2s. Missing camera data uses character heading. |
+| Camera overlap buffer | `CameraOverlapReleaseDelaySeconds=1`: when turning removes an overlap, keep its server-owned field for 1s before a player takes over. Turning back cancels the release. 0 disables. New fields and movement remain unchanged; requires Server-Side Simulation. |
 | Checks | Movement and camera each default to 0.05s; both support 0.05–5s. Changed camera coverage gets send priority and wakes the next server pass, without another interval wait. Network delivery and protected handoffs can still add delay. |
 | Leaving fields | Keep ownership: on. In directional mode, when only one player remains, red fields transfer automatically; forward/outer fields keep their owner until that player's next cell or heading-sector change. Fully vacated fields retain ownership. Native release still applies. |
 | Categories and overrides | 24 object groups; separate static, default-interactive and permanent-refill server ownership. All three overrides default off and are ignored with NoServerSideSimulation=true. |

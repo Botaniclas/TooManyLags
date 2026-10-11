@@ -82,3 +82,5 @@ Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOw
 **PUP FPS is optional.**
 
 The imported PUP readiness check supports the verified PUP FPS 1.0.34 build. Other PUP builds block AI server fallback; target-player ownership still works. Without PUP, native loading readiness is checked instead.
+
+**BotanicPupPatch is recommended when combining PUP FPS with FiresGhettoNetworking.** It adds compatibility safeguards for cluster collisions and building stability during loading and ownership changes. Install it on the server and all clients; it is optional for TooManyLags.

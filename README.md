@@ -61,17 +61,9 @@ https://github.com/user-attachments/assets/8555a985-7696-4cc6-865a-5115c3695f72
 
 Configure ownership rules, the grid, delays, ping limits and **camera check timing on the server** in `BepInEx/config/botanic.toomanylags.fgnaddon.cfg`. The server sends camera timing to all clients. Client copies of these settings are ignored. `Enabled` and `EnableAIOwnership` must be enabled consistently on the server and clients; `EnableLogs` affects only the installation where it is changed. Each config entry states its scope.
 
-**Live console tuning:** Server admins can use `tml_config` in the in-game console without restarting:
+**Console:** `tml_config list` lists settings; `tml_config <Key>` reads one; `tml_config <Key> <Value>` saves a change. Only admins can change server settings.
 
-```text
-tml_config list
-tml_config OuterTransitionDelaySeconds 2
-tml_config MovementRotationCheckIntervalSeconds 0.1
-tml_config CameraHeadingCheckIntervalSeconds 0.05
-tml_config ServerFallbackPingMs 200
-```
-
-Use `tml_config <Key>` to read a setting and its description. Check intervals, transition delays and mob fallback ping/radius apply immediately and are saved to the server config. Camera changes reach all clients. Pending handoffs are not reset; new field requests use the updated delays. Inventory, refill and collision safeguards remain active. Other settings are saved for the next server restart: the reply confirms this, and the list shows the pending value alongside the active value. `Enabled` and `EnableAIOwnership` also need matching client settings and client restarts. Manual config-file edits require a restart. `tml_config EnableLogs true/false` changes only local logging.
+Intervals, delays and mob fallback limits apply immediately. Other server settings take effect after restart. `Enabled` and `EnableAIOwnership` require client restarts too.
 
 Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOwnerDebug/) as an optional client-side debugging tool to see object and mob owners, check ownership transfers and tune your configuration.
 

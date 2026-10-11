@@ -7,6 +7,7 @@
 - Adds a quick-start guide combining FiresGhettoNetworking defaults and Auto-Tune with TooManyLags defaults and required session overrides.
 - Clarifies that all clients need the mod for full handoffs in the mode without Server-Side Simulation.
 - Adds a GitHub issue-reporting guide with isolated baseline tests and a notice about limited real-world testing.
+- Keeps only current files in the output folder after packaging; archives older versions under Versions and other files under Others.
 ```
 
 **1.0.7**

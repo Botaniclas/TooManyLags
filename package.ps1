@@ -28,6 +28,7 @@ $authoritySources+=Join-Path $PSScriptRoot 'thunderstore.toml'
 $authoritySources+=Join-Path $PSScriptRoot 'publish.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-fgn-settings.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-player-simulation.ps1'
+$authoritySources+=Join-Path $PSScriptRoot 'organize-outputs.ps1'
 $authorityRules=Join-Path $PSScriptRoot 'AGENTS.md'
 if(-not (Test-Path -LiteralPath $authorityRules -PathType Leaf)){$authorityRules=Join-Path (Split-Path $PSScriptRoot) 'AGENTS.md'}
 $authoritySources+=$authorityRules
@@ -63,4 +64,5 @@ try{
     $authorityReader=New-Object IO.StreamReader($authorityConfigEntry.Open())
     try{if($authorityReader.ReadToEnd() -cne [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'botanic.toomanylags.fgnaddon.cfg'))){throw 'Packaged config differs.'}}finally{$authorityReader.Dispose()}
 }finally{$authorityConfigArchive.Dispose()}
+& (Join-Path $PSScriptRoot 'organize-outputs.ps1') -OutputDirectory $authorityOutput -Project 'TooManyLags-FGNAddon'
 Get-ChildItem -LiteralPath $authorityOutput -Filter ($authorityStem+'*') | Select-Object Name,Length

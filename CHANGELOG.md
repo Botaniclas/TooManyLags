@@ -5,6 +5,7 @@
 - Adds optional NoServerSideSimulation mode for weak dedicated-server CPUs: shared fields and high-ping Hostile Mobs select a lower-latency player; server ownership overrides are unavailable. Keeps guarded inventory, refill and active-use handoffs.
 - Removes only FiresGhettoNetworking simulation hooks at startup in this mode; saved settings and unrelated networking patches remain unchanged.
 - Adds a quick-start guide combining FiresGhettoNetworking defaults and Auto-Tune with TooManyLags defaults and required session overrides.
+- Clarifies that all clients need the mod for full handoffs in the mode without Server-Side Simulation.
 ```
 
 **1.0.7**

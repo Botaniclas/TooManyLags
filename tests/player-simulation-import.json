@@ -1,6 +1,6 @@
 {
   "source": "TooManyLags Standalone 1.0.1",
-  "target": "TooManyLags FiresGhettoNetworking Addon 1.0.10 player-simulation mode",
+  "target": "TooManyLags FiresGhettoNetworking Addon 1.0.11 player-simulation mode",
   "files": [
     {
       "file": "AuthorityGrid.cs",

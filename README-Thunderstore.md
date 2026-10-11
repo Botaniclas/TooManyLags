@@ -71,7 +71,7 @@ tml_config CameraHeadingCheckIntervalSeconds 0.05
 tml_config ServerFallbackPingMs 200
 ```
 
-Use `tml_config <Key>` to read a setting and its description. Check intervals, transition delays and mob fallback ping/radius support live changes, saved to the server config. Camera changes reach all clients. Pending handoffs are not reset; new field requests use the updated delays. Inventory, refill and collision safeguards remain active. Simulation mode, grid layout, categories and feature switches require a restart and cannot be changed by this command. Manual config-file edits also require a restart. `tml_config EnableLogs true/false` changes only local logging.
+Use `tml_config <Key>` to read a setting and its description. Check intervals, transition delays and mob fallback ping/radius apply immediately and are saved to the server config. Camera changes reach all clients. Pending handoffs are not reset; new field requests use the updated delays. Inventory, refill and collision safeguards remain active. Other settings are saved for the next server restart: the reply confirms this, and the list shows the pending value alongside the active value. `Enabled` and `EnableAIOwnership` also need matching client settings and client restarts. Manual config-file edits require a restart. `tml_config EnableLogs true/false` changes only local logging.
 
 Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOwnerDebug/) as an optional client-side debugging tool to see object and mob owners, check ownership transfers and tune your configuration.
 

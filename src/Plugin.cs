@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.10.0")]
+[assembly: AssemblyVersion("1.0.11.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.10")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.11")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.10", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.11", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -46,9 +46,15 @@ namespace TooManyLags
             int cellSize = Config.Bind("04 - Grid Settings", "GridCellSizeMeters", 4, new ConfigDescription(
                 "Server only; restart required. Cell size in metres: 4, 8 or 16. 4 metres requires Rounded5x5/Rounded7x7. Does not change vanilla/PUP loading distances.",
                 new AcceptableValueList<int>(4, 8, 16))).Value;
-            string patternName = Config.Bind("04 - Grid Settings", "GridCoveragePattern", "Rounded7x7", new ConfigDescription(
+            ConfigEntry<string> patternConfig = Config.Bind("04 - Grid Settings", "GridCoveragePattern", "Rounded7x7", new ConfigDescription(
                 "Server only; restart required. Base shape: Square3x3 is square; Rounded5x5/Rounded7x7 are rounded. Directional mode omits central and far rear fields. Overlaps use the server, or a lower-latency player with NoServerSideSimulation=true.",
-                new AcceptableValueList<string>(cellSize == 4 ? new[] { "Rounded5x5", "Rounded7x7" } : new[] { "Rounded5x5", "Square3x3", "Rounded7x7" }))).Value;
+                new AcceptableValueList<string>("Rounded5x5", "Square3x3", "Rounded7x7")));
+            string patternName = patternConfig.Value;
+            if (cellSize == 4 && patternName == "Square3x3")
+            {
+                patternName = "Rounded5x5";
+                patternConfig.Value = patternName;
+            }
             GridCoveragePattern pattern = patternName == "Rounded7x7" ? GridCoveragePattern.Rounded7x7 : patternName == "Rounded5x5" ? GridCoveragePattern.Rounded5x5 : GridCoveragePattern.Square3x3;
             bool directional = Config.Bind("05 - Directional Grid Mode", "DirectionalGridMode", true,
                 "Server only; restart required. true: camera-directed grid with the three timers below. false: full grid from section 06. Clients publish their camera's eight heading sectors. Missing camera data falls back to character heading. Stationary players still count towards overlaps.").Value;

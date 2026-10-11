@@ -83,9 +83,12 @@ internal static class ConfigConsoleTests
         ConfigEntry<float> camera = config.Bind("08", "CameraHeadingCheckIntervalSeconds", .1f, new ConfigDescription("Server only", new AcceptableValueRange<float>(.05f, 5)));
         ConfigEntry<bool> logs = config.Bind("01", "EnableLogs", false, "Local");
         ConfigEntry<int> ping = config.Bind("09", "ServerFallbackPingMs", 200, new ConfigDescription("Server only", new AcceptableValueRange<int>(0, 2000)));
-        ConfigEntry<int> size = config.Bind("04", "GridCellSizeMeters", 4, "Server only; restart required");
+        ConfigEntry<int> size = config.Bind("04", "GridCellSizeMeters", 4, new ConfigDescription("Server only; restart required", new AcceptableValueList<int>(4, 8, 16)));
+        ConfigEntry<string> shape = config.Bind("04", "GridCoveragePattern", "Rounded7x7", new ConfigDescription("Server only; restart required", new AcceptableValueList<string>("Rounded5x5", "Square3x3", "Rounded7x7")));
         ConfigEntry<bool> ai = config.Bind("09", "EnableAIOwnership", true, "Both; restart required");
-        outer.Value = 3; camera.Value = .1f; logs.Value = false; ping.Value = 200; config.Save();
+        ConfigEntry<bool> doors = config.Bind("07", "Doors", true, "Server only; restart required");
+        outer.Value = 3; camera.Value = .1f; logs.Value = false; ping.Value = 200;
+        size.Value = 4; shape.Value = "Rounded7x7"; ai.Value = true; doors.Value = true; config.Save();
         int applies = 0; string changed = null;
         ConfigCommands commands = new ConfigCommands(config, delegate(string key) { applies++; changed = key; });
         Check(commands.Execute("outertransitiondelayseconds 0,2", true).Contains("applied") && outer.Value == .2f && changed == outer.Definition.Key && applies == 1, "canonical key, invariant/comma input and runtime callback");
@@ -102,8 +105,21 @@ internal static class ConfigConsoleTests
         Check(commands.Execute("EnableLogs true", false).Contains("applied") && logs.Value, "local logging");
         int before = applies;
         Check(commands.Execute("EnableLogs true", false).Contains("already") && applies == before, "unchanged value has no writes/runtime work");
-        Check(commands.Execute("GridCellSizeMeters 16", true).Contains("restart") && size.Value == 4 && applies == before, "structural setting never mutates live");
-        Check(commands.Execute("EnableAIOwnership false", true).Contains("restart") && ai.Value, "no runtime policy teardown");
+        Check(commands.Execute("GridCoveragePattern Square3x3", true).Contains("Invalid grid combination") && shape.Value == "Rounded7x7", "rejects square grid with 4-metre cells");
+        Check(commands.Execute("GridCellSizeMeters 5", true).Contains("Invalid value") && size.Value == 4, "restart values obey allowed list");
+        Check(commands.Execute("GridCellSizeMeters 16", true).Contains("Takes effect after server restart") && size.Value == 16 && applies == before, "structural value saved without live callback");
+        Check(commands.Execute("GridCellSizeMeters", true).Contains("restart pending; active: 4"), "read distinguishes saved and active values");
+        Check(commands.Execute("GridCellSizeMeters 16", true).Contains("already") && commands.Execute("GridCellSizeMeters 16", true).Contains("restart") && applies == before, "unchanged pending value retains restart feedback without callbacks");
+        Check(commands.Execute("GridCoveragePattern Square3x3", true).Contains("restart") && shape.Value == "Square3x3" && applies == before, "string grid option uses saved cell size");
+        Check(commands.Execute("GridCellSizeMeters 4", true).Contains("Invalid grid combination") && size.Value == 16, "cannot save an invalid grid combination");
+        Check(commands.Execute("GridCoveragePattern invalid", true).Contains("Invalid value") && shape.Value == "Square3x3", "rejects unknown string option without clamping");
+        string aiReply = commands.Execute("EnableAIOwnership false", true);
+        Check(aiReply.Contains("restart") && aiReply.Contains("every client") && !ai.Value && applies == before, "AI config saved with matching-client reminder and no policy teardown");
+        Check(commands.Execute("EnableAIOwnership true", true).Contains("no restart pending") && !commands.Execute("EnableAIOwnership", true).Contains("restart pending") && applies == before, "restoring active value cancels queued change without teardown");
+        Check(commands.Execute("Doors false", true).Contains("restart") && !doors.Value && applies == before, "category change saved without rebuilding indexes");
+        Check(commands.Execute("list", true).Contains("GridCellSizeMeters = 16 [restart pending; active: 4]"), "list marks pending restart and original active value");
+        ConfigFile nextStart = new ConfigFile(path, false);
+        Check(nextStart.Bind("04", "GridCellSizeMeters", 4, "").Value == 16 && nextStart.Bind("04", "GridCoveragePattern", "Rounded7x7", "").Value == "Square3x3" && !nextStart.Bind("07", "Doors", true, "").Value, "next startup reads queued geometry/category values");
         Check(commands.Execute("missing 1", true).Contains("Unknown"), "unknown keys");
         Check(commands.Execute(new string('x', 257), true).Contains("Invalid"), "bounded input");
         Check(commands.Execute("list", true).Contains("OuterTransitionDelaySeconds") && commands.Execute("list", true).Contains("CameraHeading") && !commands.Execute("list", true).Contains("EnableLogs"), "server list scope");
@@ -112,6 +128,12 @@ internal static class ConfigConsoleTests
         ConfigCommands failure = new ConfigCommands(config, delegate(string key) { if (fail) { fail = false; throw new Exception("fixture"); } });
         Check(failure.Execute("OuterTransitionDelaySeconds 5", true).Contains("failed") && outer.Value == .2f, "apply failure restores value");
         Check(new ConfigFile(path, false).Bind("05", outer.Definition.Key, 9f, "").Value == .2f, "apply failure restores saved value");
+        Check(new ConfigFile(path, false).Bind("04", "GridCellSizeMeters", 4, "").Value == 16, "later live save/rollback preserves queued restart value");
+        string blocked = Path.Combine(folder, "blocked.cfg"); Directory.CreateDirectory(blocked);
+        ConfigFile cannotSave = new ConfigFile(blocked, false); cannotSave.SaveOnConfigSet = false;
+        ConfigEntry<bool> toggle = cannotSave.Bind("07", "Doors", true, "Server only; restart required");
+        ConfigCommands saveFailure = new ConfigCommands(cannotSave, delegate(string key) { throw new Exception("Restart setting must never apply."); });
+        Check(saveFailure.Execute("Doors false", true).Contains("failed") && toggle.Value && !saveFailure.Execute("Doors", true).Contains("restart pending"), "failed restart save restores value and pending state without invoking live callback");
     }
     private static void Endpoint()
     {

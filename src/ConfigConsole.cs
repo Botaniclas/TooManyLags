@@ -18,7 +18,7 @@ namespace TooManyLags
         internal static void Register()
         {
             if (registered) return;
-            new Terminal.ConsoleCommand("tml_config", "tml_config list | <Key> [value]. Server settings require admin; logging is local. Live settings are marked in the list.", new Terminal.ConsoleEvent(Run));
+            new Terminal.ConsoleCommand("tml_config", "tml_config list | <Key> [value]. Server settings require admin; logging is local. Restart settings are saved for the next restart.", new Terminal.ConsoleEvent(Run));
             registered = true;
         }
         private static void Run(Terminal.ConsoleEventArgs args)

@@ -1,3 +1,14 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.9 release validation
+
+## Mob policy precedence
+
+TooManyLags takes precedence only when EnableAIOwnership is enabled and its selected mob module initializes successfully. Startup runs after plugin Awake, so installation order cannot leave two optional combat transpilers installed. The bridge binds BotanicPupPatch's existing optional combat Stop/Install/Enabled contract without adding a dependency or changing its config. Stop removes only that module; collision, support, cart/animal and streaming guards remain installed. An unsupported contract prevents takeover. Disabled TooManyLags leaves the previous policy untouched; failed normal or player-simulation setup restores it using the original config and network assembly/version. No new polling or gameplay hooks are added for arbitration.
+
+The transaction fixtures pass 40 assertions on both Windows .NET and Valheim's embedded Mono using real Harmony and BepInEx.ConfigFile, including successful, disabled, absent, inactive, failed and partially stopped modules; saved settings; exact single-policy installation; rollback; and preservation of separate collision/streaming Harmony owners. The native audit checks the actual startup IL for suspension before installation, successful-module gating and finally-based rollback. The existing BotanicPupPatch 2.1.0 DLL contract is inspected directly. No BotanicPupPatch rebuild is required.
+
+This is startup arbitration, not a live cross-plugin protocol switch. Server and clients should use this TooManyLags version with consistent AI settings. No live multiplayer test has been performed.
+
+---
 # TooManyLags - FiresGhettoNetworking Addon 1.0.8 release validation
 
 `NoServerSideSimulation=false` retains the normal dedicated-server simulation path. With true, startup validates the seven actual FiresGhettoNetworking simulation patch groups before removing only their hooks under FiresGhettoNetworking's Harmony owner. It refuses changes after a network/world object exists. Simulation config and runtime flags are disabled without changing the saved file; unrelated networking and other mods' hooks remain. Station routing remains enabled. The server-owned building/default/refill overrides are not instantiated in this mode.

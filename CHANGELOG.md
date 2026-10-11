@@ -1,5 +1,10 @@
 # Changelog
 
+**1.0.9**
+```
+- Fixes Hostile Mob ownership being disabled by another installed target-ownership feature. Keeps collision protection active and restores the previous target policy if startup fails.
+```
+
 **1.0.8**
 ```
 - Adds NoServerSideSimulation for weak dedicated servers: overlapping fields and high-ping Hostile Mobs prefer a better-connected player. Server ownership is disabled in this mode.

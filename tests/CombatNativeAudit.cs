@@ -154,25 +154,24 @@ internal static class NativeCombatAudit
             TypeDefinition combat=addon.MainModule.Types.Single(t=>t.Name=="FgnCombatOwnership");
             TypeDefinition plugin=addon.MainModule.Types.Single(t=>t.FullName=="TooManyLags.Plugin");
             var startPolicy=Method(plugin,"Start").Body.Instructions.ToList();
-            int policyCheck=startPolicy.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="ExistingMobPolicy"),
+            int policyCheck=startPolicy.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="MobPolicyHandoff"&&((MethodReference)i.Operand).Name=="Begin"),
                 policyInstall=startPolicy.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="FgnCombatOwnership"&&((MethodReference)i.Operand).Name=="Install");
-            Check(policyCheck>=0&&policyInstall>policyCheck,"actual startup detects the preferred policy before installing addon combat hooks");
-            Check(policyInstall>=8 && startPolicy[policyInstall-8].OpCode.Name == startPolicy[policyCheck+1].OpCode.Name.Replace("stloc", "ldloc") &&
-                startPolicy[policyInstall-7].OpCode.Name.StartsWith("brtrue") && ReferenceEquals(startPolicy[policyInstall-7].Operand,startPolicy[policyInstall-1]) &&
-                startPolicy[policyInstall-5].Operand is FieldReference && ((FieldReference)startPolicy[policyInstall-5].Operand).Name=="playerSimulation" &&
-                startPolicy[policyInstall-4].OpCode.Name=="ldc.i4.0" && startPolicy[policyInstall-3].OpCode.Name=="ceq" &&
-                startPolicy[policyInstall-1].OpCode.Name=="ldc.i4.0" && ReferenceEquals(startPolicy[policyInstall-2].Operand,startPolicy[policyInstall]),
-                "actual startup suppresses native combat when a duplicate policy or player-simulation mode is selected");
-            MethodDefinition existingPolicy=Method(plugin,"ExistingMobPolicy");
-            Check(new[]{"botanic.pup.patch","BotanicPupPatch.FgnCombatOwnership","Enabled","botanic.pup.patch.fgn.aiownership"}.All(value=>
-                existingPolicy.Body.Instructions.Any(i=>i.OpCode.Name=="ldstr"&&(string)i.Operand==value)),
-                "actual priority detection checks loaded policy state and retained native ownership hooks");
-            Check(new[]{"GetField","GetValue","GetPatchInfo"}.All(name=>existingPolicy.Body.Instructions.Any(i=>
-                i.Operand is MethodReference&&((MethodReference)i.Operand).Name==name))&&
-                !existingPolicy.Body.Instructions.Any(i=>i.Operand is MethodReference&&new[]{"SetValue","UnpatchSelf","Stop"}.Contains(((MethodReference)i.Operand).Name)),
-                "actual preferred-policy detection only reads state and never alters the other policy");
-            Check(!startPolicy.Any(i=>i.OpCode.Name=="ldstr"&&((string)i.Operand).Contains("disable EnableAIOwnership")),
-                "actual startup has no instruction to disable the preferred policy");
+            Check(policyCheck>=0&&policyInstall>policyCheck,"actual startup suspends previous combat before installing addon hooks");
+            TypeDefinition policyHandoff=addon.MainModule.Types.Single(t=>t.FullName=="TooManyLags.MobPolicyHandoff");
+            var begin=Method(policyHandoff,"Begin").Body.Instructions;
+            Check(new[]{"Enabled","Stop","Install"}.All(value=>begin.Any(i=>i.OpCode.Name=="ldstr"&&(string)i.Operand==value))&&
+                (string)policyHandoff.Fields.Single(f=>f.Name=="Owner").Constant=="botanic.pup.patch.fgn.aiownership",
+                "actual bridge binds only the optional combat contract and exact combat Harmony owner");
+            Check(new[]{"GetField","GetValue","GetMethod","CreateDelegate"}.All(name=>begin.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name==name))&&
+                !begin.Any(i=>i.Operand is MethodReference&&new[]{"SetValue","UnpatchSelf"}.Contains(((MethodReference)i.Operand).Name)),
+                "actual bridge uses module lifecycle methods without editing config or removing guards itself");
+            int commit=startPolicy.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="MobPolicyHandoff"&&((MethodReference)i.Operand).Name=="Commit"),
+                dispose=startPolicy.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="MobPolicyHandoff"&&((MethodReference)i.Operand).Name=="Dispose");
+            Check(commit>policyInstall&&dispose>commit&&Method(plugin,"Start").Body.ExceptionHandlers.Any(h=>h.HandlerType==Mono.Cecil.Cil.ExceptionHandlerType.Finally),
+                "actual startup commits successful takeover and always disposes the rollback transaction");
+            Check(startPolicy.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).DeclaringType.Name=="FgnCombatOwnership"&&((FieldReference)i.Operand).Name=="Enabled")&&
+                startPolicy.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).DeclaringType.Name=="LocalAgent"&&((FieldReference)i.Operand).Name=="MobsEnabled"),
+                "actual startup checks installed normal combat or ready player-mode mob hooks before committing");
             TypeDefinition nativeCharacter=native.MainModule.Types.Single(t=>t.Name=="Character");
             MethodDefinition faction=Method(nativeCharacter,"GetFaction");
             Check(faction.ReturnType.FullName=="Character/Faction"&&faction.Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="m_faction")&&

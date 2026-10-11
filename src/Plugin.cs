@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.8.0")]
+[assembly: AssemblyVersion("1.0.9.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.8")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.9")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.8", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.9", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -127,8 +127,8 @@ namespace TooManyLags
         private void Start()
         {
             if (!enabledMod || networkPlugin == null || !networkPlugin.Instance) return;
-            // All plugin Awakes have completed: optional PUP and duplicate
-            // policies are now visible without introducing a soft dependency.
+            // All plugin Awakes have completed: the optional combat module can
+            // release its hooks before ours are installed, independent of load order.
             try
             {
                 PluginInfo pup;
@@ -136,39 +136,51 @@ namespace TooManyLags
             }
             catch (Exception error)
             { Native = null; Logger.LogWarning("PUP readiness unavailable; AI server fallback stays blocked while PUP is present. " + error.GetBaseException().Message); }
+            MobPolicyHandoff takeover = null;
             try
             {
-                bool duplicate = ExistingMobPolicy();
-                FgnCombatOwnership.Install(Config, networkPlugin.Instance.GetType().Assembly, networkPlugin.Metadata.Version, !duplicate && !playerSimulation);
+                ConfigEntry<bool> ai;
+                bool requested = Config.TryGetEntry<bool>(new ConfigDefinition("09 - AI Mob Ownership", "EnableAIOwnership"), out ai) && ai.Value;
+                bool allowed = requested;
+                try
+                {
+                    PluginInfo guard;
+                    bool found = Chainloader.PluginInfos.TryGetValue("botanic.pup.patch", out guard) && guard.Instance;
+                    takeover = MobPolicyHandoff.Begin(requested, found ? guard.Instance.Config : null,
+                        found ? guard.Instance.GetType().Assembly.GetType("BotanicPupPatch.FgnCombatOwnership", false) : null,
+                        networkPlugin.Instance.GetType().Assembly, networkPlugin.Metadata.Version);
+                }
+                catch (Exception error)
+                { allowed = false; Logger.LogWarning("TooManyLags mob takeover unavailable. " + error.GetBaseException().Message); }
+                FgnCombatOwnership.Install(Config, networkPlugin.Instance.GetType().Assembly, networkPlugin.Metadata.Version, allowed && !playerSimulation);
                 FgnCombatStatus.Register();
                 if (!String.IsNullOrEmpty(FgnCombatOwnership.StartupError)) Logger.LogWarning("TooManyLags AI ownership inactive: " + FgnCombatOwnership.StartupError);
-                ConfigEntry<bool> ai;
-                bool useMobs = !duplicate && Config.TryGetEntry<bool>(new ConfigDefinition("09 - AI Mob Ownership", "EnableAIOwnership"), out ai) && ai.Value;
+                bool useMobs = allowed && (playerSimulation || FgnCombatOwnership.Enabled);
+                bool playerMobsReady = false;
                 if (playerSimulation && useMobs) FgnSessionSettings.CreatureBalancing(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config, false);
-                try { PlayerSimulation.Plugin.Initialize(Config, networkPlugin.Instance.GetType().Assembly, playerSimulation, useMobs); }
+                try
+                {
+                    PlayerSimulation.Plugin.Initialize(Config, networkPlugin.Instance.GetType().Assembly, playerSimulation, useMobs);
+                    playerMobsReady = playerSimulation && useMobs && PlayerSimulation.Plugin.Local != null && PlayerSimulation.Plugin.Local.MobsEnabled;
+                }
                 catch (Exception error)
                 {
                     PlayerSimulation.Plugin.Stop();
                     if (playerSimulation && useMobs) FgnSessionSettings.CreatureBalancing(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config, true);
                     Logger.LogWarning("Player-simulation ownership mode inactive; native ownership retained. " + error.GetBaseException());
                 }
+                if (takeover != null && (FgnCombatOwnership.Enabled || playerMobsReady)) takeover.Commit();
             }
             catch (Exception error)
             { FgnCombatOwnership.Stop(); PlayerSimulation.Plugin.Stop(); Logger.LogWarning("TooManyLags optional ownership mode inactive: " + error.GetBaseException()); }
+            finally
+            {
+                if (takeover != null)
+                    try { takeover.Dispose(); }
+                    catch (Exception error) { Logger.LogWarning("Previous mob ownership restore failed; native ownership retained. " + error.GetBaseException()); }
+            }
         }
         private void Update() { if (enabledMod) PlayerSimulation.Plugin.Poll(); }
-        private static bool ExistingMobPolicy()
-        {
-            PluginInfo pup;
-            if (Chainloader.PluginInfos.TryGetValue("botanic.pup.patch", out pup) && pup.Instance)
-            {
-                Type policy = pup.Instance.GetType().Assembly.GetType("BotanicPupPatch.FgnCombatOwnership", false);
-                FieldInfo active = policy == null ? null : policy.GetField("Enabled", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                if (active != null && active.FieldType == typeof(bool) && (bool)active.GetValue(null)) return true;
-            }
-            Patches patches = Harmony.GetPatchInfo(AccessTools.Method(typeof(ZDOMan), "ReleaseNearbyZDOS"));
-            return patches != null && patches.Owners.Contains("botanic.pup.patch.fgn.aiownership");
-        }
         internal static void SampleCamera() { if (instance && instance.camera != null) instance.camera.Sample(Time.unscaledTime); }
         internal static void InvalidateCamera() { if (instance && instance.camera != null) instance.camera.Reset(true); }
         internal static void Warn(string message) { if (Diagnostics && instance) instance.Logger.LogWarning(message); }

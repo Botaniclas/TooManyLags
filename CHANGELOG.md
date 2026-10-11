@@ -1,5 +1,10 @@
 # Changelog
 
+**Unreleased**
+```
+- Adds a quick-start guide combining FiresGhettoNetworking defaults and Auto-Tune with TooManyLags defaults and required session overrides.
+```
+
 **1.0.7**
 ```
 - Clarifies that installation requires no manual FiresGhettoNetworking configuration; required settings are applied automatically for the current session.

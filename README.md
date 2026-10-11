@@ -6,6 +6,8 @@ A FiresGhettoNetworking extension designed to make nearby interactions feel almo
 
 TooManyLags applies required FiresGhettoNetworking settings at startup, including enabling **Server-Side Simulation** on the dedicated server. Their saved config values are ignored while TooManyLags is enabled; the config file stays unchanged. Other FGN settings and incompatible-mod safety blocks remain active.
 
+**Quick start:** Install both mods on the dedicated server and every client, then play. FiresGhettoNetworking's default settings and Auto-Tune, combined with TooManyLags' defaults and required overrides, are intended to provide an optimal starting setup for almost all dedicated servers without manual configuration.
+
 **If Server-Side Simulation was previously off, enabling it adds CPU workload to the server.**
 
 ## Why it helps

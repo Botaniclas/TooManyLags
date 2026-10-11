@@ -1,4 +1,4 @@
-# TooManyLags - FiresGhettoNetworking Addon 1.0.8 draft
+# TooManyLags - FiresGhettoNetworking Addon 1.0.8 release validation
 
 `NoServerSideSimulation=false` retains the normal dedicated-server simulation path. With true, startup validates the seven actual FiresGhettoNetworking simulation patch groups before removing only their hooks under FiresGhettoNetworking's Harmony owner. It refuses changes after a network/world object exists. Simulation config and runtime flags are disabled without changing the saved file; unrelated networking and other mods' hooks remain. Station routing remains enabled. The server-owned building/default/refill overrides are not instantiated in this mode.
 
@@ -8,7 +8,7 @@ Player-mode overlaps use smoothed latency with a 30 ms advantage margin. Hostile
 
 Automated validation covers the normal path and the embedded player path: startup on/off and saved-file preservation with real BepInEx config; exact native hooks and contracts against the installed Valheim release and FiresGhettoNetworking 1.5.36/1.5.41; grid/cache/unload behavior; 4,188 production handoff assertions; and 12 mode-negotiation/connection assertions. Actual native interface contracts use the modern metadata host where the Windows desktop CLR cannot load default interface implementations. Fixtures do not simulate live Unity physics or Steam packet ordering.
 
-**No live dedicated-server or multiplayer test has been performed. This draft is local and has not been published.** Standalone changes for this request are documentation only; its simulation code is unchanged.
+**No live dedicated-server or multiplayer test has been performed.** Standalone changes alongside this release are documentation only; its simulation code is unchanged.
 
 ---
 # TooManyLags - FGN Addon 1.0.6: verification

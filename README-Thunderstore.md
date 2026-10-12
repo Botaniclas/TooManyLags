@@ -1,7 +1,5 @@
 # TooManyLags - FiresGhettoNetworking Addon
 
-**Local test build 1.0.17:** Recipient checks focus on actual transfers and delivery failures. Transfer metadata now lives directly in the existing loaded-object entry, removing the separate readiness-scope cache. Update the server and clients together. Previous test builds are preserved; no live multiplayer test has been performed.
-
 A FiresGhettoNetworking extension designed to make nearby interactions feel almost latency-free: locally owned objects are processed directly on your client, without waiting for another player's connection. In shared areas, the server takes over so each player primarily feels their own latency instead of someone else's lag. Includes ownership improvements for Hostile Mobs.
 
 ## Forced FiresGhettoNetworking settings

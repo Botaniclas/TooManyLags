@@ -1,4 +1,4 @@
-# TooManyLags - FiresGhettoNetworking Addon 1.0.17 experimental validation
+# TooManyLags - FiresGhettoNetworking Addon 1.0.17 release validation
 
 ## Transfer bookkeeping without a separate readiness-scope cache
 
@@ -8,9 +8,12 @@ This trades 16 bytes in every loaded managed node for removal of the previous we
 
 The recipient gate is not restricted to currently overlapping players: a second player's departure/teleport/disconnect may itself cause a protected transfer. Historical overlap could be indexed separately, but adding proximity/history checks to skip three inline scalar updates is not justified here. With default server ownership disabled, the existing native-region contention gate already leaves truly isolated players under vanilla ownership. Its broad native-area test cannot simply be replaced by a fine-grid radius: separated players can still share a vanilla ownership region and need local object handoffs. Once a transfer is active it must finish safely even if the peer moves away.
 
-Targeted tests pass nine state-floor assertions, 124,064 grid/index assertions and 10,623 controller/router assertions. They exercise 1,000 genuine zero-delay transfers with no interactions and zero recipient-readiness checks; unchanged-owner fast paths; both native owner/revision receipt orders; state floors captured from direct writes; higher source floors followed by lower local observations; inventory final assignment; receiver relay recovery; and ignoring state reports for unloaded identities. Native metadata checks require an inline value field and inspect the compiled transfer-mark method for no allocation, tracking-table access or delegate invocation. All 18 final verification groups pass, including 50 exact Harmony targets audited with FiresGhettoNetworking 1.5.41 and 1.5.36. Final DLL SHA256: `2DF24C571027DA9A6E32132A811F4FAFAD032C3B3AA56D0E154F213FC11958D9`. Full verification results are recorded in verification.json. No live Unity multiplayer session or CPU/latency benchmark has been performed.
+Targeted tests pass nine state-floor assertions, 124,064 grid/index assertions and 10,623 controller/router assertions. They exercise 1,000 genuine zero-delay transfers with no interactions and zero recipient-readiness checks; unchanged-owner fast paths; both native owner/revision receipt orders; state floors captured from direct writes; higher source floors followed by lower local observations; inventory final assignment; receiver relay recovery; and ignoring state reports for unloaded identities. Native metadata checks require an inline value field and inspect the compiled transfer-mark method for no allocation, tracking-table access or delegate invocation. All 18 final verification groups pass, including 50 exact Harmony targets audited with FiresGhettoNetworking 1.5.41 and 1.5.36. Final DLL SHA256: `B72C53A0DB25A7A135C265205886CF46F87B4F17E3BD45921356FDDF925A014B`. Full verification results are recorded in verification.json. No live Unity multiplayer session or CPU/latency benchmark has been performed.
 
 The object-specific portal/sign text-edit protection discussed afterwards is documented in TYPING_PROTECTION_DESIGN.md. It has not been implemented in this build. This avoids silently claiming a server-side guard for a client-local UI event or blocking Sign.SetText's required native ownership claim.
+
+
+Release preparation on 2026-10-12 reran the full source build and all 18 verification groups against the final DLL. Version metadata, publication descriptions and the finalized changelog match 1.0.17. No runtime changes were made while preparing publication; the Windows framework compiler produces a fresh binary identity when rebuilding. No live multiplayer test is claimed.
 
 ---
 # TooManyLags - FiresGhettoNetworking Addon 1.0.16 experimental validation

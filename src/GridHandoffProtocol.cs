@@ -16,7 +16,6 @@ namespace TooManyLags.GridHandoffs
         private enum Message { Hello, Welcome, Commit, Status, Result, Ready, ReadyResult, Relay, ReadyLost }
         private sealed class Connection { internal ZNetPeer Peer; internal bool Capable; internal readonly CommitFence Fence = new CommitFence(); }
         private sealed class Advertisement { internal ZNetPeer Peer; internal ZDOID Id; internal long Token; }
-        private sealed class StateFloor { internal long Owner; internal uint Revision, State; }
         private sealed class Readiness
         {
             internal ZDO Data; internal ZRpc Rpc; internal long Owner, Token;
@@ -31,7 +30,7 @@ namespace TooManyLags.GridHandoffs
         private static ConditionalWeakTable<ZNetView, KindCache> kinds = new ConditionalWeakTable<ZNetView, KindCache>();
         private static ConditionalWeakTable<ZDO, Lease> refills = new ConditionalWeakTable<ZDO, Lease>();
         private static ConditionalWeakTable<ZNetView, Advertisement> advertised = new ConditionalWeakTable<ZNetView, Advertisement>();
-        private static ConditionalWeakTable<ZDO, StateFloor> floors = new ConditionalWeakTable<ZDO, StateFloor>();
+        private static ConditionalWeakTable<ZDO, RecipientRequirement> floors = new ConditionalWeakTable<ZDO, RecipientRequirement>();
         private static readonly Dictionary<Vector2s, bool> areas = new Dictionary<Vector2s, bool>();
         private static int frame = -1;
         private static long readinessToken;
@@ -48,6 +47,7 @@ namespace TooManyLags.GridHandoffs
             RequestRouter.RecipientReady = Ready;
             AuthorityController.ReadinessRemoved = Forget;
             AuthorityController.ReadinessReset = ClearReadiness;
+            AuthorityController.RecipientReadinessRequired = RequireRecipient;
             patches = new Harmony(Plugin.Id + ".gridhandoff");
             foreach (Type hook in new[] { typeof(ConnectPatch), typeof(PeerReadyPatch), typeof(ReceivePatch), typeof(UnloadPatch), typeof(ShutdownPatch), typeof(DisconnectPatch) })
                 patches.CreateClassProcessor(hook).Patch();
@@ -56,10 +56,10 @@ namespace TooManyLags.GridHandoffs
         {
             if (patches != null) patches.UnpatchSelf(); patches = null;
             FgnOwnerHandoff.CooperativeClient = null; FgnOwnerHandoff.IdentifiedSend = null; FgnOwnerHandoff.IdentifiedStatus = null;
-            RequestRouter.RecipientReady = null; AuthorityController.ReadinessRemoved = null; AuthorityController.ReadinessReset = null; nativeCommit = null; Reset();
+            RequestRouter.RecipientReady = null; AuthorityController.ReadinessRemoved = null; AuthorityController.ReadinessReset = null; AuthorityController.RecipientReadinessRequired = null; nativeCommit = null; Reset();
         }
         private static void Reset()
-        { connections.Clear(); ready.Clear(); retiring.Clear(); kinds = new ConditionalWeakTable<ZNetView, KindCache>(); refills = new ConditionalWeakTable<ZDO, Lease>(); advertised = new ConditionalWeakTable<ZNetView, Advertisement>(); floors = new ConditionalWeakTable<ZDO, StateFloor>(); areas.Clear(); frame = -1; }
+        { connections.Clear(); ready.Clear(); retiring.Clear(); kinds = new ConditionalWeakTable<ZNetView, KindCache>(); refills = new ConditionalWeakTable<ZDO, Lease>(); advertised = new ConditionalWeakTable<ZNetView, Advertisement>(); floors = new ConditionalWeakTable<ZDO, RecipientRequirement>(); areas.Clear(); frame = -1; }
         internal static bool Capable(ZNetPeer peer)
         {
             Connection c;
@@ -203,13 +203,20 @@ namespace TooManyLags.GridHandoffs
         }
         private static void SetFloor(ZDO data, long owner, uint revision, uint state)
         {
-            StateFloor floor = floors.GetOrCreateValue(data); floor.Owner = owner; floor.Revision = revision; floor.State = state;
+            RecipientRequirement floor = floors.GetOrCreateValue(data); floor.Include(owner, revision, state);
             Readiness r;
-            if (ready.TryGetValue(data.m_uid, out r) && ReferenceEquals(r.Data, data) && r.Owner == owner && r.Revision == revision && state > r.MinimumState)
-            { r.MinimumState = state; r.Ready = false; r.Next = 0; }
+            if (ready.TryGetValue(data.m_uid, out r) && ReferenceEquals(r.Data, data) && r.Owner == owner && r.Revision == revision && floor.State > r.MinimumState)
+            { r.MinimumState = floor.State; r.Ready = false; r.Next = 0; }
         }
+        private static void RequireRecipient(ZDO data)
+        { SetFloor(data, data.GetOwner(), data.OwnerRevision, data.DataRevision); }
         internal static bool Ready(ZDOMan world, long owner, ZDO data)
         {
+            // Experimental narrow path: unchanged native ownership needs no
+            // additional handshake. Real TML transfers and receiver relays arm
+            // this existing weak record, retaining their readiness protection.
+            RecipientRequirement floor;
+            if (!floors.TryGetValue(data, out floor) || !floor.Matches(owner, data.OwnerRevision)) return true;
             ZNetPeer peer = ZNet.instance ? ZNet.instance.GetPeer(owner) : null;
             // Peers without this capability keep native delivery; automatic
             // grid transfers to/from them are disabled separately.
@@ -218,8 +225,7 @@ namespace TooManyLags.GridHandoffs
             if (!ready.TryGetValue(data.m_uid, out r) || !ReferenceEquals(r.Data, data) || r.Owner != owner ||
                 r.Revision != data.OwnerRevision || !ReferenceEquals(r.Rpc, peer.m_rpc))
             { r = new Readiness { Data = data, Rpc = peer.m_rpc, Owner = owner, Revision = data.OwnerRevision, MinimumState = data.DataRevision }; ready[data.m_uid] = r; }
-            StateFloor floor;
-            if (floors.TryGetValue(data, out floor) && floor.Owner == owner && floor.Revision == r.Revision && floor.State > r.MinimumState)
+            if (floor.State > r.MinimumState)
             { r.MinimumState = floor.State; r.Ready = false; r.Next = 0; }
             if (r.Ready) return true;
             if (Time.unscaledTime >= r.Next)
@@ -231,7 +237,7 @@ namespace TooManyLags.GridHandoffs
             return false;
         }
         internal static void Forget(ZDO data) { if (data != null) { ready.Remove(data.m_uid); floors.Remove(data); } }
-        private static void ClearReadiness() { ready.Clear(); floors = new ConditionalWeakTable<ZDO, StateFloor>(); }
+        private static void ClearReadiness() { ready.Clear(); floors = new ConditionalWeakTable<ZDO, RecipientRequirement>(); }
         private static void Unload(ZNetView view)
         {
             Advertisement a;

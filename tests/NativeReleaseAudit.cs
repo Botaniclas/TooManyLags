@@ -43,6 +43,7 @@ internal static class NativeReleaseAudit
                     else
                     {
                         Metadata(module, native);
+                        RecipientScope(module);
                         Targets(module, native, authority, game);
                         Lifecycle(module,native);
                         MovementCadence(module,native);
@@ -69,6 +70,43 @@ internal static class NativeReleaseAudit
         catch (Exception error) { Console.Error.WriteLine(error); Environment.ExitCode = 1; }
     }
 
+    private static MethodDefinition ScopeMethod(TypeDefinition type, string name)
+    {
+        foreach (MethodDefinition method in type.Methods) if (method.Name == name) return method;
+        throw new Exception("Recipient-scope method missing: " + type.FullName + "." + name);
+    }
+    private static int ScopeCall(MethodDefinition method, string type, string name)
+    {
+        for (int i = 0; i < method.Body.Instructions.Count; i++)
+        {
+            MethodReference call = method.Body.Instructions[i].Operand as MethodReference;
+            if (call != null && call.DeclaringType.FullName.StartsWith(type, StringComparison.Ordinal) && call.Name == name) return i;
+        }
+        return -1;
+    }
+    private static void RecipientScope(AssemblyDefinition authority)
+    {
+        TypeDefinition protocol = authority.MainModule.GetType("TooManyLags.GridHandoffs.Protocol");
+        Check(protocol != null, "Production recipient-readiness protocol missing");
+        MethodDefinition ready = ScopeMethod(protocol, "Ready");
+        int record = ScopeCall(ready, "System.Runtime.CompilerServices.ConditionalWeakTable`2", "TryGetValue");
+        int tuple = ScopeCall(ready, "TooManyLags.GridHandoffs.RecipientRequirement", "Matches");
+        int peer = ScopeCall(ready, "ZNet", "GetPeer");
+        Check(record >= 0 && tuple > record && peer > tuple, "Recipient scope must precede peer/capability work in the compiled production gate");
+        Check(ScopeCall(ScopeMethod(protocol, "SetFloor"), "TooManyLags.GridHandoffs.RecipientRequirement", "Include") >= 0,
+            "Source snapshots and local owner events must share the monotonic state floor");
+        TypeDefinition controller = authority.MainModule.GetType("TooManyLags.AuthorityController");
+        Check(ScopeCall(ScopeMethod(controller, "OwnerChanged"), controller.FullName, "RequireRecipient") >= 0,
+            "Completed source receipts must arm readiness before another policy tick");
+        TypeDefinition node = null;
+        foreach (TypeDefinition nested in controller.NestedTypes) if (nested.Name == "NativeNode") node = nested;
+        Check(node != null && ScopeCall(ScopeMethod(node, "Apply"), controller.FullName, "RequireRecipient") >= 0,
+            "Direct owner writes and cooperative completions must arm recipient readiness");
+        TypeDefinition router = authority.MainModule.GetType("TooManyLags.RequestRouter");
+        Check(ScopeCall(ScopeMethod(router, "Forwarded"), controller.FullName, "RequireRecipient") >= 0,
+            "An observed missing/stale receiver must arm readiness even without a previous TML transfer");
+        Console.WriteLine("PASS: Actual compiled recipient scope precedes peer work; source snapshots, completed receipts, direct writes and receiver relays retain readiness integration.");
+    }
     private static void Metadata(AssemblyDefinition authority, AssemblyDefinition native)
     {
         TypeDefinition plugin = authority.MainModule.GetType("TooManyLags.Plugin");

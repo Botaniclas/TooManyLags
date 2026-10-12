@@ -3,7 +3,7 @@
 **Unreleased**
 ```
 - Restores camera-directed grid updates when the initial server camera settings are missed. Clients request the required interval until it arrives; retries stop after successful synchronization.
-- Fixes rejected or uncertain grid handoffs blocking door and harvesting requests. Confirms source results and recipient readiness, relaying late requests before execution without timeout-based steals or repeated commits. Processes replies per object rather than rescanning unrelated pending interactions. Requires updated clients for automatic interactive transfers; older clients retain native ownership. Keeps inventory/refill protection and guards pending item-stand attachments.
+- Fixes rejected or uncertain grid handoffs blocking door and harvesting requests. Confirms source results and recipient readiness, relaying late requests before execution without timeout-based steals or repeated commits. Processes replies per object; the experimental recipient gate checks actual transfers and observed delivery failures instead of every unchanged-owner interaction. Requires updated clients for automatic interactive transfers; older clients retain native ownership. Keeps inventory/refill protection and guards pending item-stand attachments.
 - Adds ServerOverlapCooldownSeconds (default 1s, 0 disables): overlapping directional fields assigned to the server temporarily ignore new grid ownership decisions. After expiry, only a new movement/heading update may request a change; there is no automatic player return. Supports live server tuning and preserves existing usage safeguards.
 ```
 

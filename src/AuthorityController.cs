@@ -268,7 +268,9 @@ namespace TooManyLags
                 long recipientOwner = data.GetOwner(); uint revision = data.OwnerRevision;
                 if (node.ObservedOwner == recipientOwner && node.Revision == revision) return;
                 node.ObservedOwner = recipientOwner; node.Revision = revision;
-                if (active && (Inventory.Received(data) || Cooperative.Received(data)) && node.Identity() && node.Controllable() && AvailableOwner(recipientOwner, data.GetPosition()))
+                bool receipt = Inventory.Received(data) || Cooperative.Received(data);
+                if (active && receipt) RequireRecipient(data);
+                if (active && receipt && node.Identity() && node.Controllable() && AvailableOwner(recipientOwner, data.GetPosition()))
                 {
                     node.Managed = true; node.ManagedOwner = recipientOwner;
                     if (recipientOwner != server) world.ForceSendZDO(recipientOwner, data.m_uid);
@@ -328,6 +330,12 @@ namespace TooManyLags
         internal bool IsActive { get { return active && !failed; } }
         internal static Action<ZDO> ReadinessRemoved { get; set; }
         internal static Action ReadinessReset { get; set; }
+        internal static Action<ZDO> RecipientReadinessRequired { get; set; }
+        internal void RequireRecipient(ZDO data)
+        {
+            long recipient = data.GetOwner();
+            if (recipient != 0 && recipient != server && RecipientReadinessRequired != null) RecipientReadinessRequired(data);
+        }
         internal void CapabilityChanged(long uid)
         {
             if (indexed == null || !active) return;
@@ -529,6 +537,7 @@ namespace TooManyLags
                     if (receipt == 1) return ApplyResult.Pending;
                     if (receipt == 2)
                     {
+                        owner.RequireRecipient(Data);
                         Managed = true; ManagedOwner = Data.GetOwner(); ObservedOwner = ManagedOwner; Revision = Data.OwnerRevision;
                         owner.Cooperative.Forget(Data); if (ManagedOwner != owner.server) owner.world.ForceSendZDO(ManagedOwner, Id);
                         return ApplyResult.Done;
@@ -543,7 +552,7 @@ namespace TooManyLags
                 {
                     if (Data.OwnerRevision == UInt16.MaxValue) return ApplyResult.Dropped;
                     owner.writing = true;
-                    try { if (target != owner.server) owner.world.ForceSendZDO(target, Id); Data.SetOwner(target); }
+                    try { if (target != owner.server) owner.world.ForceSendZDO(target, Id); Data.SetOwner(target); owner.RequireRecipient(Data); }
                     finally { owner.writing = false; }
                 }
                 ObservedOwner = Data.GetOwner(); Revision = Data.OwnerRevision; Managed = ObservedOwner == target; ManagedOwner = ObservedOwner;

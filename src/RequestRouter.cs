@@ -155,6 +155,7 @@ namespace TooManyLags
         {
             AuthorityController.NativeNode node = controller.RequestNode(request.m_targetZDO, request.m_methodHash);
             if (node == null) return; // Destroyed/unmanaged native instances are not recreated by a relay.
+            controller.RequireRecipient(node.Data);
             Waiting entry;
             if (!waiting.TryGetValue(node.Id, out entry)) { entry = new Waiting { Node = node }; waiting.Add(node.Id, entry); }
             node.Refilled(request.m_methodHash); Hold(entry, Copy(request)); Flush(node.Id);

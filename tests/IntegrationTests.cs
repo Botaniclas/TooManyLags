@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using TooManyLags;
 using HarmonyLib;
 using UnityEngine;
@@ -1082,11 +1083,90 @@ internal static class IntegrationTests
         }
         finally { RequestRouter.RecipientReady=null; }
     }
+    private static void RecipientScopeController()
+    {
+        var requirements=new ConditionalWeakTable<ZDO,TooManyLags.GridHandoffs.RecipientRequirement>();
+        var ready=new HashSet<ZDOID>(); int armed=0, recipientChecks=0;
+        AuthorityController.RecipientReadinessRequired=delegate(ZDO data) {
+            requirements.GetOrCreateValue(data).Include(data.GetOwner(),data.OwnerRevision,0); armed++;
+        };
+        AuthorityController.ReadinessRemoved=delegate(ZDO data) {requirements.Remove(data);ready.Remove(data.m_uid);};
+        AuthorityController.ReadinessReset=delegate {requirements=new ConditionalWeakTable<ZDO,TooManyLags.GridHandoffs.RecipientRequirement>();ready.Clear();};
+        RequestRouter.RecipientReady=delegate(ZDOMan world,long owner,ZDO data) {
+            TooManyLags.GridHandoffs.RecipientRequirement requirement;
+            if(!requirements.TryGetValue(data,out requirement)||!requirement.Matches(owner,data.OwnerRevision))return true;
+            recipientChecks++;return ready.Contains(data.m_uid);
+        };
+        try
+        {
+            Fresh(Kinds.Doors,defaultInteractives:true);Peer(1);armed=recipientChecks=0;
+            ZDO door=Object(typeof(Door),1,1,1);Tick(0);Tick(2);ZDOMan.instance.MarkSent(1,door);
+            for(int i=0;i<100;i++)Check("unchanged ownership retains native interaction fast path",!controller.Router.TryHandle(ZRoutedRpc.instance,Request(door,"UseDoor",1),false));
+            Check("100 stable interactions add no readiness requirement or recipient checks",armed==0&&recipientChecks==0&&ZRoutedRpc.instance.Remote.Count==0);
+            Tick(3);Check("no-op grid completion does not arm readiness",armed==0);
+
+            Fresh(Kinds.Doors,defaultInteractives:true,directional:true);Peer(1);armed=recipientChecks=0;
+            var frequent=new List<ZDO>();
+            for(int i=0;i<100;i++)frequent.Add(Object(typeof(Door),1,1,99));
+            Tick(0);Tick(2);
+            for(int cycle=1;cycle<10;cycle++)
+            {
+                foreach(ZDO data in frequent){data.SetOwner(99);controller.OwnerChanged(data);}
+                Tick(cycle+2);
+            }
+            foreach(ZDO data in frequent)Check("frequent no-interaction writes reach the intended owner",data.GetOwner()==1);
+            Check("1000 transfers without interactions never query recipient readiness",armed==1000&&recipientChecks==0&&ZRoutedRpc.instance.Remote.Count==0);
+
+            Fresh(Kinds.Doors,defaultInteractives:true);Peer(1);armed=recipientChecks=0;
+            door=Object(typeof(Door),1,1,99);Tick(0);Tick(2);
+            Check("real server-to-client write arms recipient once",door.GetOwner()==1&&armed==1);
+            ZDOMan.instance.MarkSent(1,door);
+            Check("post-write interaction waits for actual recipient readiness",controller.Router.TryHandle(ZRoutedRpc.instance,Request(door,"UseDoor",1),false)&&ZRoutedRpc.instance.Remote.Count==0&&recipientChecks>0);
+            ready.Add(door.m_uid);controller.Router.Flush(door.m_uid);
+            Check("ready post-write request executes once",ZRoutedRpc.instance.Remote.Count==1);
+            Tick(3);Check("already-owned grid result does not re-arm readiness",armed==1);
+            var view=ZNetScene.instance.FindInstance(door);controller.Unregister(view);
+            TooManyLags.GridHandoffs.RecipientRequirement record;
+            Check("unload forgets recipient scope",!requirements.TryGetValue(door,out record));
+
+            foreach(bool reverse in new[]{false,true})
+            {
+                Fresh(Kinds.Doors);Peer(1);Peer(7,64);armed=recipientChecks=0;
+                FiresGhettoNetworkMod.FgnVersionGate.Match=true;
+                door=Object(typeof(Door));Tick(0);Tick(2);Check("source transfer actually pending",controller.TransferPending(door)&&armed==0);
+                Import(door,1,reverse);
+                Check("complete cooperative receipt arms scope before next policy tick",armed==1&&requirements.TryGetValue(door,out record)&&record.Matches(1,door.OwnerRevision));
+                ZDOMan.instance.MarkSent(1,door);
+                Check("immediate interaction cannot outrun post-receipt readiness",controller.Router.TryHandle(ZRoutedRpc.instance,Request(door,"UseDoor",1),false)&&ZRoutedRpc.instance.Remote.Count==0);
+                ready.Add(door.m_uid);controller.Router.Flush(door.m_uid);
+                Check("both import orders deliver exactly once",ZRoutedRpc.instance.Remote.Count==1);
+            }
+            Fresh(Kinds.Containers);Peer(1);Peer(7,64);armed=recipientChecks=0;
+            ZDO chest=Object(typeof(Container));view=ZNetScene.instance.FindInstance(chest);
+            Tick(0);Tick(2);Import(chest,99,false);
+            Check("native inventory acquisition on server needs no remote readiness",armed==0);
+            controller.InventoryResponse(view.GetComponent<Container>(),7,true);Tick(3);
+            Check("final native inventory client assignment still arms readiness",chest.GetOwner()==1&&armed==1);
+
+            Fresh(Kinds.Doors);Peer(1);armed=recipientChecks=0;
+            door=Object(typeof(Door),1,1,1);Tick(0);Tick(2);ZDOMan.instance.MarkSent(1,door);
+            controller.Router.Forwarded(Request(door,"UseDoor",1));
+            Check("a receiver failure arms readiness even without TML transfer",armed==1&&recipientChecks>0&&ZRoutedRpc.instance.Remote.Count==0);
+            ready.Add(door.m_uid);controller.Router.Flush(door.m_uid);
+            Check("receiver failure recovery retains one delivery",ZRoutedRpc.instance.Remote.Count==1);
+            controller.Reset();Check("world reset removes scope records",!requirements.TryGetValue(door,out record));
+            Console.WriteLine("PASS: 100 unchanged-owner interactions and 1000 no-interaction transfers perform zero additional recipient-readiness checks; real writes, both source receipt orders, inventory assignments and receiver failures retain readiness gates.");
+        }
+        finally {
+            RequestRouter.RecipientReady=null;AuthorityController.RecipientReadinessRequired=null;
+            AuthorityController.ReadinessRemoved=null;AuthorityController.ReadinessReset=null;
+        }
+    }
     public static void Main()
     {
         try {
         Fields();Inventories();StationsAndActors();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
-        SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();
+        SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
         Console.WriteLine("PASS: "+checks+" full-controller/grid/router fixture assertions; no PUP/PupPatch plugin in fixture.");
         Console.WriteLine("LIMIT: simulated transport and Unity registry; no live multiplayer test.");
         } catch(Exception error){Console.Error.WriteLine(error);Environment.ExitCode=1;}

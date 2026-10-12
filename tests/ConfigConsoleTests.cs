@@ -88,7 +88,7 @@ internal static class ConfigConsoleTests
         ConfigEntry<string> shape = config.Bind("04", "GridCoveragePattern", "Rounded7x7", new ConfigDescription("Server only; restart required", new AcceptableValueList<string>("Rounded5x5", "Square3x3", "Rounded7x7")));
         ConfigEntry<bool> ai = config.Bind("09", "EnableAIOwnership", true, "Both; restart required");
         ConfigEntry<bool> doors = config.Bind("07", "Doors", true, "Server only; restart required");
-        outer.Value = 3; camera.Value = .1f; logs.Value = false; ping.Value = 200;
+        outer.Value = 3; camera.Value = .1f; overlap.Value = 1f; logs.Value = false; ping.Value = 200;
         size.Value = 4; shape.Value = "Rounded7x7"; ai.Value = true; doors.Value = true; config.Save();
         int applies = 0; string changed = null;
         ConfigCommands commands = new ConfigCommands(config, delegate(string key) { applies++; changed = key; });

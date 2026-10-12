@@ -8,12 +8,16 @@ namespace TooManyLags
     {
         private const string RequestRpc = "TooManyLags_Config_1", ReplyRpc = "TooManyLags_ConfigReply_1";
         private const string CameraRpc = "TooManyLags_CameraInterval_1";
+        private const string CameraRequestRpc = "TooManyLags_CameraRequest_1";
         private static bool registered;
         private static WeakReference terminal;
         private static ZNet network;
         private static int ticket;
         private static double until;
         private static ZNet cameraNetwork;
+        private static ZRpc cameraRequestedRpc;
+        private static ZNet cameraRequestedNetwork;
+        private static double cameraRetryAt;
         internal static bool CameraConfigured { get { return ZNet.instance && ReferenceEquals(cameraNetwork, ZNet.instance); } }
         internal static void Register()
         {
@@ -43,6 +47,17 @@ namespace TooManyLags
             if (peer == null || peer.m_rpc == null) return;
             if (peer.m_server && ZNet.instance && !ZNet.instance.IsDedicated()) cameraNetwork = null;
             double window = -100; int requests = 0;
+            double nextCameraRequest = -100;
+            peer.m_rpc.Register<int>(CameraRequestRpc, delegate(ZRpc rpc, int protocol)
+            {
+                ZNet current = ZNet.instance;
+                if (protocol != 1 || !current || !current.IsDedicated() || !peer.IsReady() ||
+                    !ReferenceEquals(current.GetPeer(peer.m_uid), peer) || !ReferenceEquals(rpc, peer.m_rpc)) return;
+                double now = Time.realtimeSinceStartupAsDouble;
+                if (now < nextCameraRequest) return;
+                nextCameraRequest = now + 1;
+                SendCamera(peer, Plugin.CameraInterval());
+            });
             peer.m_rpc.Register<string, int>(RequestRpc, delegate(ZRpc rpc, string command, int id)
             {
                 ZNet current = ZNet.instance;
@@ -85,11 +100,28 @@ namespace TooManyLags
             if (!ZNet.instance || !ZNet.instance.IsDedicated()) return;
             foreach (ZNetPeer peer in ZNet.instance.GetPeers()) if (peer != null && peer.IsReady()) SendCamera(peer, interval);
         }
+        internal static void RequestCamera()
+        {
+            if (CameraConfigured) return;
+            ZNet current = ZNet.instance;
+            if (!current || current.IsDedicated()) return;
+            ZNetPeer server = current.GetServerPeer();
+            if (server == null || !server.IsReady() || server.m_rpc == null) return;
+            if (!ReferenceEquals(cameraRequestedNetwork, current) || !ReferenceEquals(cameraRequestedRpc, server.m_rpc))
+            { cameraRequestedNetwork = current; cameraRequestedRpc = server.m_rpc; cameraRetryAt = Double.NegativeInfinity; }
+            double now = Time.realtimeSinceStartupAsDouble;
+            if (now < cameraRetryAt) return;
+            // Only retry settings acquisition; never repeat a gameplay action.
+            // Receiving the authenticated interval stops these requests entirely.
+            cameraRetryAt = now + 2;
+            try { server.m_rpc.Invoke(CameraRequestRpc, 1); } catch (Exception) { }
+        }
         private static void SendCamera(ZNetPeer peer, float interval)
         { try { if (peer.m_rpc != null) peer.m_rpc.Invoke(CameraRpc, interval); } catch (Exception) { } }
         private static void Print(Terminal context, string lines)
         { foreach (string line in lines.Split('\n')) context.AddString(line.TrimEnd('\r')); }
-        internal static void Reset() { terminal = null; network = null; cameraNetwork = null; until = 0; }
+        internal static void Reset()
+        { terminal = null; network = null; cameraNetwork = null; until = 0; cameraRequestedRpc = null; cameraRequestedNetwork = null; cameraRetryAt = 0; }
     }
     [HarmonyPatch(typeof(ZNet), "OnNewConnection")]
     internal static class ConfigConnectionPatch

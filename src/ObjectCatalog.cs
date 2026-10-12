@@ -106,6 +106,8 @@ namespace TooManyLags
             HashSet<int> methods;
             return requests.TryGetValue(kind, out methods) && methods.Contains(hash);
         }
+        internal static bool AnyOwnerRequest(int hash)
+        { return allRequests.Contains(hash); }
         internal static bool RefillRequest(Kinds kind, int hash)
         {
             if (kind == Kinds.Smelters) return hash == addOre || hash == addFuel;
@@ -121,6 +123,7 @@ namespace TooManyLags
         // Existing owner-targeted requests only. Responses and broadcasts are
         // never redirected. Public inventories use native source-side consent;
         // station ownership stays on the server after the initial handoff.
+        private static readonly HashSet<int> allRequests = new HashSet<int>();
         private static readonly Dictionary<Kinds, HashSet<int>> requests = BuildRequests();
         private static Dictionary<Kinds, HashSet<int>> BuildRequests()
         {
@@ -147,7 +150,7 @@ namespace TooManyLags
         }
         private static void Add(Dictionary<Kinds, HashSet<int>> groups, Kinds kind, params string[] names)
         {
-            groups.Add(kind, Hashes(names));
+            HashSet<int> methods = Hashes(names); groups.Add(kind, methods); allRequests.UnionWith(methods); allRequests.UnionWith(common);
         }
         private static HashSet<int> Hashes(params string[] names)
         { var result = new HashSet<int>(); foreach (string name in names) result.Add(name.GetStableHashCode()); return result; }

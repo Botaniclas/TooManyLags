@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.13.0")]
+[assembly: AssemblyVersion("1.0.15.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.13")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.15")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.13", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.15", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -30,6 +30,7 @@ namespace TooManyLags
         private CameraPublisher camera;
         private PluginInfo networkPlugin;
         private bool playerSimulation;
+        private bool gridProtocol;
         private void Awake()
         {
             instance = this;
@@ -95,6 +96,12 @@ namespace TooManyLags
             }
             catch (Exception error)
             { enabledMod = false; Logger.LogWarning("TooManyLags inactive: required FGN session settings could not be applied. " + error.GetBaseException()); return; }
+            if (!playerSimulation || !Application.isBatchMode)
+            {
+                try { GridHandoffs.Protocol.Start(networkPlugin.Instance.GetType().Assembly); gridProtocol = true; }
+                catch (Exception error)
+                { GridHandoffs.Protocol.Stop(); Logger.LogWarning("Interactive ownership inactive: grid handoff safeguards unavailable. " + error.GetBaseException()); }
+            }
             if (!Application.isBatchMode)
             {
                 try
@@ -109,6 +116,7 @@ namespace TooManyLags
                 return;
             }
             if (playerSimulation) return;
+            if (!gridProtocol) return;
             if (!buildings && kinds == Kinds.None) return;
             try
             {
@@ -295,6 +303,7 @@ namespace TooManyLags
         private void Cleanup() { if (harmony != null) harmony.UnpatchSelf(); }
         private void OnDestroy()
         {
+            GridHandoffs.Protocol.Stop();
             ConfigConsole.Reset(); if (configHarmony != null) configHarmony.UnpatchSelf(); commands = null;
             FgnCombatOwnership.Stop(); FgnCombatStatus.Reset();
             PlayerSimulation.Plugin.Stop();

@@ -1,4 +1,24 @@
-# TooManyLags - FiresGhettoNetworking Addon 1.0.13 validation
+# TooManyLags - FiresGhettoNetworking Addon 1.0.15 validation
+
+## Scoped processing of waiting interactions
+
+Grid-handoff results, recipient-readiness replies and relayed requests now wake only their object's queue through a dictionary lookup. They do not copy or traverse the collection of unrelated waiting objects. Both scoped and full processing share the same source-consent, recipient-readiness, FIFO and expiry checks. The existing native-replication and controller fallback passes remain unchanged, so deadlines, disconnects and state changes without a protocol reply still progress. Empty queues add no recipient work. No new timer, player-count gate, physics polling, world scan or persistent cache is introduced.
+
+The 100-object fixture measures 10,000 recipient-readiness checks for 100 full passes and 100 checks for 100 scoped replies while all objects are waiting. This is a 99% reduction in those particular repeated checks, not a measured reduction of total CPU or network latency. Routing and protocol messages themselves are unchanged. Additional tests cover unrelated/duplicate replies, relays, ordered multi-action delivery, full-fallback inventory denial, unresolved source consent, changed owners, native object removal, reloaded identities and scene reset inside a native handler. Queue snapshots survive teardown callbacks and skip retired entries, preserving newly queued work for a reloaded instance. Teardown allocates a temporary snapshot only when queues actually need cancellation; normal reply processing has no new collection allocation.
+
+The targeted grid/controller/router run passes 124,064 grid/index checks and 10,370 full-controller checks. All 17 final verification groups pass, with 50 exact Harmony targets audited against each of the installed FiresGhettoNetworking builds. Final DLL SHA256: `8D0952871C64EDEC4495E04B6F941FC0BFA523B83FEE2A9E89C3C978A12092E3`. Full build/native regression results are recorded in `verification.json`. No live multiplayer CPU benchmark or Unity session has been performed.
+
+A separate comparison compiled the archived 1.0.14 router with the same managed native-handler reset scenario. Its shared snapshot raised a controller fault during scene teardown; the current full and scoped paths both pass without that fault. This justifies isolating the rare teardown snapshot rather than reusing the running dispatch snapshot. The comparison is in `bin/router-optimization-audit`; it did not modify the production assembly or prior archive.
+
+## Identified grid handoff repair
+
+Normal Server-Side Simulation mode now uses a dedicated identified grid-handoff endpoint. The source calls the existing FiresGhettoNetworking commit after checking the expected owner/revision, live instance, active user, local refill lease and pending native item/armour-stand actions. Untagged FGN results cannot resolve these transactions. A per-connection scalar token fence prevents a duplicate or cancelled commit from executing later. A status query fences an uncertain unsent commit and reports the actual source snapshot; it never replays the commit. Owner writes still require native source execution or the existing orphan/native path, not a timeout.
+
+Recipient probes verify the live instance, matching owner revision and required data revision. Readiness is cached only for loaded managed objects and the current connection, invalidated on unload, ownership mismatch and controller reset. Native area readiness is reused per zone/frame only while handling real probes. The receiver intercepts verified owner-addressed building requests before their handler if the instance is missing or no longer owned, then relays the original packet to the coordinator. No gameplay action is retransmitted after execution. Public-container acquisition still uses native RequestOpen; its existing grant/UI limitations and timeout behavior were not redesigned by this focused repair. Direct non-owner sign claims and arbitrary mod protocols are not given a new universal arbitration guarantee.
+
+Performance: no new Update/FixedUpdate polling or world scan for grid handoffs. The routed-message hook skips unrelated methods before object/instance/component lookups. Commit status is queried at most once per two seconds for an unresolved transaction; readiness probes at most once per half-second per waiting object. A capability change wakes affected loaded nodes once. Active-transaction token history is one scalar per connection; loaded-object readiness and weak local leases are cleared on unload/reset, and disconnected connection records are removed. Network messages during actual transitions remain a cost, and live CPU/latency has not been benchmarked.
+
+New managed tests cover rejected and missing source results, stale tokens/connections, half-imported ownership tuples, status fencing, native-result isolation, recipient readiness and exactly one router dispatch of a held/relayed request. Native metadata audits include all seven new protocol Harmony targets and require a separate TML endpoint rather than replacement of native RPC callbacks. No live multiplayer test has been run. This is a local test build, not a published release.
 
 ## Server overlap cooldown
 
@@ -10,7 +30,7 @@ The cooldown adds one scalar timestamp to existing field policies. It uses the e
 
 No live Unity multiplayer session was tested. See `verification.json` for the final build hash and all native-contract/managed regression results. The remainder records safeguards retained from 1.0.12.
 
-All 16 verification groups passed, including 20,415 cooldown checks and 10,184 controller checks. The report also covers real BepInEx generation/reload of 44 settings, both FiresGhettoNetworking builds and the unchanged optional PUP guard contracts.
+The regression report covers identified handoffs, cooldowns, full-controller routing, real BepInEx generation/reload of 44 settings, both FiresGhettoNetworking builds and the unchanged optional PUP guard contracts. The integrated camera-settings recovery has 17 separate managed checks: missed initial settings, authenticated replies, bounded retries, reconnects and zero requests after successful synchronization.
 
 ## Directional overlap and config defaults
 
@@ -115,3 +135,11 @@ Build uses installed Valheim/BepInEx APIs with warnings treated as errors. Contr
 The actual config binding prefixes execute with installed BepInEx.ConfigFile: 42 settings, nine English sections, reload/save equality. Verification JSON records the final DLL, native dependencies, copied sources and config hashes. Release packaging checks version, DLL hash, manifest, README and config contents.
 
 No live multiplayer, real packet transport, Unity physics session or in-game latency benchmark was performed. Automated checks cannot guarantee immediate delivery or compatibility with arbitrary future/third-party changes. The new filter covers native summons and the current faction of loaded actors. Unloaded actors use their prefab's current faction; arbitrary modded per-instance faction changes while unloaded cannot be inferred from native ZDO data. Modded friendly creatures using another faction are not identified by this predicate; existing summon safeguards still apply. Local PUP collision/stability protection remains separate.
+
+## Camera interval recovery (2026-10-12)
+
+- User-provided runtime snapshot: camera publisher and hook present, multiplayer active, player ownership valid, server grid active, but intervalReceived=False and raw camera coverage=-1 on client and server. The diagnostic request/reply succeeds; this isolates the missing camera configuration prerequisite without proving why the original join push was missed.
+- Added an authenticated, rate-limited request for the authoritative server interval. Clients retry at most every two seconds while unconfigured; successful receipt stops requests. Reconnect/shutdown clear the request identity. No ownership or gameplay actions are retried.
+- test-camera-recovery.ps1: 17 managed recovery/authentication/reconnect checks passed, including a missed early join push and no sends across 1000 configured frame checks.
+- Existing test-config-console.ps1 passed: 60 console/authorization/persistence checks, both 9-check grid timing suites and both 11015-check camera receipt/wake suites.
+- An isolated 1.0.12 test package includes the recovery plus tml_camera snapshots. IL comparison verified 861 original method bodies unchanged outside ConfigConsole and the camera sampling hook. No live multiplayer success has yet been reported. No installed profile or remote release was modified automatically.

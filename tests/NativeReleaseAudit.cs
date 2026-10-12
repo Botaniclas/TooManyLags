@@ -192,13 +192,21 @@ internal static class NativeReleaseAudit
                     {
                         Check(called.DeclaringType.FullName != "System.Version", "Runtime numeric version gate remains");
                         bool configEndpoint = type.FullName == "TooManyLags.ConfigConsole" && method.Name == "Connect";
+                        bool gridEndpoint = type.FullName == "TooManyLags.GridHandoffs.Protocol" && method.Name == "Connect";
+                        if (called.DeclaringType.FullName == "ZRpc" && called.Name == "Register" && gridEndpoint)
+                        {
+                            string endpoint = null;
+                            for (int i = method.Body.Instructions.IndexOf(instruction) - 1; i >= 0; i--)
+                                if (method.Body.Instructions[i].OpCode == Mono.Cecil.Cil.OpCodes.Ldstr) { endpoint = (string)method.Body.Instructions[i].Operand; break; }
+                            Check(endpoint == "TooManyLags_GridHandoff_1", "Grid handoffs must register only their own identified endpoint, never native callbacks");
+                        }
                         if (called.DeclaringType.FullName == "ZRpc" && called.Name == "Register" && configEndpoint)
                         {
                             string endpoint = null;
                             for (int i = method.Body.Instructions.IndexOf(instruction) - 1; i >= 0; i--)
                                 if (method.Body.Instructions[i].OpCode == Mono.Cecil.Cil.OpCodes.Ldstr)
                                 { endpoint = (string)method.Body.Instructions[i].Operand; break; }
-                            Check(endpoint == "TooManyLags_Config_1" || endpoint == "TooManyLags_ConfigReply_1" || endpoint == "TooManyLags_CameraInterval_1", "Only isolated config/camera RPC names may be registered");
+                            Check(endpoint == "TooManyLags_Config_1" || endpoint == "TooManyLags_ConfigReply_1" || endpoint == "TooManyLags_CameraInterval_1" || endpoint == "TooManyLags_CameraRequest_1", "Only isolated config/camera RPC names may be registered");
                             configRegistrations++;
                         }
                         if (type.FullName.StartsWith("TooManyLags.ConfigConsole/", StringComparison.Ordinal) && called.DeclaringType.FullName == "ZNet" && called.Name == "IsAdmin")
@@ -212,7 +220,7 @@ internal static class NativeReleaseAudit
                             Check(executesAfterAuthorization, "Remote setting execution follows native admin identity check"); configAdminChecks++;
                         }
                         Check(!((called.DeclaringType.FullName == "ZRpc" || called.DeclaringType.FullName == "ZRoutedRpc") &&
-                            called.Name == "Register") || configEndpoint || (type.FullName == "TooManyLags.PlayerSimulation.Network" && method.Name == "Register"), "Authority registers/replaces a native client RPC callback");
+                            called.Name == "Register") || configEndpoint || gridEndpoint || (type.FullName == "TooManyLags.PlayerSimulation.Network" && method.Name == "Register"), "Authority registers/replaces a native client RPC callback");
                         Check(!(called.DeclaringType.FullName == "System.Reflection.FieldInfo" && called.Name == "SetValue") ||
                             (type.FullName == "TooManyLags.FgnSessionSettings" && (method.Name == "Apply" || method.Name == "CreatureBalancing")),
                             "Reflection writes must be confined to approved FGN startup settings; native gameplay fields remain untouched");
@@ -224,7 +232,7 @@ internal static class NativeReleaseAudit
                 }
             }
         }
-        Check(configRegistrations == 3 && configAdminChecks == 1, "Three private config/camera endpoints and one remote admin check required");
+        Check(configRegistrations == 4 && configAdminChecks == 1, "Four private config/camera endpoints and one remote admin check required");
         TypeDefinition net = native.MainModule.GetType("ZNet"); MethodDefinition admin = null, ready = null;
         foreach (MethodDefinition method in net.Methods) { if (method.Name == "IsAdmin") admin = method; if (method.Name == "RPC_PeerInfo") ready = method; }
         Check(admin != null && admin.IsPublic && admin.Parameters.Count == 1 && admin.Parameters[0].ParameterType.FullName == "System.String" && admin.ReturnType.FullName == "System.Boolean", "Native public admin-list wrapper changed");
@@ -333,7 +341,7 @@ internal static class NativeReleaseAudit
     private static void Targets(AssemblyDefinition authority, AssemblyDefinition native, Assembly runtime, Assembly game)
     {
         int configTargets = 0;
-        foreach (TypeDefinition type in authority.MainModule.Types)
+        foreach (TypeDefinition type in HandoffTargets(authority))
         {
             CustomAttribute patch = null;
             foreach (CustomAttribute attribute in type.CustomAttributes)
@@ -341,7 +349,7 @@ internal static class NativeReleaseAudit
             if (patch == null) continue;
             if (patch.ConstructorArguments.Count == 0)
             {
-                MethodInfo enumerate = runtime.GetType(type.FullName, true).GetMethod("TargetMethods", Static);
+                MethodInfo enumerate = runtime.GetType(type.FullName.Replace('/', '+'), true).GetMethod("TargetMethods", Static);
                 Check(enumerate != null, "Dynamic Harmony target enumerator missing: " + type.FullName);
                 foreach (MethodBase target in (IEnumerable<MethodBase>)enumerate.Invoke(null, null))
                 {
@@ -386,7 +394,16 @@ internal static class NativeReleaseAudit
                 PatchParameters(type, target); targets++;
             }
         }
-        Check(configTargets == 3 && targets == 43, "Unexpected Harmony target count: " + targets);
+        Check(configTargets == 3 && targets == 50, "Unexpected Harmony target count: " + targets);
+    }
+    private static IEnumerable<TypeDefinition> HandoffTargets(AssemblyDefinition module)
+    {
+        foreach (TypeDefinition type in module.MainModule.Types)
+        {
+            yield return type;
+            if (type.FullName == "TooManyLags.GridHandoffs.Protocol")
+                foreach (TypeDefinition nested in type.NestedTypes) yield return nested;
+        }
     }
     private static MethodDefinition ByToken(TypeDefinition type, int token)
     { foreach (MethodDefinition method in type.Methods) if (method.MetadataToken.ToInt32() == token) return method; return null; }

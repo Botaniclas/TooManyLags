@@ -208,6 +208,7 @@ namespace TooManyLags
         private void Remove(NativeNode node)
         {
             Inventory.Forget(node.Data); Cooperative.Forget(node.Data);
+            if (ReadinessRemoved != null) ReadinessRemoved(node.Data);
             indexed.Remove(node); nodes.Remove(node.Id); views.Remove(node.View); Router.Remove(node);
         }
         internal void Position(ZDO data)
@@ -325,6 +326,15 @@ namespace TooManyLags
             NativeNode node; return active && !failed && nodes.TryGetValue(id, out node) && ObjectCatalog.OwnerRequest(node.Kind, method) && node.Identity() ? node : null;
         }
         internal bool IsActive { get { return active && !failed; } }
+        internal static Action<ZDO> ReadinessRemoved { get; set; }
+        internal static Action ReadinessReset { get; set; }
+        internal void CapabilityChanged(long uid)
+        {
+            if (indexed == null || !active) return;
+            foreach (NativeNode node in nodes.Values)
+                if (node.Data.GetOwner() == uid || indexed.Grid.Owner(node.Cell) == uid) indexed.Changed(node, Time.unscaledTime, NeedsPolicy(node));
+            cadence.Request();
+        }
         private bool NeedsGrid(Cell cell) { return !coarseEnabled || regions.Contains(cell, cellSize); }
         private bool ProtectedTransfer(ZDO data)
         { return Inventory.Transitioning(data) || Cooperative.Transitioning(data) || TransferPending(data) || Cooperative.Reserved(data); }
@@ -345,6 +355,7 @@ namespace TooManyLags
         internal void RequestFault(Exception error) { try { if (requestFault != null) requestFault(error); } catch { } }
         internal void Reset()
         {
+            if (ReadinessReset != null) ReadinessReset();
             active = false; primed = false; coarseEnabled = false;
             if (Inventory != null) Inventory.Clear(); if (Cooperative != null) Cooperative.Clear();
             Inventory = null; Cooperative = null; nodes.Clear(); views = new ConditionalWeakTable<ZNetView, NativeNode>();
@@ -485,6 +496,13 @@ namespace TooManyLags
                 if (!Finite(position) || !Cell.At(position.x, position.z, owner.cellSize, out current)) return ApplyResult.Dropped;
                 if (!current.Equals(Cell)) { owner.indexed.Move(this, current, Time.unscaledTime); return ApplyResult.Pending; }
                 if (!owner.AvailableOwner(target, position)) return ApplyResult.Pending;
+                // A capability check replaces an exact-version lock. Connected
+                // clients lacking identified commits/readiness retain native ownership.
+                if (Kind != Kinds.TamedAnimals && FgnOwnerHandoff.CooperativeClient != null &&
+                    ((target != owner.server && !FgnOwnerHandoff.CooperativeClient(owner.network.GetPeer(target))) ||
+                    (Data.GetOwner() != 0 && Data.GetOwner() != owner.server && owner.AvailableOwner(Data.GetOwner(), position) &&
+                     !FgnOwnerHandoff.CooperativeClient(owner.network.GetPeer(Data.GetOwner())))))
+                { Managed = false; return ApplyResult.Done; }
                 long old = Data.GetOwner(); uint revision = Data.OwnerRevision;
                 bool transfer = owner.TransferPending(Data);
                 if (old == target && !transfer && (!container || !owner.Inventory.Received(Data) || owner.Inventory.Acquire(Data, View, container) == 2))
@@ -515,6 +533,7 @@ namespace TooManyLags
                         owner.Cooperative.Forget(Data); if (ManagedOwner != owner.server) owner.world.ForceSendZDO(ManagedOwner, Id);
                         return ApplyResult.Done;
                     }
+                    if (FgnOwnerHandoff.IdentifiedSend != null) { Managed = false; return ApplyResult.Done; }
                     // No compatible FGN callback: only non-inventory objects use
                     // vanilla assignment. A timeout never returns this fallback.
                 }

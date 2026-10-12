@@ -6,11 +6,15 @@ using UnityEngine;
 
 namespace TooManyLags
 {
-    // A source-owner commit, not a server-side ownership permit. No custom RPC,
-    // FGN creature dictionary, timeout owner write, or background sweep is used.
+    // Source-owner commits. Identified production requests reconcile explicit
+    // source snapshots; a timer can query status, never steal or repeat a commit.
     internal sealed class FgnOwnerHandoff
     {
         private const double RetrySeconds = 6.0;
+        internal static Func<ZNetPeer, bool> CooperativeClient { get; set; }
+        internal static Action<ZNetPeer, ZDOID, long, uint, long> IdentifiedSend { get; set; }
+        internal static Action<ZNetPeer, ZDOID, long> IdentifiedStatus { get; set; }
+        private static long nextToken;
         private sealed class Stamp
         {
             internal ZDOID Id;
@@ -20,6 +24,9 @@ namespace TooManyLags
             internal ZRpc Rpc;
             internal double RetryAt;
             internal bool InFlight;
+            internal long Token;
+            internal bool Reconciling;
+            internal double StatusAt;
         }
 
         private sealed class IdentityComparer : IEqualityComparer<ZDO>
@@ -34,10 +41,23 @@ namespace TooManyLags
         private readonly Func<ZDOID, ZDO> lookup;
         private readonly Action<ZNetPeer, ZDOID, long> invoke;
         private readonly Func<double> clock;
+        private readonly Action<ZNetPeer, ZDOID, long, uint, long> identified;
+        private readonly Action<ZNetPeer, ZDOID, long> status;
         private readonly Dictionary<ZDO, Stamp> pending = new Dictionary<ZDO, Stamp>(new IdentityComparer());
 
         internal FgnOwnerHandoff(Assembly fgn, long server)
-            : this(server, Bind(fgn), FindPeer, FindData, Send, Now) { }
+            : this(server, Bind(fgn), FindPeer, FindData, Send, Now)
+        { identified = IdentifiedSend; status = IdentifiedStatus; }
+
+        internal FgnOwnerHandoff(long server, Func<ZNetPeer, bool> matched,
+            Func<long, ZNetPeer> peer, Func<ZDOID, ZDO> lookup,
+            Action<ZNetPeer, ZDOID, long, uint, long> identified,
+            Action<ZNetPeer, ZDOID, long> status, Func<double> clock)
+            : this(server, matched, peer, lookup, Send, clock)
+        { this.identified = identified; this.status = status; }
+
+        internal bool Supports(ZNetPeer source)
+        { return identified == null || (CooperativeClient != null && CooperativeClient(source)); }
 
         // Test seam; production delegates bind once and use actual native peers.
         internal FgnOwnerHandoff(long server, Func<ZNetPeer, bool> matched,
@@ -68,6 +88,7 @@ namespace TooManyLags
                 else if (Unchanged(data, stamp))
                 {
                     if (!Connected(stamp)) { pending.Remove(data); return 0; }
+                    if (stamp.Reconciling) { Probe(stamp); return 1; }
                     if (!stamp.InFlight && target != stamp.Target && target != 0 &&
                         target != stamp.Source && DestinationReady(target))
                     {
@@ -88,7 +109,7 @@ namespace TooManyLags
             if (source == 0 || source == server || target == 0 || target == source ||
                 data.OwnerRevision >= UInt16.MaxValue) return 0;
             ZNetPeer sourcePeer = peer(source);
-            if (!Ready(sourcePeer) || !matched(sourcePeer)) return 0;
+            if (!Ready(sourcePeer) || !matched(sourcePeer) || !Supports(sourcePeer)) return 0;
             stamp = Create(data, sourcePeer, target);
             pending.Add(data, stamp);
             Retry(stamp);
@@ -103,7 +124,8 @@ namespace TooManyLags
             if (Committed(data, stamp)) return false;
             if (Transition(data, stamp)) return true;
             if (!Unchanged(data, stamp) || !Connected(stamp)) { pending.Remove(data); return false; }
-            return stamp.InFlight;
+            Probe(stamp);
+            return stamp.InFlight || stamp.Reconciling;
         }
 
         internal bool Reserved(ZDO data)
@@ -122,13 +144,37 @@ namespace TooManyLags
             if (accepted || !KnownOwnerVeto(reason)) return;
             ZDO data = lookup(id); Stamp stamp;
             if (data == null || !pending.TryGetValue(data, out stamp) || !stamp.InFlight ||
-                !data.m_uid.Equals(id) || !stamp.Id.Equals(id) ||
+                stamp.Token != 0 || !data.m_uid.Equals(id) || !stamp.Id.Equals(id) ||
                 !System.Object.ReferenceEquals(rpc, stamp.Rpc) || !Current(data) ||
                 !Unchanged(data, stamp) || !Connected(stamp)) return;
             // Known native vetoes are reached only after source IsOwner passed.
             // Gameplay can run there; the grid policy keeps ownership reserved.
             stamp.InFlight = false;
             stamp.RetryAt = clock() + RetrySeconds;
+        }
+
+        internal bool Observed(ZRpc rpc, ZDOID id, long token, bool processed,
+            bool present, long observedOwner, uint observedRevision)
+        {
+            ZDO data = lookup(id); Stamp stamp;
+            if (!processed || token <= 0 || data == null || !pending.TryGetValue(data, out stamp) ||
+                token != stamp.Token || !data.m_uid.Equals(id) || !stamp.Id.Equals(id) ||
+                !ReferenceEquals(rpc, stamp.Rpc) || !Current(data) || !Connected(stamp)) return false;
+            if (!stamp.InFlight && !stamp.Reconciling) return false;
+            // The identified commit has definitely returned. It cannot execute
+            // later: status messages never invoke it and the source fences tokens.
+            stamp.InFlight = false;
+            stamp.RetryAt = clock() + RetrySeconds;
+            stamp.Reconciling = present && (data.GetOwner() != observedOwner || data.OwnerRevision != observedRevision);
+            stamp.StatusAt = clock() + 2;
+            return true;
+        }
+
+        private void Probe(Stamp stamp)
+        {
+            if (stamp.Token == 0 || status == null || (!stamp.InFlight && !stamp.Reconciling) || clock() < stamp.StatusAt) return;
+            stamp.StatusAt = clock() + 2;
+            try { status(stamp.Peer, stamp.Id, stamp.Token); } catch (Exception) { }
         }
 
         internal bool Received(ZDO data)
@@ -188,11 +234,21 @@ namespace TooManyLags
         private void Retry(Stamp stamp)
         {
             double now = clock();
-            if (stamp.InFlight || stamp.RetryAt > now || !DestinationReady(stamp.Target)) return;
+            if (stamp.InFlight) { Probe(stamp); return; }
+            if (stamp.Reconciling || stamp.RetryAt > now || !DestinationReady(stamp.Target)) return;
+            if (identified != null)
+            {
+                if (nextToken == Int64.MaxValue) return;
+                stamp.Token = ++nextToken; stamp.StatusAt = now + 2;
+            }
             stamp.InFlight = true;
             // A failed send can have partially left the process. Retain the
             // pending record rather than turning an exception into steal consent.
-            try { invoke(stamp.Peer, stamp.Id, stamp.Target); }
+            try
+            {
+                if (identified != null) identified(stamp.Peer, stamp.Id, stamp.Target, stamp.Revision, stamp.Token);
+                else invoke(stamp.Peer, stamp.Id, stamp.Target);
+            }
             catch (Exception) { }
         }
         private static bool KnownOwnerVeto(string reason)

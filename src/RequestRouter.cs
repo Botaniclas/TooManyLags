@@ -12,6 +12,7 @@ namespace TooManyLags
     // original target again after HandleRoutedRPC returns.
     internal sealed class RequestRouter
     {
+        internal static Func<ZDOMan, long, ZDO, bool> RecipientReady { get; set; }
         private sealed class DispatchFailure : Exception
         {
             internal readonly ExceptionDispatchInfo Original;
@@ -65,7 +66,7 @@ namespace TooManyLags
                 Waiting entry;
                 if (waiting.TryGetValue(node.Id, out entry)) { Hold(entry, Copy(data)); return true; }
                 bool pending = controller.TransferPending(node.Data);
-                if (available && !pending && target == data.m_targetPeerID && (target == controller.Server ? local : knows(ZDOMan.instance, target, node.Data))) return false;
+                if (available && !pending && target == data.m_targetPeerID && (target == controller.Server ? local : Knows(target, node.Data))) return false;
                 ZRoutedRpc.RoutedRPCData copy = Copy(data);
                 if (available && !pending && Deliver(rpc, node, copy, target)) return true;
                 entry = new Waiting { Node = node }; waiting.Add(node.Id, entry);
@@ -83,35 +84,57 @@ namespace TooManyLags
             try
             {
                 scratch.Clear(); foreach (Waiting entry in waiting.Values) scratch.Add(entry);
-                foreach (Waiting entry in scratch)
-                {
-                    AuthorityController.NativeNode node = entry.Node;
-                    if (node.Removed || !node.Identity()) { Remove(node); continue; }
-                    Expire(entry);
-                    if (entry.Requests.Count == 0) { waiting.Remove(node.Id); controller.RequestFinished(node); continue; }
-                    if (controller.IsActive && controller.TransferPending(node.Data)) continue;
-                    long target = node.Data.GetOwner();
-                    if (!controller.AvailableOwner(target, node.Data.GetPosition())) continue;
-                    if (target != controller.Server && !knows(ZDOMan.instance, target, node.Data)) { Force(entry, target); continue; }
-                    // Dequeue before delivery: a legitimate Remove/Damage request
-                    // can destroy this object and remove its remaining work.
-                    while (entry.Requests.Count != 0 && !node.Removed)
-                    {
-                        var request = entry.Requests.Dequeue().Packet; node.Requests--;
-                        try { Deliver(ZRoutedRpc.instance, node, request, target); }
-                        catch (DispatchFailure error) { controller.RequestFault(error.Original.SourceException); }
-                        // Each handler can alter the owner or destroy the object.
-                        if (node.Removed || node.Data.GetOwner() != target) break;
-                    }
-                    if (entry.Requests.Count == 0) { waiting.Remove(node.Id); controller.RequestFinished(node); }
-                }
+                foreach (Waiting entry in scratch) FlushEntry(entry);
             }
             catch (Exception error) { controller.RouterFault(error); }
             finally { scratch.Clear(); flushing = false; }
         }
+        // A protocol result concerns one object. Keep the full pass for native
+        // replication, deadlines and state changes without a protocol reply.
+        internal void Flush(ZDOID id)
+        {
+            if (flushing || waiting.Count == 0 || ZDOMan.instance == null || ZRoutedRpc.instance == null || !ZNet.instance) return;
+            Waiting entry; if (!waiting.TryGetValue(id, out entry)) return;
+            flushing = true;
+            try { FlushEntry(entry); }
+            catch (Exception error) { controller.RouterFault(error); }
+            finally { flushing = false; }
+        }
+        private bool Current(Waiting entry)
+        { Waiting current; return waiting.TryGetValue(entry.Node.Id, out current) && ReferenceEquals(current, entry); }
+        private void FlushEntry(Waiting entry)
+        {
+            // A native handler may unload an object or reset the whole scene.
+            // A snapshot from before that callback must not process its successor.
+            if (!Current(entry)) return;
+            AuthorityController.NativeNode node = entry.Node;
+            if (node.Removed || !node.Identity()) { Remove(node); return; }
+            Expire(entry);
+            if (!Current(entry)) return;
+            if (entry.Requests.Count == 0) { Finish(entry); return; }
+            if (controller.IsActive && controller.TransferPending(node.Data)) return;
+            long target = node.Data.GetOwner();
+            if (!controller.AvailableOwner(target, node.Data.GetPosition())) return;
+            if (target != controller.Server && !Knows(target, node.Data)) { Force(entry, target); return; }
+            // Dequeue before delivery: a legitimate Remove/Damage request can
+            // destroy this object and remove its remaining work.
+            while (entry.Requests.Count != 0 && !node.Removed)
+            {
+                var request = entry.Requests.Dequeue().Packet; node.Requests--;
+                try { Deliver(ZRoutedRpc.instance, node, request, target); }
+                catch (DispatchFailure error) { controller.RequestFault(error.Original.SourceException); }
+                if (node.Removed || node.Data.GetOwner() != target) break;
+            }
+            if (entry.Requests.Count == 0) Finish(entry);
+        }
+        private void Finish(Waiting entry)
+        {
+            if (!Current(entry)) return;
+            waiting.Remove(entry.Node.Id); controller.RequestFinished(entry.Node);
+        }
         private bool Deliver(ZRoutedRpc rpc, AuthorityController.NativeNode node, ZRoutedRpc.RoutedRPCData request, long target)
         {
-            if (target != controller.Server && !knows(ZDOMan.instance, target, node.Data)) return false;
+            if (target != controller.Server && !Knows(target, node.Data)) return false;
             request.m_targetPeerID = target; request.m_parameters.SetPos(0);
             node.Refilled(request.m_methodHash);
             dispatching = true;
@@ -125,6 +148,16 @@ namespace TooManyLags
             return new ZRoutedRpc.RoutedRPCData { m_msgID = data.m_msgID, m_senderPeerID = data.m_senderPeerID,
                 m_targetPeerID = data.m_targetPeerID, m_targetZDO = data.m_targetZDO, m_methodHash = data.m_methodHash,
                 m_parameters = new ZPackage(data.m_parameters.GetArray()) };
+        }
+        private bool Knows(long target, ZDO data)
+        { return knows(ZDOMan.instance, target, data) && (RecipientReady == null || RecipientReady(ZDOMan.instance, target, data)); }
+        internal void Forwarded(ZRoutedRpc.RoutedRPCData request)
+        {
+            AuthorityController.NativeNode node = controller.RequestNode(request.m_targetZDO, request.m_methodHash);
+            if (node == null) return; // Destroyed/unmanaged native instances are not recreated by a relay.
+            Waiting entry;
+            if (!waiting.TryGetValue(node.Id, out entry)) { entry = new Waiting { Node = node }; waiting.Add(node.Id, entry); }
+            node.Refilled(request.m_methodHash); Hold(entry, Copy(request)); Flush(node.Id);
         }
         private static void Hold(Waiting entry, ZRoutedRpc.RoutedRPCData request)
         {
@@ -180,7 +213,13 @@ namespace TooManyLags
         internal void Remove(AuthorityController.NativeNode node)
         { Waiting entry; if (waiting.TryGetValue(node.Id, out entry)) { waiting.Remove(node.Id); Cancel(entry); } }
         internal void Clear()
-        { scratch.Clear(); foreach (Waiting entry in waiting.Values) scratch.Add(entry); waiting.Clear(); foreach (Waiting entry in scratch) Cancel(entry); scratch.Clear(); }
+        {
+            if (waiting.Count == 0) return;
+            // Teardown is rare; use its own snapshot so a reset inside a native
+            // dispatch cannot invalidate a running full-pass enumeration.
+            var removed = new List<Waiting>(waiting.Values); waiting.Clear();
+            foreach (Waiting entry in removed) Cancel(entry);
+        }
 
         private static Func<ZDOMan, long, ZDO, bool> BindKnowledge()
         {

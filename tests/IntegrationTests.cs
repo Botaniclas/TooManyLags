@@ -14,6 +14,8 @@ public sealed class ZRpc
 internal static class StringHash { public static int GetStableHashCode(this string value){return value.GetHashCode();} }
 namespace TooManyLags
 {
+    // Camera settings transport is exercised by its dedicated fixture.
+    internal static class ConfigConsole { internal static void RequestCamera() { } }
     internal static class Plugin
     {
         internal const string Id="botanic.toomanylags.fgnaddon",FgnId="com.Fire.FiresGhettoNetworkMod";
@@ -924,11 +926,167 @@ internal static class IntegrationTests
         foreach(var peer in all)Check("distant peers skip rotation sampling",ZDOMan.instance.GetZDO(peer.m_characterID).RotationReads==0);
         Check("far peers inside stable native zones repeat no pair tests",controller.RegionGate.PairTests==pairs&&controller.RegionGate.Rebuilds==builds&&controller.RegionGate.CachedZones==0);
     }
+    private static void IdentifiedInteractionDelivery()
+    {
+        // The receiver's cheap filter must retain every supported routed action.
+        var actions = new Dictionary<Kinds,string> {
+            { Kinds.Doors, "UseDoor" }, { Kinds.Beehives, "RPC_Extract" },
+            { Kinds.Portals, "RPC_SetTag" }, { Kinds.Containers, "RPC_RequestOpen" },
+            { Kinds.ItemStands, "RPC_RequestOwn" }, { Kinds.Smelters, "RPC_AddOre" }
+        };
+        foreach (var action in actions)
+        {
+            int hash = action.Value.GetStableHashCode();
+            Check("receiver filter retains native action " + action.Value,
+                ObjectCatalog.OwnerRequest(action.Key, hash) && ObjectCatalog.AnyOwnerRequest(hash));
+        }
+        Check("receiver filter retains building damage", ObjectCatalog.AnyOwnerRequest("RPC_Damage".GetStableHashCode()));
+        Check("receiver filter leaves native inventory replies alone", !ObjectCatalog.AnyOwnerRequest("RPC_OpenResponse".GetStableHashCode()));
+        long token = 0; bool recipientReady = false;
+        FgnOwnerHandoff.CooperativeClient = delegate { return true; };
+        FgnOwnerHandoff.IdentifiedSend = delegate(ZNetPeer p, ZDOID id, long target, uint revision, long t) { token = t; };
+        FgnOwnerHandoff.IdentifiedStatus = delegate { };
+        RequestRouter.RecipientReady = delegate { return recipientReady; };
+        try
+        {
+            Fresh(Kinds.Doors); Peer(1); ZNetPeer source = Peer(7,64,0); FiresGhettoNetworkMod.FgnVersionGate.Match = true;
+            ZDO door = Object(typeof(Door)); Tick(0); Tick(2);
+            Check("identified grid handoff pending", token > 0 && controller.TransferPending(door));
+            ZDOMan.instance.MarkSent(7,door);
+            Check("interaction held during actual commit", controller.Router.TryHandle(ZRoutedRpc.instance,Request(door,"UseDoor",7),false) && ZRoutedRpc.instance.Remote.Count == 0);
+            controller.Router.Flush(door.m_uid);
+            Check("scoped reply cannot bypass pending source consent",ZRoutedRpc.instance.Remote.Count==0 && controller.TransferPending(door));
+            Check("source rejects definitively", controller.Cooperative.Observed(source.m_rpc,door.m_uid,token,true,true,7,door.OwnerRevision));
+            controller.Router.Flush(door.m_uid);
+            Check("rejection ends commit but sent data is not recipient readiness", !controller.TransferPending(door) && ZRoutedRpc.instance.Remote.Count == 0);
+            recipientReady = true; controller.Router.Flush(door.m_uid);
+            Check("rejected handoff delivers interaction at valid old owner", ZRoutedRpc.instance.Remote.Count == 1 && door.GetOwner() == 7);
+            controller.Router.Flush(); Check("interaction never replayed", ZRoutedRpc.instance.Remote.Count == 1);
+            recipientReady = false; controller.Router.Forwarded(Request(door,"UseDoor",7));
+            Check("late receiver relay waits rather than bouncing", ZRoutedRpc.instance.Remote.Count == 1);
+            recipientReady = true; controller.Router.Flush();
+            Check("late receiver relay dispatched once after readiness", ZRoutedRpc.instance.Remote.Count == 2);
+            controller.Router.Flush(); Check("relay is not an action retry", ZRoutedRpc.instance.Remote.Count == 2);
+        }
+        finally { FgnOwnerHandoff.CooperativeClient = null; FgnOwnerHandoff.IdentifiedSend = null; FgnOwnerHandoff.IdentifiedStatus = null; RequestRouter.RecipientReady = null; }
+    }
+    private static void ScopedInteractionDelivery()
+    {
+        var ready = new HashSet<ZDOID>(); int reads = 0;
+        RequestRouter.RecipientReady = delegate(ZDOMan world,long owner,ZDO data) { reads++; return ready.Contains(data.m_uid); };
+        try
+        {
+            Fresh(Kinds.Doors,defaultInteractives:true); Peer(1);
+            var doors = new List<ZDO>();
+            for (int i=0;i<100;i++) doors.Add(Object(typeof(Door),1,1,1));
+            Tick(0); Tick(2);
+            foreach (ZDO door in doors)
+            {
+                ZDOMan.instance.MarkSent(1,door);
+                Check("scoped fixture holds unavailable recipient",controller.Router.TryHandle(ZRoutedRpc.instance,Request(door,"UseDoor",1),false));
+            }
+            int forced = ZDOMan.instance.Forced; reads=0;
+            for(int i=0;i<100;i++) controller.Router.Flush();
+            Check("unscoped 100-reply equivalent inspects 10000 recipients",reads==10000 && ZRoutedRpc.instance.Remote.Count==0);
+            reads=0;
+            foreach (ZDO door in doors) controller.Router.Flush(door.m_uid);
+            Check("100 scoped replies inspect 100 waiting recipients",reads==100 && ZRoutedRpc.instance.Remote.Count==0);
+            Check("scoped replies preserve force-send deduplication",ZDOMan.instance.Forced==forced);
+            reads=0; controller.Router.Flush();
+            Check("full fallback still checks all waiting recipients",reads==100);
+            reads=0; controller.Router.Flush(new ZDOID{ID=999999});
+            Check("unknown reply inspects no unrelated recipient",reads==0);
+            ready.Add(doors[0].m_uid); controller.Router.Flush(doors[0].m_uid);
+            Check("one ready result dispatches only its object",reads==2 && ZRoutedRpc.instance.Remote.Count==1);
+            reads=0; controller.Router.Flush(doors[0].m_uid);
+            Check("duplicate result has no work or replay",reads==0 && ZRoutedRpc.instance.Remote.Count==1);
+            ready.Remove(doors[0].m_uid);
+            var first = Request(doors[0],"UseDoor",1); first.m_msgID=201;
+            controller.Router.Forwarded(first);
+            Check("relay wakes only its own queue",reads==1 && ZRoutedRpc.instance.Remote.Count==1);
+            var second = Request(doors[0],"UseDoor",1); second.m_msgID=202;
+            Check("second action joins existing queue",controller.Router.TryHandle(ZRoutedRpc.instance,second,false));
+            ready.Add(doors[0].m_uid); reads=0; controller.Router.Flush(doors[0].m_uid);
+            Check("targeted delivery retains FIFO and per-dispatch readiness",reads==3 && ZRoutedRpc.instance.Remote.Count==3 &&
+                ZRoutedRpc.instance.Remote[1].m_msgID==201 && ZRoutedRpc.instance.Remote[2].m_msgID==202);
+            foreach (ZDO door in doors) ready.Add(door.m_uid);
+            reads=0; controller.Router.Flush();
+            Check("full pass delivers the remaining objects exactly once",reads==198 && ZRoutedRpc.instance.Remote.Count==102);
+            reads=0; controller.Router.Flush();
+            Check("empty full fallback performs no recipient work",reads==0 && ZRoutedRpc.instance.Remote.Count==102);
+
+            Fresh(Kinds.Containers); Peer(1); ready.Clear();
+            ZDO chest=Object(typeof(Container),1,1,1); Tick(0); Tick(2); ZDOMan.instance.MarkSent(1,chest);
+            int denied=0; ZRoutedRpc.instance.OnInvoke=delegate(long owner,ZDOID id,string method,object[] args) {
+                Check("expiry retains native negative inventory reply",owner==1 && id.Equals(chest.m_uid) && method=="RPC_OpenResponse" && !(bool)args[0]); denied++;
+            };
+            Check("unready inventory request held",controller.Router.TryHandle(ZRoutedRpc.instance,Request(chest,"RPC_RequestOpen",1),false));
+            Time.unscaledTime=8; controller.Router.Flush(new ZDOID{ID=999999});
+            Check("unrelated reply does not dispatch or cancel inventory",denied==0);
+            controller.Router.Flush(); controller.Router.Flush(chest.m_uid);
+            Check("periodic fallback still expires inventory once",denied==1 && ZRoutedRpc.instance.Remote.Count==0);
+
+            foreach (bool scoped in new[]{false,true})
+            {
+                Fresh(Kinds.Doors); Peer(1); ready.Clear();
+                ZDO a=Object(typeof(Door),1,1,1), b=Object(typeof(Door),1,1,1); Tick(0); Tick(2);
+                ZDOMan.instance.MarkSent(1,a); ZDOMan.instance.MarkSent(1,b);
+                Check("first reentrant action waits",controller.Router.TryHandle(ZRoutedRpc.instance,Request(a,"UseDoor",1),false));
+                Check("second reentrant action waits",controller.Router.TryHandle(ZRoutedRpc.instance,Request(b,"UseDoor",1),false));
+                a.SetOwner(99); b.SetOwner(99);
+                ZRoutedRpc.instance.OnHandle=delegate {
+                    controller.Router.Flush(b.m_uid); controller.Router.Flush();
+                    controller.Reset();
+                };
+                if(scoped)controller.Router.Flush(a.m_uid);else controller.Router.Flush();
+                Check("nested flush and scene reset never dispatch retired work",ZRoutedRpc.instance.Local.Count==1 && failures==0 && !controller.IsActive);
+                controller.Router.Flush(a.m_uid); controller.Router.Flush();
+                Check("cleared queues never replay after scoped/full reset",ZRoutedRpc.instance.Local.Count==1 && failures==0);
+
+                Fresh(Kinds.Doors); Peer(1); ready.Clear();
+                a=Object(typeof(Door),1,1,1); Tick(0); Tick(2); ZDOMan.instance.MarkSent(1,a);
+                var view=ZNetScene.instance.FindInstance(a);
+                Check("first removable action waits",controller.Router.TryHandle(ZRoutedRpc.instance,Request(a,"UseDoor",1),false));
+                Check("second removable action waits",controller.Router.TryHandle(ZRoutedRpc.instance,Request(a,"UseDoor",1),false));
+                a.SetOwner(99); ZRoutedRpc.instance.OnHandle=delegate { controller.Unregister(view); };
+                if(scoped)controller.Router.Flush(a.m_uid);else controller.Router.Flush();
+                Check("native removal cancels remaining actions in either path",ZRoutedRpc.instance.Local.Count==1 && failures==0 && controller.IsActive);
+
+                Fresh(Kinds.Doors); Peer(1); ready.Clear();
+                a=Object(typeof(Door),1,1,1); b=Object(typeof(Door),1,1,1); Tick(0); Tick(2);
+                ZDOMan.instance.MarkSent(1,a); ZDOMan.instance.MarkSent(1,b);
+                Check("first replacement action waits",controller.Router.TryHandle(ZRoutedRpc.instance,Request(a,"UseDoor",1),false));
+                Check("old replacement action waits",controller.Router.TryHandle(ZRoutedRpc.instance,Request(b,"UseDoor",1),false));
+                var successorView=ZNetScene.instance.FindInstance(b);
+                a.SetOwner(99);
+                ZRoutedRpc.instance.OnHandle=delegate {
+                    controller.Unregister(successorView); controller.Register(b,successorView);
+                    controller.Router.Forwarded(Request(b,"UseDoor",1));
+                };
+                if(scoped)controller.Router.Flush(a.m_uid);else controller.Router.Flush();
+                Check("old snapshot leaves a reloaded object's new queue intact",ZRoutedRpc.instance.Local.Count==1 && ZRoutedRpc.instance.Remote.Count==0 && failures==0);
+                ready.Add(b.m_uid); controller.Router.Flush(b.m_uid);
+                Check("reloaded object's new request is delivered once",ZRoutedRpc.instance.Remote.Count==1 && failures==0);
+
+                Fresh(Kinds.Doors); Peer(1); ready.Clear();
+                a=Object(typeof(Door),1,1,1); Tick(0); Tick(2); ZDOMan.instance.MarkSent(1,a);
+                Check("owner-change first action waits",controller.Router.TryHandle(ZRoutedRpc.instance,Request(a,"UseDoor",1),false));
+                Check("owner-change second action waits",controller.Router.TryHandle(ZRoutedRpc.instance,Request(a,"UseDoor",1),false));
+                a.SetOwner(99); ZRoutedRpc.instance.OnHandle=delegate { a.SetOwner(1); };
+                if(scoped)controller.Router.Flush(a.m_uid);else controller.Router.Flush();
+                Check("native owner change stops same-batch delivery",ZRoutedRpc.instance.Local.Count==1 && ZRoutedRpc.instance.Remote.Count==0);
+                ZDOMan.instance.MarkSent(1,a); ready.Add(a.m_uid); controller.Router.Flush(a.m_uid);
+                Check("remaining action follows the newly ready owner",ZRoutedRpc.instance.Local.Count==1 && ZRoutedRpc.instance.Remote.Count==1 && failures==0);
+            }
+            Console.WriteLine("PASS: 100-object reply fixture: 100 recipient checks instead of 10000; unchanged full fallback and delivery safeguards.");
+        }
+        finally { RequestRouter.RecipientReady=null; }
+    }
     public static void Main()
     {
         try {
         Fields();Inventories();StationsAndActors();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
-        SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();
+        SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();
         Console.WriteLine("PASS: "+checks+" full-controller/grid/router fixture assertions; no PUP/PupPatch plugin in fixture.");
         Console.WriteLine("LIMIT: simulated transport and Unity registry; no live multiplayer test.");
         } catch(Exception error){Console.Error.WriteLine(error);Environment.ExitCode=1;}

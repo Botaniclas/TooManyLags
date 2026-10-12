@@ -61,7 +61,7 @@ namespace TooManyLags
         // The native camera has finished positioning/rotation/shake. Sampling
         // runs last among Harmony postfixes and writes only changed coverage.
         [HarmonyPostfix, HarmonyPriority(Priority.Last)]
-        private static void Postfix() { Plugin.SampleCamera(); }
+        private static void Postfix() { ConfigConsole.RequestCamera(); Plugin.SampleCamera(); }
     }
     [HarmonyPatch(typeof(GameCamera), "OnDestroy")]
     internal static class CameraLossPatch

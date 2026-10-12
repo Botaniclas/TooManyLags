@@ -88,14 +88,32 @@ internal static class NativeReleaseAudit
     {
         TypeDefinition protocol = authority.MainModule.GetType("TooManyLags.GridHandoffs.Protocol");
         Check(protocol != null, "Production recipient-readiness protocol missing");
-        MethodDefinition ready = ScopeMethod(protocol, "Ready");
-        int record = ScopeCall(ready, "System.Runtime.CompilerServices.ConditionalWeakTable`2", "TryGetValue");
-        int tuple = ScopeCall(ready, "TooManyLags.GridHandoffs.RecipientRequirement", "Matches");
-        int peer = ScopeCall(ready, "ZNet", "GetPeer");
-        Check(record >= 0 && tuple > record && peer > tuple, "Recipient scope must precede peer/capability work in the compiled production gate");
-        Check(ScopeCall(ScopeMethod(protocol, "SetFloor"), "TooManyLags.GridHandoffs.RecipientRequirement", "Include") >= 0,
-            "Source snapshots and local owner events must share the monotonic state floor");
         TypeDefinition controller = authority.MainModule.GetType("TooManyLags.AuthorityController");
+        MethodDefinition ready = ScopeMethod(protocol, "Ready");
+        int record = ScopeCall(ready, controller.FullName, "TryRecipientState");
+        int peer = ScopeCall(ready, "ZNet", "GetPeer");
+        Check(record >= 0 && peer > record, "Inline recipient scope must precede peer/capability work in the compiled production gate");
+        Check(ScopeCall(ScopeMethod(controller, "TryRecipientState"), "TooManyLags.GridHandoffs.RecipientRequirement", "Matches") >= 0,
+            "Inline recipient query must check the current owner tuple");
+        Check(ScopeCall(ScopeMethod(protocol, "SetFloor"), controller.FullName, "RecordRecipient") >= 0 &&
+            ScopeCall(ScopeMethod(controller, "RecordRecipient"), "TooManyLags.GridHandoffs.RecipientRequirement", "Include") >= 0,
+            "Source snapshots and local owner events must share the monotonic inline state floor");
+        TypeDefinition requirement = authority.MainModule.GetType("TooManyLags.GridHandoffs.RecipientRequirement");
+        Check(requirement != null && requirement.IsValueType, "Recipient metadata must be inline, not an allocated per-transfer object");
+        foreach (FieldDefinition field in protocol.Fields) Check(field.Name != "floors", "Separate recipient state-floor cache remains");
+        MethodDefinition mark = ScopeMethod(controller, "RequireRecipient"); bool address = false;
+        foreach (var instruction in mark.Body.Instructions)
+        {
+            FieldReference field = instruction.Operand as FieldReference;
+            if (instruction.OpCode == Mono.Cecil.Cil.OpCodes.Ldflda && field != null && field.Name == "Recipient") address = true;
+            Check(instruction.OpCode != Mono.Cecil.Cil.OpCodes.Newobj && instruction.OpCode != Mono.Cecil.Cil.OpCodes.Newarr,
+                "Marking a transfer must not allocate an object or array");
+            MethodReference call = instruction.Operand as MethodReference;
+            Check(call == null || (call.Name != "Invoke" && !call.DeclaringType.FullName.StartsWith("System.Runtime.CompilerServices.ConditionalWeakTable", StringComparison.Ordinal) &&
+                !call.DeclaringType.FullName.StartsWith("System.Collections.Generic.Dictionary", StringComparison.Ordinal)),
+                "Marking a transfer must not call a readiness delegate or tracking-table lookup");
+        }
+        Check(address, "Recipient state must be updated in place on the existing loaded node");
         Check(ScopeCall(ScopeMethod(controller, "OwnerChanged"), controller.FullName, "RequireRecipient") >= 0,
             "Completed source receipts must arm readiness before another policy tick");
         TypeDefinition node = null;
@@ -105,7 +123,7 @@ internal static class NativeReleaseAudit
         TypeDefinition router = authority.MainModule.GetType("TooManyLags.RequestRouter");
         Check(ScopeCall(ScopeMethod(router, "Forwarded"), controller.FullName, "RequireRecipient") >= 0,
             "An observed missing/stale receiver must arm readiness even without a previous TML transfer");
-        Console.WriteLine("PASS: Actual compiled recipient scope precedes peer work; source snapshots, completed receipts, direct writes and receiver relays retain readiness integration.");
+        Console.WriteLine("PASS: Actual compiled recipient marking updates inline fields without new objects, delegate calls or tracking-table lookups; snapshots, receipts, direct writes and receiver relays retain readiness integration.");
     }
     private static void Metadata(AssemblyDefinition authority, AssemblyDefinition native)
     {

@@ -268,8 +268,8 @@ namespace TooManyLags
                 long recipientOwner = data.GetOwner(); uint revision = data.OwnerRevision;
                 if (node.ObservedOwner == recipientOwner && node.Revision == revision) return;
                 node.ObservedOwner = recipientOwner; node.Revision = revision;
-                bool receipt = Inventory.Received(data) || Cooperative.Received(data);
-                if (active && receipt) RequireRecipient(data);
+                bool receipt = active && (Inventory.Received(data) || Cooperative.Received(data));
+                if (receipt) RequireRecipient(node);
                 if (active && receipt && node.Identity() && node.Controllable() && AvailableOwner(recipientOwner, data.GetPosition()))
                 {
                     node.Managed = true; node.ManagedOwner = recipientOwner;
@@ -330,11 +330,24 @@ namespace TooManyLags
         internal bool IsActive { get { return active && !failed; } }
         internal static Action<ZDO> ReadinessRemoved { get; set; }
         internal static Action ReadinessReset { get; set; }
-        internal static Action<ZDO> RecipientReadinessRequired { get; set; }
-        internal void RequireRecipient(ZDO data)
+        internal void RequireRecipient(NativeNode node)
         {
-            long recipient = data.GetOwner();
-            if (recipient != 0 && recipient != server && RecipientReadinessRequired != null) RecipientReadinessRequired(data);
+            if (RequestRouter.RecipientReady == null) return;
+            long recipient = node.Data.GetOwner();
+            if (recipient != 0 && recipient != server) node.Recipient.Include(recipient, node.Data.OwnerRevision, node.Data.DataRevision);
+        }
+        internal void RecordRecipient(ZDO data, long recipient, uint revision, uint state)
+        {
+            NativeNode node;
+            if (nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data) && !node.Removed)
+                node.Recipient.Include(recipient, revision, state);
+        }
+        internal bool TryRecipientState(ZDO data, long recipient, out uint state)
+        {
+            NativeNode node; state = 0;
+            if (!nodes.TryGetValue(data.m_uid, out node) || !ReferenceEquals(node.Data, data) || node.Removed ||
+                !node.Recipient.Matches(recipient, data.OwnerRevision)) return false;
+            state = node.Recipient.State; return true;
         }
         internal void CapabilityChanged(long uid)
         {
@@ -387,6 +400,7 @@ namespace TooManyLags
             private readonly Container container;
             internal long ObservedOwner;
             internal uint Revision;
+            internal GridHandoffs.RecipientRequirement Recipient;
             internal int Requests;
             private float refillAt, refillUntil, inventoryAt, inventoryUntil;
             private long refillOwner, inventoryOwner;
@@ -537,7 +551,7 @@ namespace TooManyLags
                     if (receipt == 1) return ApplyResult.Pending;
                     if (receipt == 2)
                     {
-                        owner.RequireRecipient(Data);
+                        owner.RequireRecipient(this);
                         Managed = true; ManagedOwner = Data.GetOwner(); ObservedOwner = ManagedOwner; Revision = Data.OwnerRevision;
                         owner.Cooperative.Forget(Data); if (ManagedOwner != owner.server) owner.world.ForceSendZDO(ManagedOwner, Id);
                         return ApplyResult.Done;
@@ -552,7 +566,7 @@ namespace TooManyLags
                 {
                     if (Data.OwnerRevision == UInt16.MaxValue) return ApplyResult.Dropped;
                     owner.writing = true;
-                    try { if (target != owner.server) owner.world.ForceSendZDO(target, Id); Data.SetOwner(target); owner.RequireRecipient(Data); }
+                    try { if (target != owner.server) owner.world.ForceSendZDO(target, Id); Data.SetOwner(target); owner.RequireRecipient(this); }
                     finally { owner.writing = false; }
                 }
                 ObservedOwner = Data.GetOwner(); Revision = Data.OwnerRevision; Managed = ObservedOwner == target; ManagedOwner = ObservedOwner;

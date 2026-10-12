@@ -1,3 +1,18 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.17 experimental validation
+
+## Transfer bookkeeping without a separate readiness-scope cache
+
+RecipientRequirement is now a 16-byte value stored directly in each existing loaded NativeNode. A direct client-directed ownership write updates this value in place: no ConditionalWeakTable access, separately allocated record, readiness-dictionary lookup or delegate invocation. The source result handler stores its reported revision/state floor through the existing node index, without touching the readiness reply cache. Reply-cache invalidation is deferred until Ready is actually called for an interaction; it compares the latest monotonic node floor before trusting a cached acknowledgement. The records and readiness state remain tied to the loaded identity and current connection. Removing/resetting nodes removes access to their metadata; late source state cannot recreate unloaded records.
+
+This trades 16 bytes in every loaded managed node for removal of the previous weak table and its touched-object records. It does not add a new world cache, periodic scan, timer or physics callback. Actual native ownership assignment, initial area/use validation, source commits/results, uncertainty reconciliation and existing data-send priority remain unchanged. Only the bookkeeping and lazy reply invalidation are changed. Both same-revision source floor monotonicity and resetting the floor on a new owner tuple are preserved. The player-simulation mode is unchanged.
+
+The recipient gate is not restricted to currently overlapping players: a second player's departure/teleport/disconnect may itself cause a protected transfer. Historical overlap could be indexed separately, but adding proximity/history checks to skip three inline scalar updates is not justified here. With default server ownership disabled, the existing native-region contention gate already leaves truly isolated players under vanilla ownership. Its broad native-area test cannot simply be replaced by a fine-grid radius: separated players can still share a vanilla ownership region and need local object handoffs. Once a transfer is active it must finish safely even if the peer moves away.
+
+Targeted tests pass nine state-floor assertions, 124,064 grid/index assertions and 10,623 controller/router assertions. They exercise 1,000 genuine zero-delay transfers with no interactions and zero recipient-readiness checks; unchanged-owner fast paths; both native owner/revision receipt orders; state floors captured from direct writes; higher source floors followed by lower local observations; inventory final assignment; receiver relay recovery; and ignoring state reports for unloaded identities. Native metadata checks require an inline value field and inspect the compiled transfer-mark method for no allocation, tracking-table access or delegate invocation. All 18 final verification groups pass, including 50 exact Harmony targets audited with FiresGhettoNetworking 1.5.41 and 1.5.36. Final DLL SHA256: `2DF24C571027DA9A6E32132A811F4FAFAD032C3B3AA56D0E154F213FC11958D9`. Full verification results are recorded in verification.json. No live Unity multiplayer session or CPU/latency benchmark has been performed.
+
+The object-specific portal/sign text-edit protection discussed afterwards is documented in TYPING_PROTECTION_DESIGN.md. It has not been implemented in this build. This avoids silently claiming a server-side guard for a client-local UI event or blocking Sign.SetText's required native ownership claim.
+
+---
 # TooManyLags - FiresGhettoNetworking Addon 1.0.16 experimental validation
 
 ## Recipient checks on actual transfer events

@@ -1,13 +1,13 @@
 namespace TooManyLags.GridHandoffs
 {
-    // Reuses the existing weak object record; no extra tracking collection.
-    internal sealed class RecipientRequirement
+    // Stored inline in the existing loaded-object node; no separate cache entry.
+    internal struct RecipientRequirement
     {
         internal long Owner;
         internal uint Revision, State;
 
         internal bool Matches(long owner, uint revision)
-        { return Owner == owner && Revision == revision; }
+        { return Owner != 0 && Owner == owner && Revision == revision; }
 
         internal void Include(long owner, uint revision, uint state)
         {

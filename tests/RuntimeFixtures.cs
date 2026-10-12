@@ -94,6 +94,7 @@ public sealed class ZDO
     private long owner;
     public int Writes;
     public ushort OwnerRevision {get;set;}
+    public uint DataRevision {get;set;}
     public ZDOID m_uid;
     public int Hash;
     public bool Valid = true, PersistentValue = true, Parked, ThrowPersistent, Tamed;

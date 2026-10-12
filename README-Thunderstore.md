@@ -14,7 +14,7 @@ TooManyLags applies required FiresGhettoNetworking settings at startup, includin
 
 | Your setup | Recommended edition and mode |
 |---|---|
-| Dedicated server, strong CPU | This addon with **Server-Side Simulation** (default). |
+| Dedicated server, strong CPU | This addon with **Server-Side Simulation** (default). **Most-tested mode.** |
 | Dedicated server, weak CPU, with FiresGhettoNetworking | This addon with `NoServerSideSimulation=true`. |
 | Dedicated server, weak CPU, without FiresGhettoNetworking | **[TooManyLags - Standalone](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_Standalone/)**. |
 | Locally hosted multiplayer | **[TooManyLags - Standalone](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_Standalone/)**. |

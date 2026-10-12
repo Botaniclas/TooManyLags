@@ -18,4 +18,4 @@ After verification, create the install, source and config ZIPs:
 
 Build outputs and generated verification reports are ignored by Git. Preserve the existing C# line endings: the imported-source review checks exact file hashes. Follow `AGENTS.md` when recording release changes.
 
-To publish the verified ZIP with Thunderstore CLI, run `./publish.ps1 -CliDll 'path/to/tcli.dll'`. The default path uses the workspace's local CLI. Enter a Botaniclas service-account token at the hidden prompt, or provide `TCLI_AUTH_TOKEN` in the process environment. The script does not save the token or push to GitHub. Publishing an already uploaded version is refused.
+To publish the verified ZIP with Thunderstore CLI, run `./publish.ps1 -CliDll 'path/to/tcli.dll'`. The default path uses the workspace's local CLI and encrypted shared credential store when available; see `../tools/thunderstore-cli/RELEASE-WORKERS.md`. Otherwise enter a Botaniclas service-account token at the hidden prompt or supply `TCLI_AUTH_TOKEN` in the process environment. The publish script does not save tokens or push to GitHub. Publishing an already uploaded version is refused.

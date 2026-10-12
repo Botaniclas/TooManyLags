@@ -7,6 +7,7 @@
 # Local Git workflow
 
 - Use Git locally by default. Commit local work as appropriate.
+- Authorized Thunderstore releases can use the encrypted local credential helper described in `../tools/thunderstore-cli/RELEASE-WORKERS.md`. Never print or copy tokens into chat, Git, packages or CLI arguments. A stored token does not authorize publication.
 - Publishing a version also authorizes pushing its source and finalized changelog to GitHub. Push as part of publication; keep ordinary development local unless the user requests a push. Do not create remote branches or pull requests without an explicit request.
 
 # Changelogs for BotanicPupPatch and TooManyLags

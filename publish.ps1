@@ -28,7 +28,19 @@ $remotePackage = Invoke-RestMethod -Uri ('https://thunderstore.io/api/experiment
 if ([Version]$remotePackage.latest.version_number -ge [Version]$manifest.version_number) {
     throw ('Thunderstore already has version ' + $remotePackage.latest.version_number + '. No upload performed.')
 }
+$sharedCredentialHelper = Join-Path (Split-Path $PSScriptRoot) 'tools\thunderstore-cli\ThunderstoreCredentials.ps1'
+$publishAction = {
+    & dotnet $CliDll publish --file $PackagePath --config-path (Join-Path $PSScriptRoot 'thunderstore.toml') --tcli-directory (Join-Path (Split-Path $CliDll) 'local-data')
+    if ($LASTEXITCODE -ne 0) { throw 'Thunderstore CLI publishing failed.' }
+}
 $previousToken = $env:TCLI_AUTH_TOKEN
+if ([string]::IsNullOrWhiteSpace($previousToken) -and (Test-Path -LiteralPath $sharedCredentialHelper -PathType Leaf)) {
+    . $sharedCredentialHelper
+    if (Test-Path -LiteralPath $script:BotanicThunderstoreTokenPath -PathType Leaf) {
+        Invoke-WithBotanicThunderstoreToken -Action $publishAction
+        return
+    }
+}
 try {
     if ([string]::IsNullOrWhiteSpace($previousToken)) {
         $secureToken = Read-Host 'Thunderstore service-account token for Botaniclas (hidden; not saved)' -AsSecureString
@@ -37,6 +49,5 @@ try {
         finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($tokenPointer); $secureToken.Dispose() }
         if ([string]::IsNullOrWhiteSpace($env:TCLI_AUTH_TOKEN)) { throw 'No token entered.' }
     }
-    & dotnet $CliDll publish --file $PackagePath --config-path (Join-Path $PSScriptRoot 'thunderstore.toml') --tcli-directory (Join-Path (Split-Path $CliDll) 'local-data')
-    if ($LASTEXITCODE -ne 0) { throw 'Thunderstore CLI publishing failed.' }
+    & $publishAction
 } finally { $env:TCLI_AUTH_TOKEN = $previousToken }

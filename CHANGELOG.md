@@ -3,6 +3,7 @@
 **Unreleased**
 ```
 - With ServerOwnedInteractivesByDefault=true, gives eligible stationary interactives their server owner during vanilla assignment, avoiding an initial player-to-server handoff. Settled grid fields take priority; native active-owner checks and region release remain in place. Server-side change only.
+- Adds ServerOwnedMobsByDefault (off): idle tamed animals use server ownership outside player fields, and Hostile Mobs without a player target use guarded server ownership, including with one player online. Player targets and active-use/loading safeguards remain in place. Requires Server-Side Simulation; Hostile Mobs also require EnableAIOwnership.
 ```
 
 **1.0.24**

@@ -19,6 +19,11 @@ namespace TooManyLags
         internal static bool Enabled;
         internal static FgnCombatBridge Fgn;
         private static ConfigEntry<bool> configured;
+        private static ConfigEntry<bool> defaultMobs;
+        private static bool serverDefaultsConfigured;
+        // Optional defaults track loaded actors only, using scene lifecycle
+        // events and the existing two-second FGN pass, never physics polling.
+        private static readonly Dictionary<ZDOID, ZDO> defaultLoaded = new Dictionary<ZDOID, ZDO>();
         private static System.Version detectedVersion;
         internal static string InstallationStatus = "not initialized";
         internal static string StartupError;
@@ -57,6 +62,9 @@ namespace TooManyLags
         {
             configured = config.Bind("09 - AI Mob Ownership", "EnableAIOwnership", true,
                 "Server only; restart required. Enable target-based Hostile Mob ownership. Clients follow the server; their local value is ignored. Attacks block transfers until attack end.");
+            defaultMobs = config.Bind("03 - Default Ownership and Overrides", "ServerOwnedMobsByDefault", false,
+                "Server only; restart required. Give idle tamed animals a server default outside player fields, even when the interactive default is off. Hostile Mobs without a player target use guarded server handoffs (requires EnableAIOwnership); player targets keep normal target ownership. Friendly magic summons, bosses and active riding/following stay excluded. Requires Server-Side Simulation; can increase server CPU usage.");
+            serverDefaultsConfigured = defaultMobs.Value;
             maximumPing = config.Bind("09 - AI Mob Ownership", "ServerFallbackPingMs", 200,
                 new ConfigDescription("Server only; live console supported. Target ping limit in milliseconds for server fallback with Server-Side Simulation, or a lower-latency nearby player with NoServerSideSimulation=true. Requires another eligible FiresGhettoNetworking player within ServerFallbackRadius. 0: target ping must exceed the best other candidate by 250 ms.", new AcceptableValueRange<int>(0, 2000)));
             nearbyRadius = config.Bind("09 - AI Mob Ownership", "ServerFallbackRadius", 6f,
@@ -105,6 +113,14 @@ namespace TooManyLags
                 FgnTargetEvents.Install(harmony, assembly, Watching, Observe, Fail);
                 FgnAttackRetry.Install(harmony, OnAttackEnded, Fail);
                 harmony.Patch(AccessTools.Method(typeof(BaseAI), "Awake"), postfix: Hook("AiAwakePostfix"));
+                if (serverDefaultsConfigured)
+                {
+                    harmony.Patch(AccessTools.Method(typeof(ZNetScene), "AddInstance", new[] { typeof(ZDO), typeof(ZNetView) }), postfix: Hook("DefaultLoadedPostfix"));
+                    harmony.Patch(AccessTools.Method(typeof(ZNetView), "ResetZDO"), prefix: Hook("DefaultUnloadedPrefix"));
+                    harmony.Patch(AccessTools.Method(typeof(ZNetView), "OnDestroy"), prefix: Hook("DefaultUnloadedPrefix"));
+                    harmony.Patch(AccessTools.Method(typeof(ZNetScene), "Shutdown"), prefix: Hook("ClearDefaultLoaded"));
+                    harmony.Patch(AccessTools.Method(typeof(ZNetScene), "OnDestroy"), prefix: Hook("ClearDefaultLoaded"));
+                }
                 harmony.Patch(AccessTools.Method(typeof(Player), "OnDestroy"), prefix: Hook("PlayerDestroyPrefix"));
                 harmony.Patch(AccessTools.Method(typeof(ZNet), "SetCharacterID"), postfix: Hook("CapabilityPostfix"));
                 harmony.Patch(AccessTools.Method(typeof(Character), "RPC_Damage"), prefix: Hook("DamagePrefix"));
@@ -185,12 +201,12 @@ namespace TooManyLags
             if (Fgn.Held(data)) return "outside AI policy: FGN combat hold";
             if (Fgn.Possessed(data)) return "outside AI policy: Valcast possessed";
             if (server && data.GetOwner() == ZDOMan.GetSessionID() && !managed.ContainsKey(data.m_uid)) return "outside AI policy: server-owned";
-            if (server && data.GetOwner() == ZDOMan.GetSessionID() && ShouldOverride(data.m_uid)) return "AI target (temporary server lease)";
+            if (server && data.GetOwner() == ZDOMan.GetSessionID() && ShouldOverride(data.m_uid)) return ServerDefaults ? "AI target / server default" : "AI target (temporary server lease)";
             if (server && data.GetOwner() != ZDOMan.GetSessionID() && !Participating(ZNet.instance.GetPeer(data.GetOwner())))
                 return "stock FGN: owner protocol/FGN participation missing";
             if (!server && data.GetOwner() != ZDOMan.GetSessionID())
                 return "observer: only the current owner receives the server watch";
-            if (!Watched(data)) return "stock FGN: not marked by two-player scan; check SERVER row";
+            if (!Watched(data)) return ServerDefaults ? "waiting for loaded-mob ownership watch" : "stock FGN: not marked by two-player scan; check SERVER row";
             Watch watch = watching[data.m_uid];
             if (server && !watch.Acknowledged) return "waiting for owner's initial target report";
             return ShouldOverride(data.m_uid) ? "AI target" : "stock FGN: no valid target report";
@@ -256,6 +272,7 @@ namespace TooManyLags
         }
         private static void Reset()
         {
+            defaultLoaded.Clear();
             ResetFactions();
             managed.Clear(); forwarded.Clear(); watching.Clear(); receivedTargets.Clear(); scratch.Clear(); reports = new ConditionalWeakTable<BaseAI, Report>();
             FgnTargetEvents.Reset(); FgnAttackRetry.Reset(); collecting = false;
@@ -284,7 +301,7 @@ namespace TooManyLags
             if (wasEnabled) NotifyServerOff();
             try { RevokeCapability(); Enabled = false; ReleaseManaged(); }
             catch (Exception cleanup) { if (Plugin.Diagnostics) Plugin.Warn("Optional FGN AI cleanup: " + cleanup.Message); }
-            finally { Enabled = false; managed.Clear(); forwarded.Clear(); watching.Clear(); receivedTargets.Clear(); FgnTargetEvents.Reset(); FgnAttackRetry.Reset(); ResetFactions(); forwardExpiry = 0; }
+            finally { Enabled = false; defaultLoaded.Clear(); managed.Clear(); forwarded.Clear(); watching.Clear(); receivedTargets.Clear(); FgnTargetEvents.Reset(); FgnAttackRetry.Reset(); ResetFactions(); forwardExpiry = 0; }
             if (Plugin.Diagnostics) Plugin.Warn("Optional FGN AI ownership disabled: " + error.Message);
         }
         private static void NotifyServerOff()
@@ -528,8 +545,8 @@ namespace TooManyLags
         }
         private static void ProcessTargetEvent(ZDO data, ZDOID target)
         {
-            // Loss/non-player targets invalidate reports but never directly request a handoff.
-            if (!target.IsNone() && Active && Watched(data)) Fgn.TryTransfer(data, Time.realtimeSinceStartupAsDouble);
+            // Optional server defaults also react to losing a player target.
+            if ((!target.IsNone() || ServerDefaults) && Active && Watched(data)) Fgn.TryTransfer(data, Time.realtimeSinceStartupAsDouble);
         }
         private static void RememberAttack(ZDO data, Character mob)
         {
@@ -597,12 +614,62 @@ namespace TooManyLags
                 if (Candidate(candidate, position) && ++count >= 2) return true;
             return false;
         }
+        private static bool ServerDefaults
+        { get { return serverDefaultsConfigured && Enabled && Fgn != null && ZNet.instance && ZNet.instance.IsDedicated() && Fgn.Simulation(); } }
+        private static bool AnyCandidate(Vector3 position)
+        {
+            foreach (ZNetPeer peer in ZNet.instance.GetPeers()) if (Candidate(peer, position)) return true;
+            return false;
+        }
+        private static void DefaultLoadedPostfix(ZDO zdo, ZNetView nview)
+        {
+            if (!ServerDefaults || zdo == null || !nview || !nview.IsValid() || !ReferenceEquals(nview.GetZDO(), zdo)) return;
+            try
+            {
+                Character actor = nview.GetComponent<Character>();
+                if (!actor || actor is Player || actor.IsBoss() || FriendlyCreatures.IsFriendly(actor)) return;
+                EnsureWorld(); defaultLoaded[zdo.m_uid] = zdo;
+                // Early loads may still lack an owner or client capability;
+                // the existing balance pass retries only these loaded actors.
+            }
+            catch (Exception error) { Fail(error); }
+        }
+        private static void DefaultUnloadedPrefix(ZNetView __instance)
+        {
+            if (defaultLoaded.Count == 0 || ReferenceEquals(__instance, null)) return;
+            try
+            {
+                ZDO data = __instance.GetZDO(); ZDO known;
+                if (data == null || !defaultLoaded.TryGetValue(data.m_uid, out known) || !ReferenceEquals(known, data)) return;
+                defaultLoaded.Remove(data.m_uid); managed.Remove(data.m_uid); RemoveWatch(data.m_uid); receivedTargets.Remove(data.m_uid);
+            }
+            catch (Exception error) { Fail(error); }
+        }
+        private static void ClearDefaultLoaded() { defaultLoaded.Clear(); }
+        private static void ProcessDefaults()
+        {
+            scratch.Clear(); foreach (ZDOID id in defaultLoaded.Keys) scratch.Add(id);
+            foreach (ZDOID id in scratch)
+            {
+                ZDO data;
+                if (!defaultLoaded.TryGetValue(id, out data)) continue;
+                ZNetView view = ReferenceEquals(world.GetZDO(id), data) && data.IsValid() && ZNetScene.instance ? ZNetScene.instance.FindInstance(data) : null;
+                if (!view || !view.IsValid() || !ReferenceEquals(view.GetZDO(), data))
+                { defaultLoaded.Remove(id); managed.Remove(id); RemoveWatch(id); receivedTargets.Remove(id); continue; }
+                if (!MarkWatch(data) || passMoves >= 16) continue;
+                Watch watch;
+                if (watching.TryGetValue(id, out watch) && watch.Acknowledged)
+                    Fgn.TryTransfer(data, Time.realtimeSinceStartupAsDouble);
+            }
+            scratch.Clear();
+        }
         private static bool MarkWatch(ZDO data)
         {
             long owner = data.GetOwner();
             bool localLease = owner == ZDOMan.GetSessionID() && managed.ContainsKey(data.m_uid);
             ZNetPeer source = ZNet.instance.GetPeer(owner);
-            if (!Eligible(data) || (!localLease && (!Participating(source) || !Candidate(source, data.GetPosition()))) || !TwoCandidates(data))
+            if (!Eligible(data) || (!localLease && (!Participating(source) || !Candidate(source, data.GetPosition()))) ||
+                (ServerDefaults ? !LoadedCharacter(data) : !TwoCandidates(data)))
             { RemoveWatch(data.m_uid); return false; }
             Watch watch;
             if (!watching.TryGetValue(data.m_uid, out watch) || !ReferenceEquals(watch.Data, data) || watch.Owner != owner || watch.Revision != data.OwnerRevision)
@@ -658,6 +725,7 @@ namespace TooManyLags
             if (!__state || !Active) return;
             try
             {
+                if (ServerDefaults) ProcessDefaults();
                 // FGN may stop its scan at its 16-transfer cap. Do not unwatch unseen but eligible mobs.
                 scratch.Clear(); foreach (ZDOID id in watching.Keys) scratch.Add(id);
                 foreach (ZDOID id in scratch)
@@ -774,6 +842,23 @@ namespace TooManyLags
             }
             if (target == null)
             {
+                if (ServerDefaults)
+                {
+                    if (owner == server)
+                    {
+                        // Already settled: no repeated collider-readiness work.
+                        if (!AnyCandidate(data.GetPosition()))
+                        { managed.Remove(data.m_uid); RemoveWatch(data.m_uid); receivedTargets.Remove(data.m_uid); data.SetOwner(0L); Fgn.ClearOwned(data.m_uid); }
+                        return false;
+                    }
+                    double until; int count;
+                    if (Fgn.Pending(data.m_uid, now) || (Fgn.Cooldowns.TryGetValue(data.m_uid, out until) && now < until) ||
+                        (Fgn.PerOwner.TryGetValue(owner, out count) && count >= 6) || !ServerReady(data)) return false;
+                    result = Request(data, server, now);
+                    if (result) managed[data.m_uid] = new Lease { Data = data, ReturnPeer = owner,
+                        SourceOwner = owner, SourceRevision = data.OwnerRevision, Requested = now, Pass = pass };
+                    return false;
+                }
                 if (owner != server) return true; // FGN's unchanged noncombat lower-ping path.
                 ZNetPeer returning = ZNet.instance.GetPeer(lease.ReturnPeer);
                 if (!Candidate(returning, data.GetPosition())) returning = BestCandidate(data.GetPosition());

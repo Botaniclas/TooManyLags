@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.25.0")]
+[assembly: AssemblyVersion("1.0.26.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.25")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.26")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.25", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.26", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -50,6 +50,8 @@ namespace TooManyLags
                 "Server only; restart required. true: server default outside player coverage, with grid transfers nearby. false: vanilla ownership when players are alone or far apart. KeepOwnershipOnCellExit preserves ownership after a field is vacated. Ignored with NoServerSideSimulation=true.").Value;
             bool refillStations = Config.Bind("03 - Default Ownership and Overrides", "ServerOwnedRefillStations", false,
                 "Server only; restart required. Keep enabled refill stations server-owned, even inside player fields: smelters, cooking/fire stations, fermenters, shield generators and turrets. false: grid rules with 10 seconds of protection after observed refilling. Ignored with NoServerSideSimulation=true.").Value;
+            bool defaultMobs = Config.Bind("03 - Default Ownership and Overrides", "ServerOwnedMobsByDefault", false,
+                "Server only; restart required. Give idle tamed animals a server default outside player fields, even when the interactive default is off. Hostile Mobs without a player target use guarded server handoffs (requires EnableAIOwnership); player targets keep normal target ownership. Friendly magic summons, bosses and active riding/following stay excluded. Requires Server-Side Simulation; can increase server CPU usage.").Value;
             float cellSize = Config.Bind("04 - Grid Settings", "GridCellSizeMeters", 4f, new ConfigDescription(
                 "Server only; restart required. Cell size in metres: 4, 6.4, 8 or 16. 6.4 divides each vanilla zone into 10x10 cells. 4 metres requires Rounded5x5/Rounded7x7. Does not change vanilla/PUP loading distances.",
                 new AcceptableValueList<float>(4f, 6.4f, 8f, 16f))).Value;
@@ -128,7 +130,7 @@ namespace TooManyLags
                 // Bind required client protocol signatures before installing
                 // any hooks; changed APIs are reported even when logs are off.
                 new FgnOwnerHandoff(bridge.Assembly, 1L);
-                Controller = new AuthorityController(kinds, delay, bridge, RuntimeFault, buildings, RequestFault, interval, defaultInteractives, refillStations, cellSize, pattern, keepOnExit, directional, innerDelay, outerDelay, forwardDelay, overlapCooldown);
+                Controller = new AuthorityController(kinds, delay, bridge, RuntimeFault, buildings, RequestFault, interval, defaultInteractives, refillStations, cellSize, pattern, keepOnExit, directional, innerDelay, outerDelay, forwardDelay, overlapCooldown, defaultMobs);
                 OwnershipTranspiler.Rewrite(PatchProcessor.GetOriginalInstructions(AccessTools.Method(typeof(ZDOMan), "ReleaseNearbyZDOS")), AccessTools.Method(typeof(OwnershipPatch), "Persistent"));
                 PickableServerPatch.Rewrite(PatchProcessor.GetOriginalInstructions(AccessTools.Method(typeof(Pickable), "RPC_Pick")));
                 harmony = new Harmony(Id);

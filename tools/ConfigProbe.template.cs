@@ -23,6 +23,8 @@ namespace TooManyLags
         private ConfigFile Config;
         private bool logs;
         private ConfigEntry<bool> configured;
+        private ConfigEntry<bool> defaultMobs;
+        private bool serverDefaultsConfigured;
         private ConfigEntry<int> maximumPing;
         private ConfigEntry<float> nearbyRadius;
 
@@ -77,7 +79,7 @@ namespace TooManyLags
             reloaded.Config.SaveOnConfigSet = false;
             reloaded.Bind(); VerifyDefaults(reloaded.Config); reloaded.Config.Save();
             if (File.ReadAllText(path) != generated) throw new Exception("Generated config changed during actual BepInEx reload/save.");
-            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 47 settings in ten ordered English feature sections.");
+            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 48 settings in ten ordered English feature sections.");
             Console.WriteLine("PASS: camera/movement defaults remain 0.05; angular overlap defaults to 30 degrees (0-45); prior settings are preserved; object categories stay last.");
             Console.WriteLine("PASS: actual BepInEx camera and server movement ranges accept 0.05 seconds and clamp to 0.05-5.");
         }
@@ -118,6 +120,7 @@ namespace TooManyLags
                 {"01 - General/Enabled", "true"}, {"01 - General/NoServerSideSimulation", "false"}, {"01 - General/EnableLogs", "false"},
                 {"02 - Static Buildings/ServerOwnedStaticBuildings", "false"},
                 {"03 - Default Ownership and Overrides/ServerOwnedInteractivesByDefault", "false"},
+                {"03 - Default Ownership and Overrides/ServerOwnedMobsByDefault", "false"},
                 {"03 - Default Ownership and Overrides/ServerOwnedRefillStations", "false"},
                 {"04 - Grid Settings/GridCellSizeMeters", "4"}, {"04 - Grid Settings/GridCoveragePattern", "Rounded7x7"},
                 {"04 - Grid Settings/MovementRotationCheckIntervalSeconds", "0.05"}, {"04 - Grid Settings/KeepOwnershipOnCellExit", "true"},
@@ -137,7 +140,7 @@ namespace TooManyLags
                 "SapCollectors", "Wards", "MapTables", "Wisplights", "TamedAnimals", "Containers", "ItemStands", "Signs",
                 "Portals", "Fermenters", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables"
             }) expected.Add("10 - Object Categories/" + category, "true");
-            if (config.Count != 47) throw new Exception("Expected 47 config entries; found " + config.Count + ".");
+            if (config.Count != 48) throw new Exception("Expected 48 config entries; found " + config.Count + ".");
             int categoryNotes = 0;
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> entry in config) {
                 string key = entry.Key.Section + "/" + entry.Key.Key, value = Convert.ToString(entry.Value.BoxedValue, CultureInfo.InvariantCulture), wanted;

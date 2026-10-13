@@ -21,6 +21,7 @@ internal static partial class FgnCombatTests
     {var map=(System.Collections.IDictionary)service.GetField("watching",flags).GetValue(null);object watch=map[mob.m_uid];watch.GetType().GetField("Acknowledged",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(watch,true);}
     private static void Setup()
     {
+        Set("defaultMobs",new ConfigEntry<bool>(false));Set("serverDefaultsConfigured",false);
         Time.AutoAdvance=0;Call("Reset"); FiresGhettoNetworkMod.CreatureOwnership.Clear();
         ZNet.instance=new ZNet();ZDOMan.instance=new ZDOMan();ZNetScene.instance=new ZNetScene();Time.realtimeSinceStartupAsDouble=20;
         Character.All.Clear();Player.m_localPlayer=null;
@@ -236,9 +237,74 @@ internal static partial class FgnCombatTests
         AttackEndTests();
         NativeReadinessTests();
         FriendlyCreatureTests();
+        DefaultMobTests();
         Console.WriteLine("PASS: "+count+" production FGN combat/target/lease/runtime-transpiler assertions; managed doubles, not live Unity/transport.");
     }
 
+    private static void NoPlayerTarget()
+    {
+        ai.Target=null;ZDOMan.Session=1;ZNet.instance.Dedicated=false;Set("serverConfirmed",true);
+        FgnCombatOwnership.Observe(ai);ZDOMan.Session=100;ZNet.instance.Dedicated=true;Set("serverConfirmed",false);
+        Call("MarkWatch",mob);Ack();
+    }
+    private static void DefaultMobTests()
+    {
+        bool moved;
+        Setup();Set("serverDefaultsConfigured",true);NoPlayerTarget();
+        Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==100,"idle hostile default requests guarded server handoff");
+        int sent=old.m_rpc.Sent, pendingArea=ZNetScene.instance.AreaCalls;Assert(!Handle(out moved)&&!moved&&old.m_rpc.Sent==sent,"pending idle handoff is not duplicated");
+        Assert(ZNetScene.instance.AreaCalls==pendingArea,"pending handoff skips repeated loading proof");
+        ServerAccept();int area=ZNetScene.instance.AreaCalls,collision=NativePup.Checks,writes=mob.OwnerWrites;
+        for(int i=0;i<1000;i++)Assert(!Handle(out moved)&&!moved,"settled idle default remains server-owned");
+        Assert(mob.GetOwner()==100&&mob.OwnerWrites==writes&&ZNetScene.instance.AreaCalls==area&&NativePup.Checks==collision,"settled defaults do no repeated collider proof or owner writes");
+        ai.Target=targetPlayer;FgnCombatOwnership.Observe(ai);
+        Assert(!Handle(out moved)&&moved&&mob.GetOwner()==2,"server default returns to actual player target");
+
+        Setup();Set("serverDefaultsConfigured",true);NoPlayerTarget();ZNetScene.instance.Ready=false;
+        Assert(!Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"idle default preserves native loading readiness");
+        ZNetScene.instance.Ready=true;Plugin.Native.Active=false;
+        Assert(!Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"idle default preserves invalid PUP block");
+        Plugin.Native.Active=true;NativePup.DestinationReady=false;
+        Assert(!Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"idle default preserves cluster collision proof");
+
+        Setup();Set("serverDefaultsConfigured",true);NoPlayerTarget();
+        ZNet.instance.Peers.Remove(target);ZNet.instance.Peers.Remove(other);FiresGhettoNetworkMod.CreatureOwnership.Candidates(ZNet.instance.Peers);
+        Assert((bool)Call("MarkWatch",mob),"solo idle hostile can be watched when defaults enabled");Ack();
+        Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==100,"solo idle hostile gets server default");
+        ServerAccept();ZNet.instance.Peers.Clear();FiresGhettoNetworkMod.CreatureOwnership.Candidates(ZNet.instance.Peers);
+        Assert(!Handle(out moved)&&!moved&&mob.GetOwner()==0,"no active player allows native release instead of permanent server pin");
+
+        Setup();Set("serverDefaultsConfigured",true);
+        Assert(Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"valid player target retains existing target-based path");
+        NoPlayerTarget();FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=false;
+        Assert(Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"server defaults ignored without Server-Side Simulation");
+
+        foreach(int protection in new[]{0,1,2,3,4,5})
+        {
+            Setup();Set("serverDefaultsConfigured",true);NoPlayerTarget();var actor=ZNetScene.instance.FindInstance(mob).GetComponent<Character>();
+            if(protection==0)actor.Team=Character.Faction.Players;
+            if(protection==1){actor.Tamed=true;mob.Set(ZDOVars.s_tamed,1L);}
+            if(protection==2)actor.Boss=true;
+            if(protection==3)actor.Riding=true;
+            if(protection==4)mob.Held=true;
+            if(protection==5)mob.Set(ZDOVars.s_user,1L);
+            Handle(out moved);Assert(!moved&&old.m_rpc.Sent==0,"idle default retains exclusion "+protection);
+        }
+
+        Setup();Set("serverDefaultsConfigured",true);NoPlayerTarget();var view=ZNetScene.instance.FindInstance(mob);
+        Call("DefaultLoadedPostfix",mob,view);var registry=(System.Collections.IDictionary)service.GetField("defaultLoaded",flags).GetValue(null);
+        Assert(registry.Count==1,"optional registry tracks loaded actor once");Call("DefaultLoadedPostfix",mob,view);Assert(registry.Count==1,"duplicate add event has no extra record");
+        Call("DefaultUnloadedPrefix",view);Assert(registry.Count==0&&!FgnCombatOwnership.ShouldOverride(mob.m_uid),"unload forgets default actor and watch");
+        Call("DefaultLoadedPostfix",mob,view);ZNetScene.instance.Views.Remove(mob);Call("ProcessDefaults");
+        Assert(registry.Count==0,"existing balance pass prunes missing scene instance");
+        ZNetScene.instance.Views.Add(mob,view);Call("DefaultLoadedPostfix",mob,view);Call("ClearDefaultLoaded");Assert(registry.Count==0,"scene shutdown clears optional registry");
+
+        Setup();view=ZNetScene.instance.FindInstance(mob);Call("DefaultLoadedPostfix",mob,view);
+        registry=(System.Collections.IDictionary)service.GetField("defaultLoaded",flags).GetValue(null);Assert(registry.Count==0,"default off allocates no actor record");
+        Set("serverDefaultsConfigured",true);ZDOMan.Session=1;ZNet.instance.Dedicated=false;Call("DefaultLoadedPostfix",mob,view);
+        Assert(registry.Count==0,"client does not run server default tracking");
+        Setup();FgnCombatOwnership.Stop();
+    }
     private static void NativeReadinessTests()
     {
         Setup();Plugin.Native=null;
@@ -297,6 +363,15 @@ internal static partial class FgnCombatTests
                     "full installation uses real contracts, not assembly hash or version "+version+": "+FgnCombatOwnership.InstallationStatus);
                 FgnCombatOwnership.Stop();
             }
+            Setup();FgnCombatOwnership.Stop();
+            FgnCombatOwnership.Install(new ConfigFile{MobDefaultOverride=true},typeof(FiresGhettoNetworkMod.CreatureOwnership).Assembly,new Version(1,5,41));
+            Assert(FgnCombatOwnership.Enabled&&FgnCombatOwnership.InstallationStatus=="installed","enabled defaults install their real optional scene lifecycle hooks");
+            ((ConfigEntry<bool>)service.GetField("defaultMobs",flags).GetValue(null)).Value=false;
+            Assert((bool)service.GetProperty("ServerDefaults",flags).GetValue(null,null),"saved restart-only default setting cannot change active session");
+            var view=ZNetScene.instance.FindInstance(mob);ZNetScene.instance.AddInstance(mob,view);
+            var loaded=(System.Collections.IDictionary)service.GetField("defaultLoaded",flags).GetValue(null);
+            Assert(loaded.Count==1,"patched scene add tracks mob when enabled");view.ResetZDO();Assert(loaded.Count==0,"patched view reset removes mob before losing ZDO");
+            FgnCombatOwnership.Stop();
             Setup();FgnCombatOwnership.Stop();
             FgnCombatOwnership.Install(new ConfigFile{EnableOverride=false},typeof(FiresGhettoNetworkMod.CreatureOwnership).Assembly,new Version(99,0,1));
             Assert(!FgnCombatOwnership.Enabled,"future compatible version respects explicit feature OFF");

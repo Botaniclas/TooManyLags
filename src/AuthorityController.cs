@@ -22,7 +22,7 @@ namespace TooManyLags
         private readonly OwnershipCadence cadence;
         private readonly CompatibilityBridge compatibility;
         private readonly Action<Exception> fault, requestFault;
-        private readonly bool staticEnabled, defaultInteractives, refillStations, keepOnExit;
+        private readonly bool staticEnabled, defaultInteractives, defaultMobs, refillStations, keepOnExit;
         private readonly float cellSize;
         private readonly int subdivisions;
         private readonly GridCoveragePattern pattern;
@@ -56,11 +56,12 @@ namespace TooManyLags
         internal AuthorityController(Kinds kinds, float delay, CompatibilityBridge compatibility,
             Action<Exception> fault, bool staticEnabled, Action<Exception> requestFault, float checkIntervalSeconds,
             bool defaultInteractives, bool refillStations, float cellSize, GridCoveragePattern pattern, bool keepOnExit,
-            bool directional = false, float innerDelay = 0f, float outerDelay = 3f, float forwardDelay = .2f, float overlapCooldown = 0f)
+            bool directional = false, float innerDelay = 0f, float outerDelay = 3f, float forwardDelay = .2f, float overlapCooldown = 0f, bool defaultMobs = false)
         {
             this.kinds = kinds; this.delay = delay; cadence = new OwnershipCadence(checkIntervalSeconds);
             this.compatibility = compatibility; this.fault = fault; this.requestFault = requestFault; this.staticEnabled = staticEnabled;
             this.defaultInteractives = defaultInteractives; this.refillStations = refillStations;
+            this.defaultMobs = defaultMobs && (kinds & Kinds.TamedAnimals) != 0;
             this.keepOnExit = keepOnExit;
             this.cellSize = Cell.Subdivisions(cellSize) != 0 ? cellSize : 8f;
             subdivisions = Cell.Subdivisions(this.cellSize);
@@ -120,7 +121,7 @@ namespace TooManyLags
                 }
                 peers.Clear(); peerIds.Clear(); regionPeers.Clear(); characters.Clear();
                 List<ZNetPeer> nativePeers = network.GetPeers();
-                if (coarseEnabled && nativePeers.Count <= 1)
+                if (coarseEnabled && !defaultMobs && nativePeers.Count <= 1)
                 {
                     // With at most one connection no character lookup, position,
                     // fine-cell conversion or rotation can change contention.
@@ -146,7 +147,7 @@ namespace TooManyLags
                         ZNetScene.InActiveArea(position, ZoneSystem.GetZone(peer.GetRefPos()));
                     if (valid)
                     {
-                        peers.Add(GridPeer.Covered(peer.m_uid, cell, !coarseEnabled && directional ? CameraHeading.Read(player, peer.m_uid, cameras) : 0));
+                        peers.Add(GridPeer.Covered(peer.m_uid, cell, (!coarseEnabled || defaultMobs) && directional ? CameraHeading.Read(player, peer.m_uid, cameras) : 0));
                         if (coarseEnabled) characters.Add(player);
                     }
                     if (coarseEnabled)
@@ -164,14 +165,14 @@ namespace TooManyLags
                 {
                     regions.Update(regionPeers);
                     int kept = 0;
-                    for (int i = 0; i < peers.Count; i++)
+                    for (int i = 0; !defaultMobs && i < peers.Count; i++)
                     {
                         GridPeer peer = peers[i];
                         if (!regions.Shared(peer.Uid)) continue;
                         if (directional) peer.Coverage = CameraHeading.Read(characters[i], peer.Uid, cameras);
                         peers[kept++] = peer;
                     }
-                    if (kept != peers.Count) peers.RemoveRange(kept, peers.Count - kept);
+                    if (!defaultMobs && kept != peers.Count) peers.RemoveRange(kept, peers.Count - kept);
                     // Do not hold character ZDOs after this sampling pass.
                     characters.Clear();
                 }
@@ -406,7 +407,7 @@ namespace TooManyLags
                 if (node.Data.GetOwner() == uid || indexed.Grid.Owner(node.Cell) == uid) indexed.Changed(node, Time.unscaledTime, NeedsPolicy(node));
             cadence.Request();
         }
-        private bool NeedsGrid(NativeNode node) { return !coarseEnabled || regions.ContainsZone(node.NativeZone); }
+        private bool NeedsGrid(NativeNode node) { return (defaultMobs && node.Kind == Kinds.TamedAnimals) || !coarseEnabled || regions.ContainsZone(node.NativeZone); }
         private bool ProtectedTransfer(ZDO data)
         { return Inventory.Transitioning(data) || Cooperative.Transitioning(data) || TransferPending(data) || Cooperative.Reserved(data); }
         private bool NeedsPolicy(NativeNode node)
@@ -543,9 +544,10 @@ namespace TooManyLags
                     // field's old cached grid owner during its exit grace.
                     if (owner.directional && !coveredBefore) fieldOwner = 0;
                 }
-                if (fieldOwner == 0 && owner.defaultInteractives) return owner.server;
+                if (fieldOwner == 0 && HasServerDefault) return owner.server;
                 return fieldOwner;
             }
+            private bool HasServerDefault { get { return owner.defaultInteractives || (owner.defaultMobs && Kind == Kinds.TamedAnimals); } }
             internal override ApplyResult Apply(long target)
             {
                 if (!Identity() || Summoned) { owner.Remove(this); return ApplyResult.Dropped; }
@@ -571,7 +573,7 @@ namespace TooManyLags
                 // objects to the fallback server and immediately back to the
                 // player two seconds later. Permanent refill ownership wins.
                 if (!(owner.refillStations && serverStation) && target == 0 &&
-                    owner.defaultInteractives && owner.indexed.Grid.Candidate(Cell) != 0)
+                    HasServerDefault && owner.indexed.Grid.Candidate(Cell) != 0)
                     return ApplyResult.Pending;
                 target = DesiredOwner(target);
                 if (target == 0) return ApplyResult.Done;

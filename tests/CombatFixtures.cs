@@ -50,9 +50,9 @@ namespace BepInEx.Configuration
     public class AcceptableValueRange<T> { public AcceptableValueRange(T a,T b) {} }
     public class ConfigFile
     {
-        public bool? EnableOverride; public readonly Dictionary<string,object> Defaults=new Dictionary<string,object>();
+        public bool? EnableOverride, MobDefaultOverride; public readonly Dictionary<string,object> Defaults=new Dictionary<string,object>();
         public ConfigEntry<T> Bind<T>(string section,string key,T value,object description)
-        { Defaults[key]=value; if(key=="EnableAIOwnership"&&EnableOverride.HasValue)value=(T)(object)EnableOverride.Value;return new ConfigEntry<T>(value); }
+        { Defaults[key]=value; if(key=="EnableAIOwnership"&&EnableOverride.HasValue)value=(T)(object)EnableOverride.Value;if(key=="ServerOwnedMobsByDefault"&&MobDefaultOverride.HasValue)value=(T)(object)MobDefaultOverride.Value;return new ConfigEntry<T>(value); }
     }
 }
 public static class HashExtensions
@@ -93,7 +93,10 @@ public class ZDO
     public void Set(KeyValuePair<int,int> hash,ZDOID id) { Set(hash.Key,id.UserID); Set(hash.Value,id.ID); }
     public ZDOID GetZDOID(KeyValuePair<int,int> hash) { return new ZDOID(GetLong(hash.Key,0),(uint)GetLong(hash.Value,0)); }
 }
-public class ZNetView : UnityEngine.Component { public ZDO Data; public bool m_distant; public int Forwarded; public long ForwardOwner; public HitData ForwardHit; public bool IsValid() { return Data!=null && Data.IsValid(); } public bool IsOwner() { return IsValid() && Data.GetOwner()==ZDOMan.Session; } public ZDO GetZDO() { return Data; } public void InvokeRPC(long owner,string name,params object[] args){Forwarded++;ForwardOwner=owner;ForwardHit=(HitData)args[0];} }
+public class ZNetView : UnityEngine.Component { public ZDO Data; public bool m_distant; public int Forwarded; public long ForwardOwner; public HitData ForwardHit; public bool IsValid() { return Data!=null && Data.IsValid(); } public bool IsOwner() { return IsValid() && Data.GetOwner()==ZDOMan.Session; } public ZDO GetZDO() { return Data; } public void InvokeRPC(long owner,string name,params object[] args){Forwarded++;ForwardOwner=owner;ForwardHit=(HitData)args[0];}
+    [MethodImpl(MethodImplOptions.NoInlining)] public void ResetZDO(){Data=null;}
+    [MethodImpl(MethodImplOptions.NoInlining)] private void OnDestroy(){}
+}
 public class ZSyncTransform : UnityEngine.Component { public bool m_syncPosition=true; }
 public class Character : UnityEngine.Component
 {
@@ -203,6 +206,7 @@ public class ZNetScene : UnityEngine.Object
     public readonly Dictionary<ZDO,ZNetView> Views=new Dictionary<ZDO,ZNetView>();
     public readonly Dictionary<int,UnityEngine.GameObject> Prefabs=new Dictionary<int,UnityEngine.GameObject>();
     public UnityEngine.GameObject GetPrefab(int hash){PrefabCalls++;UnityEngine.GameObject p;return Prefabs.TryGetValue(hash,out p)?p:null;}
+    [MethodImpl(MethodImplOptions.NoInlining)] public void AddInstance(ZDO zdo,ZNetView nview){Views[zdo]=nview;}
     [MethodImpl(MethodImplOptions.NoInlining)] public void Shutdown(){}
     [MethodImpl(MethodImplOptions.NoInlining)] private void OnDestroy(){}
     public ZNetView FindInstance(ZDO d){ZNetView v;return Views.TryGetValue(d,out v)?v:null;}

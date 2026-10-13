@@ -42,7 +42,7 @@ internal static class IntegrationTests
     private static bool loadingObserver;
     private static ZNetPeer observer;
     private static void Check(string label,bool result){checks++;if(!result)throw new Exception(label);}
-    private static void Fresh(Kinds kinds,bool statics=false,bool defaultInteractives=false,bool refillStations=false,float cellSize=8,GridCoveragePattern pattern=GridCoveragePattern.Square3x3,bool keepOnExit=true,bool directional=false,float innerDelay=0,float outerDelay=3,float checkIntervalSeconds=1,float forwardDelay=.2f,bool nativeSolo=false,float overlapCooldown=0)
+    private static void Fresh(Kinds kinds,bool statics=false,bool defaultInteractives=false,bool refillStations=false,float cellSize=8,GridCoveragePattern pattern=GridCoveragePattern.Square3x3,bool keepOnExit=true,bool directional=false,float innerDelay=0,float outerDelay=3,float checkIntervalSeconds=1,float forwardDelay=.2f,bool nativeSolo=false,float overlapCooldown=0,bool defaultMobs=false)
     {
         if(controller!=null)controller.Reset();
         next=1;failures=0;Time.time=Time.unscaledTime=0;
@@ -57,7 +57,7 @@ internal static class IntegrationTests
         FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=true;
         FiresGhettoNetworkMod.HelmOwnership.ServerOwnsShips=false;
         var fgn=new FiresGhettoNetworkMod.FiresGhettoNetworkMod();
-        controller=new AuthorityController(kinds,2,new CompatibilityBridge(fgn),delegate{failures++;},statics,delegate{failures++;},checkIntervalSeconds,defaultInteractives,refillStations,cellSize,pattern,keepOnExit,directional,innerDelay,outerDelay,forwardDelay,overlapCooldown);
+        controller=new AuthorityController(kinds,2,new CompatibilityBridge(fgn),delegate{failures++;},statics,delegate{failures++;},checkIntervalSeconds,defaultInteractives,refillStations,cellSize,pattern,keepOnExit,directional,innerDelay,outerDelay,forwardDelay,overlapCooldown,defaultMobs);
         Plugin.Controller=controller;
     }
     private static void Tick(float now){Time.time=Time.unscaledTime=now;controller.Tick();Check("controller active",controller.IsActive&&failures==0);}
@@ -718,6 +718,29 @@ internal static class IntegrationTests
         }
         finally {patcher.UnpatchSelf();}
     }
+    private static void SeparateMobDefaults()
+    {
+        Fresh(Kinds.Doors|Kinds.TamedAnimals,defaultMobs:true,nativeSolo:true);Peer(1);
+        var near=Object(typeof(Character),1,1,7);near.Tamed=true;controller.DataChanged(near);
+        var far=Object(typeof(Character),40,1,7);far.Tamed=true;controller.DataChanged(far);
+        var door=Object(typeof(Door),1,1,7);
+        ZNetScene.instance.Ready=delegate{return false;};Tick(0);Tick(2);
+        Check("mob defaults preserve loading guard",near.GetOwner()==7&&far.GetOwner()==7);
+        ZNetScene.instance.Ready=delegate{return true;};Tick(3);
+        Check("solo tamed grid works with interactive default off",near.GetOwner()==1);
+        Check("tamed server default is independent of interactive default",far.GetOwner()==99);
+        Check("solo interactions retain vanilla with only mob default enabled",door.GetOwner()==7);
+        int writes=far.Writes;Tick(4);Tick(5);Check("settled default tame is not repeatedly rewritten",far.Writes==writes);
+
+        Fresh(Kinds.TamedAnimals,defaultMobs:true,nativeSolo:true);Peer(1);
+        var used=Object(typeof(Character),40,1,7);used.Tamed=true;used.User=7;controller.DataChanged(used);Tick(0);Tick(2);
+        Check("mob default does not take actively used animal",used.GetOwner()==7);
+        var wild=Object(typeof(Character),41,1,7);Tick(3);
+        Check("hostile actors stay outside tame grid",wild.GetOwner()==7);
+
+        Fresh(Kinds.Doors,defaultMobs:true,nativeSolo:true);Peer(1);door=Object(typeof(Door),1,1,7);Tick(0);Tick(2);
+        Check("disabled tamed category keeps solo shortcut and vanilla interactions",controller.FieldUpdates==0&&door.GetOwner()==7);
+    }
     private static void InnerOnlyDepartureController()
     {
         Fresh(Kinds.Doors|Kinds.TamedAnimals,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true,nativeSolo:true);
@@ -1377,6 +1400,7 @@ internal static class IntegrationTests
         try {
         Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
+        SeparateMobDefaults();
         Console.WriteLine("PASS: "+checks+" full-controller/grid/router fixture assertions; no PUP/PupPatch plugin in fixture.");
         Console.WriteLine("LIMIT: simulated transport and Unity registry; no live multiplayer test.");
         } catch(Exception error){Console.Error.WriteLine(error);Environment.ExitCode=1;}

@@ -1,3 +1,19 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.26 local test build
+
+## Optional mob defaults
+
+`ServerOwnedMobsByDefault=false` is a server-only, restart-only setting. When enabled with Server-Side Simulation, idle tamed animals get a server default outside player fields even with the interactive default disabled. Their existing category toggle, grid timers, active-use/follow/riding exclusions, loading check and KeepOwnershipOnCellExit rule remain effective. Existing tame behavior with ServerOwnedInteractivesByDefault remains unchanged. Isolated stationary interactions still use native ownership when their default is disabled; the fine grid remains active for enabled tamed animals.
+
+Hostile Mobs additionally require the existing AI module and participating owner client. A valid current-owner report without a player target requests the same guarded FiresGhettoNetworking server handoff as the existing high-ping exception. Player targets retain the existing target ownership/high-ping policy. Friendly creatures, bosses, possession, taming and active controls retain their exclusions. Already server-owned mobs outside this policy's leases are left alone. Readiness at canonical and differing live poses, optional PUP proof, source consent/vetoes, pending requests and existing transfer caps remain unchanged. Dynamic mobs are not assigned to the server early through the new stationary-object native selector.
+
+The optional candidate index records loaded non-player actors using AddInstance and view/scene unload hooks, only when the setting is enabled. It retries delayed owner capability, reports, readiness and handoffs on FiresGhettoNetworking's existing two-second pass, including solo sessions; it performs no world scan or per-physics polling. Unload/reset removes records, and the pass also prunes invalid/missing instances. Stable idle server ownership performs no repeated collider-readiness proof or owner write; pending/cooldown/source-budget checks precede expensive readiness work. There is additional bounded bookkeeping when enabled, and actual server creature simulation can increase CPU use. No new performance benchmark is claimed.
+
+The setting is captured at startup: saving a new value through the console cannot partly activate/deactivate the running AI mode. Inventory, refill, interaction protection, standalone/player-simulation mode and the 1.0.25 stationary native assignment selector were not changed.
+
+All 19 verification groups pass on the final DLL, including 11,626 full-controller/router assertions, 1,752 AI runtime/target/lease assertions on CLR and embedded Valheim Mono, actual optional lifecycle-hook installation, generated BepInEx defaults and reload, native release/transpiler composition, and the latest-provider Pickable audit. Added fixtures cover solo tame ownership independent of the interactive default, native loading waits, usage exclusions, idle hostile handoff/retention/target return, pending-proof avoidance, absence of Server-Side Simulation, no-player release, loaded-cache cleanup and restart-only activation. These are managed/runtime and metadata checks, not a live multiplayer session. Existing wire protocols are unchanged; the new policy executes on the server. Not published or pushed. Verified DLL SHA256: `55F43DBAD242BE0AD1A0EF5E41E79B97D6C6C261CD8FE77C76BA0A8B3DF70FE7`.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.25 local test build
 
 ## Vanilla assignment target selection

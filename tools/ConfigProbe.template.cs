@@ -14,6 +14,7 @@ namespace TooManyLags
 {
     @@KINDS@@
     @@GRID_PATTERN@@
+    internal static class CameraHeading { internal static void Configure(float degrees, float seconds = 0f) { } }
 
     internal sealed class ConfigProbe
     {
@@ -39,6 +40,9 @@ namespace TooManyLags
 
         public static int Main(string[] args)
         {
+            // Keep generated numeric option comments readable in English,
+            // including the fractional 6.4-metre choice.
+            System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
             AppDomain.CurrentDomain.AssemblyResolve += delegate(object sender, ResolveEventArgs request) {
                 string name = new AssemblyName(request.Name).Name + ".dll";
                 for (int i = 1; i < args.Length; i++) {
@@ -61,20 +65,20 @@ namespace TooManyLags
             string[] sections = {
                 "01 - General", "02 - Static Buildings", "03 - Default Ownership and Overrides",
                 "04 - Grid Settings", "05 - Directional Grid Mode", "06 - Full Grid Mode",
-                "08 - Camera Heading", "09 - AI Mob Ownership", "10 - Object Categories"
+                "07 - Experimental Interaction Protection", "08 - Camera Heading", "09 - AI Mob Ownership", "10 - Object Categories"
             };
             int found = 0;
             foreach (string line in File.ReadAllLines(path)) if (line.StartsWith("[", StringComparison.Ordinal)) {
                 if (found >= sections.Length || line != "[" + sections[found] + "]") throw new Exception("Unexpected section or order: " + line);
                 found++;
             }
-            if (found != 9) throw new Exception("Expected nine ordered English feature sections.");
+            if (found != 10) throw new Exception("Expected ten ordered English feature sections.");
             ConfigProbe reloaded = new ConfigProbe { Config = new ConfigFile(path, false, metadata) };
             reloaded.Config.SaveOnConfigSet = false;
             reloaded.Bind(); VerifyDefaults(reloaded.Config); reloaded.Config.Save();
             if (File.ReadAllText(path) != generated) throw new Exception("Generated config changed during actual BepInEx reload/save.");
-            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 44 settings in nine ordered English feature sections.");
-            Console.WriteLine("PASS: camera/movement defaults remain 0.05; new overlap buffer defaults to 1s; all 43 previous settings are preserved; object categories stay last.");
+            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 47 settings in ten ordered English feature sections.");
+            Console.WriteLine("PASS: camera/movement defaults remain 0.05; angular overlap defaults to 30 degrees (0-45); prior settings are preserved; object categories stay last.");
             Console.WriteLine("PASS: actual BepInEx camera and server movement ranges accept 0.05 seconds and clamp to 0.05-5.");
         }
         private static void VerifyDefaults(ConfigFile config)
@@ -90,6 +94,18 @@ namespace TooManyLags
             if (camera.Value != 5f) throw new Exception("Camera interval upper bound was not enforced.");
             camera.Value = (float)camera.DefaultValue;
             ConfigEntry<float> movement = (ConfigEntry<float>)config[new ConfigDefinition("04 - Grid Settings", "MovementRotationCheckIntervalSeconds")];
+            ConfigEntry<float> angle = (ConfigEntry<float>)config[new ConfigDefinition("08 - Camera Heading", "CameraDirectionOverlapDegrees")];
+            var angleRange = angle.Description.AcceptableValues as AcceptableValueRange<float>;
+            if (angleRange == null || angleRange.MinValue != 0f || angleRange.MaxValue != 45f) throw new Exception("Unexpected angular overlap bounds.");
+            angle.Value = -1f; if (angle.Value != 0f) throw new Exception("Angular overlap minimum did not clamp.");
+            angle.Value = 90f; if (angle.Value != 45f) throw new Exception("Angular overlap maximum did not clamp.");
+            angle.Value = (float)angle.DefaultValue;
+            ConfigEntry<float> prediction = (ConfigEntry<float>)config[new ConfigDefinition("08 - Camera Heading", "CameraRotationPredictionSeconds")];
+            var predictionRange = prediction.Description.AcceptableValues as AcceptableValueRange<float>;
+            if (predictionRange == null || predictionRange.MinValue != 0f || predictionRange.MaxValue != .5f) throw new Exception("Unexpected prediction bounds.");
+            prediction.Value = -1f; if (prediction.Value != 0f) throw new Exception("Prediction cannot be disabled.");
+            prediction.Value = 1f; if (prediction.Value != .5f) throw new Exception("Prediction maximum did not clamp.");
+            prediction.Value = (float)prediction.DefaultValue;
             AcceptableValueRange<float> movementRange = movement.Description.AcceptableValues as AcceptableValueRange<float>;
             if (movementRange == null || movementRange.MinValue != .05f) throw new Exception("Unexpected server movement interval minimum.");
             ConfigEntry<float> overlap = (ConfigEntry<float>)config[new ConfigDefinition("05 - Directional Grid Mode", "ServerOverlapCooldownSeconds")];
@@ -109,7 +125,10 @@ namespace TooManyLags
                 {"05 - Directional Grid Mode/ForwardTransitionDelaySeconds", "0.2"}, {"05 - Directional Grid Mode/OuterTransitionDelaySeconds", "3"},
                 {"05 - Directional Grid Mode/ServerOverlapCooldownSeconds", "1"},
                 {"06 - Full Grid Mode/TransitionDelaySeconds", "2"},
+                {"07 - Experimental Interaction Protection/EnableExperimentalInteractionProtection", "false"},
                 {"08 - Camera Heading/CameraHeadingCheckIntervalSeconds", "0.05"},
+                {"08 - Camera Heading/CameraDirectionOverlapDegrees", "30"},
+                {"08 - Camera Heading/CameraRotationPredictionSeconds", "0.1"},
                 {"09 - AI Mob Ownership/EnableAIOwnership", "true"}, {"09 - AI Mob Ownership/ServerFallbackPingMs", "200"},
                 {"09 - AI Mob Ownership/ServerFallbackRadius", "6"}
             };
@@ -118,7 +137,7 @@ namespace TooManyLags
                 "SapCollectors", "Wards", "MapTables", "Wisplights", "TamedAnimals", "Containers", "ItemStands", "Signs",
                 "Portals", "Fermenters", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables"
             }) expected.Add("10 - Object Categories/" + category, "true");
-            if (config.Count != 44) throw new Exception("Expected 44 config entries; found " + config.Count + ".");
+            if (config.Count != 47) throw new Exception("Expected 47 config entries; found " + config.Count + ".");
             int categoryNotes = 0;
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> entry in config) {
                 string key = entry.Key.Section + "/" + entry.Key.Key, value = Convert.ToString(entry.Value.BoxedValue, CultureInfo.InvariantCulture), wanted;
@@ -128,7 +147,7 @@ namespace TooManyLags
                 if (entry.Value.DefaultValue is bool) defaultValue = defaultValue.ToLowerInvariant();
                 if (defaultValue != wanted) throw new Exception("Binding default differs: " + key);
                 if (String.IsNullOrEmpty(entry.Value.Description.Description)) throw new Exception("Missing setting description: " + key);
-                string scope = entry.Key.Key == "Enabled" || entry.Key.Key == "EnableAIOwnership" ? "Server and" : entry.Key.Key == "EnableLogs" ? "Local" : "Server only";
+                string scope = entry.Key.Key == "EnableLogs" ? "Local" : "Server only";
                 if (entry.Key.Section == "10 - Object Categories") {
                     if (entry.Value.Description.Description.StartsWith("All categories below:", StringComparison.Ordinal)) categoryNotes++;
                     else if (entry.Value.Description.Description.Contains("restart required") || entry.Value.Description.Description.Contains("true:")) throw new Exception("Repeated category instructions: " + key);
@@ -137,6 +156,10 @@ namespace TooManyLags
             }
             if (expected.Count != 0) throw new Exception("Missing expected config settings.");
             if (categoryNotes != 1) throw new Exception("Expected exactly one shared category explanation.");
+            ConfigEntry<float> geometry;
+            if (!config.TryGetEntry<float>(new ConfigDefinition("04 - Grid Settings", "GridCellSizeMeters"), out geometry) ||
+                !geometry.Description.AcceptableValues.IsValid(6.4f) || geometry.Description.AcceptableValues.IsValid(6f))
+                throw new Exception("Actual cell-size binding must accept 6.4 metres and reject unsupported sizes.");
         }
     }
 }

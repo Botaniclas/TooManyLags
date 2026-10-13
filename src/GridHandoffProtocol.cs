@@ -14,7 +14,7 @@ namespace TooManyLags.GridHandoffs
     {
         private const string RpcName = "TooManyLags_GridHandoff_1";
         private enum Message { Hello, Welcome, Commit, Status, Result, Ready, ReadyResult, Relay, ReadyLost }
-        private sealed class Connection { internal ZNetPeer Peer; internal bool Capable; internal readonly CommitFence Fence = new CommitFence(); }
+        private sealed class Connection { internal ZNetPeer Peer; internal bool Capable; internal readonly CommitFence Fence = new CommitFence(); internal readonly CapabilityGreeting Greeting = new CapabilityGreeting(); }
         private sealed class Advertisement { internal ZNetPeer Peer; internal ZDOID Id; internal long Token; }
         private sealed class Readiness
         {
@@ -35,6 +35,7 @@ namespace TooManyLags.GridHandoffs
         private static long readinessToken;
         private static Harmony patches;
         private static Action<ZRpc, ZDOID, long> nativeCommit;
+        private static bool started, clientGreetingPending;
 
         internal static void Start(Assembly fgn)
         {
@@ -49,15 +50,17 @@ namespace TooManyLags.GridHandoffs
             patches = new Harmony(Plugin.Id + ".gridhandoff");
             foreach (Type hook in new[] { typeof(ConnectPatch), typeof(PeerReadyPatch), typeof(ReceivePatch), typeof(UnloadPatch), typeof(ShutdownPatch), typeof(DisconnectPatch) })
                 patches.CreateClassProcessor(hook).Patch();
+            started = true;
+            if (ZNet.instance) foreach (ZNetPeer peer in ZNet.instance.GetPeers()) Connect(peer);
         }
         internal static void Stop()
         {
             if (patches != null) patches.UnpatchSelf(); patches = null;
             FgnOwnerHandoff.CooperativeClient = null; FgnOwnerHandoff.IdentifiedSend = null; FgnOwnerHandoff.IdentifiedStatus = null;
-            RequestRouter.RecipientReady = null; AuthorityController.ReadinessRemoved = null; AuthorityController.ReadinessReset = null; nativeCommit = null; Reset();
+            RequestRouter.RecipientReady = null; AuthorityController.ReadinessRemoved = null; AuthorityController.ReadinessReset = null; nativeCommit = null; started = false; Reset();
         }
         private static void Reset()
-        { connections.Clear(); ready.Clear(); retiring.Clear(); kinds = new ConditionalWeakTable<ZNetView, KindCache>(); refills = new ConditionalWeakTable<ZDO, Lease>(); advertised = new ConditionalWeakTable<ZNetView, Advertisement>(); areas.Clear(); frame = -1; }
+        { connections.Clear(); ready.Clear(); retiring.Clear(); kinds = new ConditionalWeakTable<ZNetView, KindCache>(); refills = new ConditionalWeakTable<ZDO, Lease>(); advertised = new ConditionalWeakTable<ZNetView, Advertisement>(); areas.Clear(); frame = -1; clientGreetingPending = false; }
         internal static bool Capable(ZNetPeer peer)
         {
             Connection c;
@@ -72,14 +75,30 @@ namespace TooManyLags.GridHandoffs
             Connection c = new Connection { Peer = peer }; connections.Add(peer.m_rpc, c);
             peer.m_rpc.Register<ZPackage>(RpcName, delegate(ZRpc rpc, ZPackage packet) { Receive(c, rpc, packet); });
         }
+        internal static void ClientHello()
+        {
+            if (!started || !clientGreetingPending || !ZNet.instance || ZNet.instance.IsDedicated()) return;
+            ZNetPeer peer = ZNet.instance.GetServerPeer(); Connection c;
+            if (peer == null || !peer.IsReady() || peer.m_rpc == null || !connections.TryGetValue(peer.m_rpc, out c) || !Current(c, peer.m_rpc)) return;
+            double now = Time.realtimeSinceStartupAsDouble;
+            if (c.Capable || !c.Greeting.Waiting(now)) { clientGreetingPending = false; return; }
+            if (c.Greeting.Due(now))
+                try { Send(peer, Message.Hello, null); } catch (Exception) { }
+        }
+        internal static void Offer(ZNetPeer peer)
+        {
+            if (!started || !ZNet.instance || !ZNet.instance.IsDedicated() || peer == null || !peer.IsReady() || peer.m_rpc == null) return;
+            Connection c;
+            if (connections.TryGetValue(peer.m_rpc, out c) && Current(c, peer.m_rpc))
+                try { Send(peer, Message.Welcome, delegate(ZPackage p) { p.Write(c.Capable); }); } catch (Exception) { }
+        }
         private static void PeerReady(ZRpc rpc)
         {
             Connection c;
             if (!connections.TryGetValue(rpc, out c) || !Current(c, rpc) || !c.Peer.IsReady()) return;
             // The server advertises the active mode. Clients can register this
             // endpoint regardless of their local server-only mode setting.
-            if (ZNet.instance.IsDedicated())
-                try { Send(c.Peer, Message.Welcome, null); } catch (Exception error) { Plugin.Warn("Grid capability offer failed: " + error.GetBaseException().Message); }
+            if (ZNet.instance.IsDedicated()) Offer(c.Peer);
         }
         private static void Send(ZNetPeer peer, Message message, Action<ZPackage> write)
         {
@@ -92,7 +111,7 @@ namespace TooManyLags.GridHandoffs
         { Send(peer, Message.Status, delegate(ZPackage p) { p.Write(token); p.Write(id); }); }
         private static void Receive(Connection c, ZRpc rpc, ZPackage packet)
         {
-            if (!Current(c, rpc) || !c.Peer.IsReady() || packet == null || ZDOMan.instance == null) return;
+            if (!Current(c, rpc) || !c.Peer.IsReady() || packet == null) return;
             try
             {
                 Message message = (Message)packet.ReadInt(); bool server = ZNet.instance.IsDedicated();
@@ -102,14 +121,19 @@ namespace TooManyLags.GridHandoffs
                 if (server)
                 {
                     if (message == Message.Hello)
-                    { bool changed = !c.Capable; c.Capable = true; Send(c.Peer, Message.Welcome, null); if (changed && Plugin.Controller != null) Plugin.Controller.CapabilityChanged(c.Peer.m_uid); return; }
-                    if (!c.Capable || Plugin.Controller == null) return;
+                    { bool changed = !c.Capable; c.Capable = true; if (changed && Plugin.Controller != null) Plugin.Controller.CapabilityChanged(c.Peer.m_uid); Send(c.Peer, Message.Welcome, delegate(ZPackage p) { p.Write(true); }); return; }
+                    if (!c.Capable || Plugin.Controller == null || ZDOMan.instance == null) return;
                     if (message == Message.Result)
                     {
                         long token = packet.ReadLong(); ZDOID id = packet.ReadZDOID(); bool processed = packet.ReadBool(), present = packet.ReadBool();
                         long owner = packet.ReadLong(); uint revision = packet.ReadUInt(), state = packet.ReadUInt();
                         if (Plugin.Controller.Cooperative == null || !Plugin.Controller.Cooperative.Observed(rpc, id, token, processed, present, owner, revision)) return;
                         ZDO data = ZDOMan.instance.GetZDO(id);
+                        // An identified command can beat its preceding native
+                        // ownership packet. Repair only that lagging source;
+                        // never install its older owner/revision as server truth.
+                        if (present && data != null && revision < data.OwnerRevision && data.GetOwner() == c.Peer.m_uid)
+                            ZDOMan.instance.ForceSendZDO(c.Peer.m_uid, id);
                         Readiness previous;
                         if ((!present || owner != c.Peer.m_uid) && ready.TryGetValue(id, out previous) && ReferenceEquals(previous.Rpc, rpc)) ready.Remove(id);
                         if (present && data != null) SetFloor(data, owner, revision, state);
@@ -138,8 +162,15 @@ namespace TooManyLags.GridHandoffs
                 }
                 if (!c.Peer.m_server || !ReferenceEquals(ZNet.instance.GetServerPeer(), c.Peer)) return;
                 if (message == Message.Welcome)
-                { bool changed = !c.Capable; c.Capable = true; if (changed) Send(c.Peer, Message.Hello, null); return; }
-                if (message != Message.Commit && message != Message.Status && message != Message.Ready) return;
+                {
+                    // New offers distinguish advertisement from acknowledgement.
+                    // Old servers acknowledge with a second header-only Welcome.
+                    bool? acknowledgement = packet.Size() > sizeof(int) ? packet.ReadBool() : (bool?)null;
+                    if (c.Greeting.Welcome(acknowledgement)) { c.Capable = true; clientGreetingPending = false; }
+                    else { clientGreetingPending = true; ClientHello(); }
+                    return;
+                }
+                if (ZDOMan.instance == null || (message != Message.Commit && message != Message.Status && message != Message.Ready)) return;
                 c.Capable = true; // Authenticated server endpoint; no exact-version gate.
                 if (message == Message.Ready)
                 {

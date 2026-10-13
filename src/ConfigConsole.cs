@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 
@@ -8,6 +9,9 @@ namespace TooManyLags
     {
         private const string RequestRpc = "TooManyLags_Config_1", ReplyRpc = "TooManyLags_ConfigReply_1";
         private const string CameraRpc = "TooManyLags_CameraInterval_1";
+        private const string CameraSettingsRpc = "TooManyLags_CameraSettings_2";
+        private const string LegacyCameraPredictionRpc = "TooManyLags_CameraSettings_3";
+        private const string CameraPredictionRpc = "TooManyLags_CameraSettings_4";
         private const string CameraRequestRpc = "TooManyLags_CameraRequest_1";
         private static bool registered;
         private static WeakReference terminal;
@@ -18,6 +22,9 @@ namespace TooManyLags
         private static ZRpc cameraRequestedRpc;
         private static ZNet cameraRequestedNetwork;
         private static double cameraRetryAt;
+        private static int cameraRequests, cameraProtocol;
+        private static readonly HashSet<ZRpc> cameraPeers = new HashSet<ZRpc>();
+        private static readonly HashSet<ZRpc> predictivePeers = new HashSet<ZRpc>();
         internal static bool CameraConfigured { get { return ZNet.instance && ReferenceEquals(cameraNetwork, ZNet.instance); } }
         internal static void Register()
         {
@@ -45,17 +52,26 @@ namespace TooManyLags
         internal static void Connect(ZNetPeer peer)
         {
             if (peer == null || peer.m_rpc == null) return;
-            if (peer.m_server && ZNet.instance && !ZNet.instance.IsDedicated()) cameraNetwork = null;
+            ServerSession.Connect(peer);
+            if (ZNet.instance && ZNet.instance.IsDedicated())
+            {
+                cameraPeers.RemoveWhere(DisconnectedCameraPeer);
+                predictivePeers.RemoveWhere(DisconnectedCameraPeer);
+            }
+            if (peer.m_server && ZNet.instance && !ZNet.instance.IsDedicated()) { cameraNetwork = null; cameraProtocol = 0; }
             double window = -100; int requests = 0;
             double nextCameraRequest = -100;
             peer.m_rpc.Register<int>(CameraRequestRpc, delegate(ZRpc rpc, int protocol)
             {
                 ZNet current = ZNet.instance;
-                if (protocol != 1 || !current || !current.IsDedicated() || !peer.IsReady() ||
+                if ((protocol < 1 || protocol > 4) || !current || !current.IsDedicated() || !peer.IsReady() ||
                     !ReferenceEquals(current.GetPeer(peer.m_uid), peer) || !ReferenceEquals(rpc, peer.m_rpc)) return;
                 double now = Time.realtimeSinceStartupAsDouble;
                 if (now < nextCameraRequest) return;
                 nextCameraRequest = now + 1;
+                if (protocol >= 2) cameraPeers.Add(rpc);
+                if (protocol == 4) predictivePeers.Add(rpc);
+                GridHandoffs.Protocol.Offer(peer);
                 SendCamera(peer, Plugin.CameraInterval());
             });
             peer.m_rpc.Register<string, int>(RequestRpc, delegate(ZRpc rpc, string command, int id)
@@ -82,10 +98,39 @@ namespace TooManyLags
             });
             peer.m_rpc.Register<float>(CameraRpc, delegate(ZRpc rpc, float interval)
             {
-                if (!ZNet.instance || ZNet.instance.IsDedicated() || !peer.m_server || !peer.IsReady() ||
+                if (cameraProtocol >= 2 || !ZNet.instance || ZNet.instance.IsDedicated() || !peer.m_server || !peer.IsReady() ||
                     !ReferenceEquals(ZNet.instance.GetServerPeer(), peer) || !ReferenceEquals(rpc, peer.m_rpc) ||
                     Single.IsNaN(interval) || Single.IsInfinity(interval) || interval < .05f || interval > 5f) return;
-                Plugin.ApplyCameraInterval(interval); cameraNetwork = ZNet.instance;
+                // Legacy timing replies do not certify the configurable angle.
+                Plugin.ApplyCameraInterval(interval);
+            });
+            peer.m_rpc.Register<float, float>(CameraSettingsRpc, delegate(ZRpc rpc, float interval, float overlap)
+            {
+                if (cameraProtocol >= 3 || !ZNet.instance || ZNet.instance.IsDedicated() || !peer.m_server || !peer.IsReady() ||
+                    !ReferenceEquals(ZNet.instance.GetServerPeer(), peer) || !ReferenceEquals(rpc, peer.m_rpc) ||
+                    Single.IsNaN(interval) || Single.IsInfinity(interval) || interval < .05f || interval > 5f ||
+                    Single.IsNaN(overlap) || Single.IsInfinity(overlap) || overlap < 0f || overlap > 45f) return;
+                Plugin.ApplyCameraSettings(interval, overlap, 0f); cameraNetwork = ZNet.instance; cameraProtocol = 2;
+            });
+            peer.m_rpc.Register<float, float, float>(CameraPredictionRpc, delegate(ZRpc rpc, float interval, float overlap, float prediction)
+            {
+                if (!ZNet.instance || ZNet.instance.IsDedicated() || !peer.m_server || !peer.IsReady() ||
+                    !ReferenceEquals(ZNet.instance.GetServerPeer(), peer) || !ReferenceEquals(rpc, peer.m_rpc) ||
+                    Single.IsNaN(interval) || Single.IsInfinity(interval) || interval < .05f || interval > 5f ||
+                    Single.IsNaN(overlap) || Single.IsInfinity(overlap) || overlap < 0f || overlap > 45f ||
+                    Single.IsNaN(prediction) || Single.IsInfinity(prediction) || prediction < 0f || prediction > .5f) return;
+                Plugin.ApplyCameraSettings(interval, overlap, prediction); cameraNetwork = ZNet.instance; cameraProtocol = 4;
+            });
+            // Earlier prediction servers cannot decode red forecast fields.
+            // Keep their base angle/timing, but never publish the new masks.
+            peer.m_rpc.Register<float, float, float>(LegacyCameraPredictionRpc, delegate(ZRpc rpc, float interval, float overlap, float prediction)
+            {
+                if (cameraProtocol >= 4 || !ZNet.instance || ZNet.instance.IsDedicated() || !peer.m_server || !peer.IsReady() ||
+                    !ReferenceEquals(ZNet.instance.GetServerPeer(), peer) || !ReferenceEquals(rpc, peer.m_rpc) ||
+                    Single.IsNaN(interval) || Single.IsInfinity(interval) || interval < .05f || interval > 5f ||
+                    Single.IsNaN(overlap) || Single.IsInfinity(overlap) || overlap < 0f || overlap > 45f ||
+                    Single.IsNaN(prediction) || Single.IsInfinity(prediction) || prediction < 0f || prediction > .5f) return;
+                Plugin.ApplyCameraSettings(interval, overlap, 0f); cameraNetwork = ZNet.instance; cameraProtocol = 3;
             });
         }
         internal static void Ready(ZRpc rpc)
@@ -93,7 +138,7 @@ namespace TooManyLags
             if (!ZNet.instance || !ZNet.instance.IsDedicated()) return;
             foreach (ZNetPeer peer in ZNet.instance.GetPeers())
                 if (peer != null && peer.IsReady() && ReferenceEquals(peer.m_rpc, rpc))
-                { SendCamera(peer, Plugin.CameraInterval()); return; }
+                { ServerSession.Ready(peer); SendCamera(peer, Plugin.CameraInterval()); return; }
         }
         internal static void BroadcastCamera(float interval)
         {
@@ -108,20 +153,36 @@ namespace TooManyLags
             ZNetPeer server = current.GetServerPeer();
             if (server == null || !server.IsReady() || server.m_rpc == null) return;
             if (!ReferenceEquals(cameraRequestedNetwork, current) || !ReferenceEquals(cameraRequestedRpc, server.m_rpc))
-            { cameraRequestedNetwork = current; cameraRequestedRpc = server.m_rpc; cameraRetryAt = Double.NegativeInfinity; }
+            { cameraRequestedNetwork = current; cameraRequestedRpc = server.m_rpc; cameraRetryAt = Double.NegativeInfinity; cameraRequests = 0; }
             double now = Time.realtimeSinceStartupAsDouble;
             if (now < cameraRetryAt) return;
             // Only retry settings acquisition; never repeat a gameplay action.
             // Receiving the authenticated interval stops these requests entirely.
             cameraRetryAt = now + 2;
-            try { server.m_rpc.Invoke(CameraRequestRpc, 1); } catch (Exception) { }
+            // Old servers understand protocol 2 and disable predictive masks.
+            int protocol = cameraRequests == 0 ? 4 : 2;
+            if (cameraRequests == 0) cameraRequests = 1;
+            try { server.m_rpc.Invoke(CameraRequestRpc, protocol); } catch (Exception) { }
         }
+        internal static void RefreshCamera()
+        { cameraNetwork = null; cameraProtocol = cameraRequests = 0; cameraRequestedRpc = null; cameraRequestedNetwork = null; RequestCamera(); }
         private static void SendCamera(ZNetPeer peer, float interval)
-        { try { if (peer.m_rpc != null) peer.m_rpc.Invoke(CameraRpc, interval); } catch (Exception) { } }
+        {
+            try
+            {
+                if (peer.m_rpc == null) return;
+                if (predictivePeers.Contains(peer.m_rpc)) peer.m_rpc.Invoke(CameraPredictionRpc, interval, Plugin.CameraOverlap(), Plugin.CameraPredictionSeconds());
+                else if (cameraPeers.Contains(peer.m_rpc)) peer.m_rpc.Invoke(CameraSettingsRpc, interval, Plugin.CameraOverlap());
+                else peer.m_rpc.Invoke(CameraRpc, interval);
+            }
+            catch (Exception) { }
+        }
         private static void Print(Terminal context, string lines)
         { foreach (string line in lines.Split('\n')) context.AddString(line.TrimEnd('\r')); }
+        private static bool DisconnectedCameraPeer(ZRpc saved)
+        { foreach (ZNetPeer peer in ZNet.instance.GetPeers()) if (peer != null && ReferenceEquals(peer.m_rpc, saved)) return false; return true; }
         internal static void Reset()
-        { terminal = null; network = null; cameraNetwork = null; until = 0; cameraRequestedRpc = null; cameraRequestedNetwork = null; cameraRetryAt = 0; }
+        { ServerSession.Reset(); terminal = null; network = null; cameraNetwork = null; until = 0; cameraRequestedRpc = null; cameraRequestedNetwork = null; cameraRetryAt = 0; cameraProtocol = cameraRequests = 0; cameraPeers.Clear(); predictivePeers.Clear(); }
     }
     [HarmonyPatch(typeof(ZNet), "OnNewConnection")]
     internal static class ConfigConnectionPatch

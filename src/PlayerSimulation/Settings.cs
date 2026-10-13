@@ -9,7 +9,7 @@ namespace TooManyLags.PlayerSimulation
         internal bool Logs;
         internal readonly bool Directional, Keep;
         internal bool Mobs;
-        internal readonly int CellSize;
+        internal readonly float CellSize;
         internal int HighPing;
         internal float Interval, Inner, Forward, Outer, Full, MobRadius;
         internal readonly float PingInterval, Margin;
@@ -18,7 +18,7 @@ namespace TooManyLags.PlayerSimulation
         internal Settings(ConfigFile config, bool mobs)
         {
             Logs = Read(config, "01 - General", "EnableLogs", false);
-            CellSize = Read(config, "04 - Grid Settings", "GridCellSizeMeters", 4);
+            CellSize = Read(config, "04 - Grid Settings", "GridCellSizeMeters", 4f);
             string shape = Read(config, "04 - Grid Settings", "GridCoveragePattern", "Rounded7x7");
             Pattern = shape == "Rounded7x7" ? GridCoveragePattern.Rounded7x7 : shape == "Rounded5x5" ? GridCoveragePattern.Rounded5x5 : GridCoveragePattern.Square3x3;
             if (CellSize == 4 && Pattern == GridCoveragePattern.Square3x3) throw new ArgumentException("4-metre cells require a rounded grid.");

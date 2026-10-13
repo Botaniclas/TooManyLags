@@ -179,7 +179,7 @@ internal static class NativeReleaseAudit
                 if(Object.Equals(awake.Body.Instructions[i].Operand,key))
                 {
                     bound++;var value=awake.Body.Instructions[i+1];
-                    Check(key=="GridCellSizeMeters"?value.OpCode==Mono.Cecil.Cil.OpCodes.Ldc_I4_4:
+                    Check(key=="GridCellSizeMeters"?value.OpCode==Mono.Cecil.Cil.OpCodes.Ldc_R4&&Convert.ToSingle(value.Operand)==4f:
                         value.OpCode==Mono.Cecil.Cil.OpCodes.Ldstr&&Object.Equals(value.Operand,"Rounded7x7"),"Actual grid config default changed: "+key);
                 }
             Check(bound==1,"Actual grid config entry missing or duplicated: "+key);
@@ -249,6 +249,14 @@ internal static class NativeReleaseAudit
                         Check(called.DeclaringType.FullName != "System.Version", "Runtime numeric version gate remains");
                         bool configEndpoint = type.FullName == "TooManyLags.ConfigConsole" && method.Name == "Connect";
                         bool gridEndpoint = type.FullName == "TooManyLags.GridHandoffs.Protocol" && method.Name == "Connect";
+                        bool sessionEndpoint = type.FullName == "TooManyLags.ServerSession" && method.Name == "Connect";
+                        if (called.DeclaringType.FullName == "ZRpc" && called.Name == "Register" && sessionEndpoint)
+                        {
+                            string endpoint = null;
+                            for (int i = method.Body.Instructions.IndexOf(instruction) - 1; i >= 0; i--)
+                                if (method.Body.Instructions[i].OpCode == Mono.Cecil.Cil.OpCodes.Ldstr) { endpoint = (string)method.Body.Instructions[i].Operand; break; }
+                            Check(endpoint == "TooManyLags_ServerSession_1", "Startup choices register only their private endpoint, never native ownership callbacks");
+                        }
                         if (called.DeclaringType.FullName == "ZRpc" && called.Name == "Register" && gridEndpoint)
                         {
                             string endpoint = null;
@@ -262,7 +270,7 @@ internal static class NativeReleaseAudit
                             for (int i = method.Body.Instructions.IndexOf(instruction) - 1; i >= 0; i--)
                                 if (method.Body.Instructions[i].OpCode == Mono.Cecil.Cil.OpCodes.Ldstr)
                                 { endpoint = (string)method.Body.Instructions[i].Operand; break; }
-                            Check(endpoint == "TooManyLags_Config_1" || endpoint == "TooManyLags_ConfigReply_1" || endpoint == "TooManyLags_CameraInterval_1" || endpoint == "TooManyLags_CameraRequest_1", "Only isolated config/camera RPC names may be registered");
+                            Check(endpoint == "TooManyLags_Config_1" || endpoint == "TooManyLags_ConfigReply_1" || endpoint == "TooManyLags_CameraInterval_1" || endpoint == "TooManyLags_CameraRequest_1" || endpoint == "TooManyLags_CameraSettings_2" || endpoint == "TooManyLags_CameraSettings_3" || endpoint == "TooManyLags_CameraSettings_4", "Only isolated config/camera RPC names may be registered");
                             configRegistrations++;
                         }
                         if (type.FullName.StartsWith("TooManyLags.ConfigConsole/", StringComparison.Ordinal) && called.DeclaringType.FullName == "ZNet" && called.Name == "IsAdmin")
@@ -276,9 +284,10 @@ internal static class NativeReleaseAudit
                             Check(executesAfterAuthorization, "Remote setting execution follows native admin identity check"); configAdminChecks++;
                         }
                         Check(!((called.DeclaringType.FullName == "ZRpc" || called.DeclaringType.FullName == "ZRoutedRpc") &&
-                            called.Name == "Register") || configEndpoint || gridEndpoint || (type.FullName == "TooManyLags.PlayerSimulation.Network" && method.Name == "Register"), "Authority registers/replaces a native client RPC callback");
+                            called.Name == "Register") || configEndpoint || gridEndpoint || sessionEndpoint || (type.FullName == "TooManyLags.PlayerSimulation.Network" && method.Name == "Register"), "Authority registers/replaces a native client RPC callback");
                         Check(!(called.DeclaringType.FullName == "System.Reflection.FieldInfo" && called.Name == "SetValue") ||
-                            (type.FullName == "TooManyLags.FgnSessionSettings" && (method.Name == "Apply" || method.Name == "CreatureBalancing")),
+                            (type.FullName == "TooManyLags.FgnSessionSettings" && (method.Name == "Apply" || method.Name == "CreatureBalancing")) ||
+                            (type.FullName == "TooManyLags.FgnSessionSettings/ClientOverrides" && method.Name == "Dispose"),
                             "Reflection writes must be confined to approved FGN startup settings; native gameplay fields remain untouched");
                     }
                     string text = instruction.Operand as string;
@@ -288,7 +297,7 @@ internal static class NativeReleaseAudit
                 }
             }
         }
-        Check(configRegistrations == 4 && configAdminChecks == 1, "Four private config/camera endpoints and one remote admin check required");
+        Check(configRegistrations == 7 && configAdminChecks == 1, "Seven private config/camera endpoints and one remote admin check required");
         TypeDefinition net = native.MainModule.GetType("ZNet"); MethodDefinition admin = null, ready = null;
         foreach (MethodDefinition method in net.Methods) { if (method.Name == "IsAdmin") admin = method; if (method.Name == "RPC_PeerInfo") ready = method; }
         Check(admin != null && admin.IsPublic && admin.Parameters.Count == 1 && admin.Parameters[0].ParameterType.FullName == "System.String" && admin.ReturnType.FullName == "System.Boolean", "Native public admin-list wrapper changed");

@@ -17,7 +17,7 @@ if ($LASTEXITCODE -ne 0) { throw 'FGN handoff state test build failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'FGN handoff state tests failed.' }
 
 $identified = Join-Path $output 'IdentifiedGridHandoffTests.exe'
-& $compiler /nologo /target:exe /optimize+ /warnaserror+ /langversion:5 /main:IdentifiedGridHandoffTests ('/out:' + $identified) $source $tests (Join-Path $PSScriptRoot 'src\GridCommitFence.cs') (Join-Path $PSScriptRoot 'tests\IdentifiedGridHandoffTests.cs')
+& $compiler /nologo /target:exe /optimize+ /warnaserror+ /langversion:5 /main:IdentifiedGridHandoffTests ('/out:' + $identified) $source $tests (Join-Path $PSScriptRoot 'src\GridCommitFence.cs') (Join-Path $PSScriptRoot 'src\GridCapabilityGreeting.cs') (Join-Path $PSScriptRoot 'tests\IdentifiedGridHandoffTests.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Identified grid handoff build failed.' }
 & $identified
 if ($LASTEXITCODE -ne 0) { throw 'Identified grid handoff tests failed.' }

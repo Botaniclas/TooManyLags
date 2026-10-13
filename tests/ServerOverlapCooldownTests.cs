@@ -33,7 +33,7 @@ internal static class ServerOverlapCooldownTests
         {
             var world = World(pattern, keep); var cell = new Cell(fx[h], fz[h]); var node = Add(world, cell);
             var a = Peer(1, 0, 0, h); var b = Peer(2, 2 * fx[h], 2 * fz[h], (h + 4) & 7);
-            var away = Peer(2, 2 * fx[h], 2 * fz[h], h);
+            var away = keep ? Peer(2, 2 * fx[h], 2 * fz[h], h) : Peer(2, 50, 50, h);
             world.Tick(Peers(a, b), 0);
             Check(node.Owner == 99 && node.Writes == 1, "overlap starts server ownership and cooldown");
             world.Tick(Peers(a, away), .1f);
@@ -86,7 +86,7 @@ internal static class ServerOverlapCooldownTests
         Check(node.Owner == 1, "noop server re-evaluation inside cooldown never extends acquisition deadline");
 
         world = World(GridCoveragePattern.Rounded7x7, false); node = Add(world, new Cell(2, 0));
-        var outerB = Peer(2, 4, 0, 0); var outerAway = Peer(2, 4, 0, 2);
+        var outerB = Peer(2, 4, 0, 0); var outerAway = Peer(2, 50, 50, 2);
         world.Tick(Peers(a, outerB), 0);
         Check(world.Grid.Candidate(node.Cell) == 99 && world.Grid.Owner(node.Cell) == 0,
             "outer overlap first waits for normal takeover timer");
@@ -121,8 +121,9 @@ internal static class ServerOverlapCooldownTests
         var cell = new Cell(0, 1);
         foreach (bool keep in new[] { true, false })
         {
+            var released = keep ? away : Peer(2, 50, 50, 0);
             var world = World(GridCoveragePattern.Rounded7x7, keep, 0); var node = Add(world, cell);
-            world.Tick(Peers(a, b), 0); world.Tick(Peers(a, away), .1f);
+            world.Tick(Peers(a, b), 0); world.Tick(Peers(a, released), .1f);
             Check(node.Owner == 1, "zero cooldown keeps native grid timing");
 
             world = World(GridCoveragePattern.Rounded7x7, keep); node = Add(world, cell);

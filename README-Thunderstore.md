@@ -40,8 +40,9 @@ Thanks for helping improve the mod. Have fun, and enjoy smoother adventures toge
 
 ## How it works
 
-- A camera-directed grid covers nearby interactive objects and idle tamed animals. One player's fields go to that player; overlapping fields go to the server. Stationary players still count.
-- Each camera direction covers ±37.5°, giving adjacent directions 30° of overlap. Cell or camera-coverage changes request updates. Received camera changes trigger the next server pass immediately; unchanged coverage does no field work. Transfer delays, caching and unloading cleanup avoid repeated work. Isolated players use vanilla ownership by default.
+- A camera-directed grid covers nearby interactive objects and idle tamed animals. One player's fields go to that player; overlapping fields go to the server. Stationary players still count. KeepOwnershipOnCellExit=true keeps the rear cutout; false covers the full shape with a red 3x3 centre and the orange row ahead.
+- `CameraDirectionOverlapDegrees` sets base angular overlap between adjacent directions: **30° by default**, adjustable from **0–45°** on the server. At 0°, one base direction is active; at 45°, two. Clients receive the server's angle; character-heading fallback uses it too. Changed coverage triggers the next server pass immediately; unchanged coverage does no field work. Isolated players use vanilla ownership by default.
+- `CameraRotationPredictionSeconds` prepares fields in your turning direction **0.1 seconds ahead** by default; **0 disables**, range 0–0.5. Faster turns can add one direction, up to three in total, while keeping your current coverage. Newly added fields use the **inner/red delay** (default **0 seconds**); existing fields keep their delays. Brief reversals are damped; usage protection stays active. Set it on the server; updated clients receive it automatically.
 - Hostile Mobs use AI target ownership with attack protection, consent, retries and safe server fallback. Hostile summons follow the same rules. Friendly magic summons, including skeletons, spirit animals and roots, stay outside both the grid and mob ownership policy. Ordinary tamed animals still use the grid; bosses and active controls retain their safeguards.
 - Open inventories, active users and refilling remain protected. Local PUP collision/stability guards remain a separate feature.
 
@@ -59,20 +60,21 @@ These examples use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botan
 
 ## Configuration
 
-Configure ownership rules, the grid, delays, ping limits and **camera check timing on the server** in `BepInEx/config/botanic.toomanylags.fgnaddon.cfg`. The server sends camera timing to all clients. Client copies of these settings are ignored. `Enabled` and `EnableAIOwnership` must be enabled consistently on the server and clients; `EnableLogs` affects only the installation where it is changed. Config descriptions state their scope; object categories share one note at the bottom.
+Configure **all gameplay settings on the server** in `BepInEx/config/botanic.toomanylags.fgnaddon.cfg`, including `Enabled`, `EnableAIOwnership` and camera settings. Clients follow the server when connecting; their local copies are ignored. Only `EnableLogs` is local. Config descriptions state their scope; object categories share one note at the bottom.
 
 **Console:** `tml_config list` lists settings; `tml_config <Key>` reads one; `tml_config <Key> <Value>` saves a change. Only admins can change server settings.
 
-Intervals, delays and mob fallback limits apply immediately. Other server settings take effect after restart. `Enabled` and `EnableAIOwnership` require client restarts too.
+Intervals, delays and mob fallback limits apply immediately. Other settings, including `Enabled` and `EnableAIOwnership`, take effect after a server restart; clients receive the new mode when reconnecting.
 
 Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOwnerDebug/) as an optional client-side debugging tool to see object and mob owners, check ownership transfers and tune your configuration.
 
 | Feature | Defaults and options |
 |---|---|
 | Simulation mode | `NoServerSideSimulation=false`: full Server-Side Simulation. Set true for weak server CPUs; transfers stay between players. |
-| Grid | 4-metre cells, rounded 7x7. Also 8/16 metres and square 3x3/rounded 5x5. 4 metres requires a rounded grid. |
-| Direction and delays | Camera direction; inner 0s, forward 0.2s, outer 3s. Full-grid mode uses 2s. Missing camera data uses character heading. |
+| Grid | 4-metre cells, rounded 7x7. Also 6.4/8/16 metres and square 3x3/rounded 5x5. 6.4 metres divides each vanilla zone into 10x10 cells. 4 metres requires a rounded grid. |
+| Direction and delays | Camera direction; overlap 0–45°, default 30 (`CameraDirectionOverlapDegrees`, server-controlled, live console supported). Inner 0s, forward 0.2s, outer 3s. Full-grid mode uses 2s. Missing camera data uses character heading. |
 | Server overlap cooldown | `ServerOverlapCooldownSeconds=1`: after an overlapping field switches to the server, keep it there and ignore new grid ownership decisions for 1s. Then the next movement/heading update can request it again; expiry alone causes no transfer. 0 disables. Requires Server-Side Simulation. |
+| Experimental interaction protection | `EnableExperimentalInteractionProtection=false` by default. Optional extra handoff and receiver checks introduced in 1.0.15; set on the server and restart. Existing inventory, refill and active-use protection stays enabled. Applies only with Server-Side Simulation. |
 | Checks | Movement and camera each default to 0.05s; both support 0.05–5s. Changed camera coverage gets send priority and wakes the next server pass, without another interval wait. Network delivery and protected handoffs can still add delay. |
 | Leaving fields | Keep ownership: on. In directional mode, when only one player remains, red fields transfer automatically; forward/outer fields keep their owner until that player's next cell or heading-sector change. Fully vacated fields retain ownership. Native release still applies. |
 | Categories and overrides | 24 object groups; separate static, default-interactive and permanent-refill server ownership. All three overrides default off and are ignored with NoServerSideSimulation=true. |
@@ -81,8 +83,8 @@ Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOw
 ## Requirements and installation
 
 1. Install **BepInEx, FiresGhettoNetworking and the same mod version on the dedicated server and every client**. Copy `TooManyLags.dll` into `BepInEx/plugins/TooManyLags/`.
-   Update clients together with the server: clients without the new handoff capability keep native interactive ownership.
-2. Copy the supplied config into `BepInEx/config/`, or let first startup generate it. Keep `EnableAIOwnership` consistent across server and clients.
+   Update clients together with the server. With experimental interaction protection enabled, clients without handoff support keep native interactive ownership.
+2. Configure the server using the supplied config in `BepInEx/config/`, or let first startup generate it. Client gameplay settings need no adjustment.
 3. Restart. **TooManyLags automatically applies all required FiresGhettoNetworking settings at startup; no manual FiresGhettoNetworking configuration is needed.** These overrides apply to the current session only. Your saved FiresGhettoNetworking config and other FiresGhettoNetworking settings remain unchanged.
 
 **Updating:** Object categories now use `10 - Object Categories`. Use the supplied config and reapply your custom values. Existing configs retain their saved check intervals; set both to `0.05` to use the new defaults. Update all clients too.

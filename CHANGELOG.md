@@ -1,5 +1,12 @@
 # Changelog
 
+**1.0.23**
+```
+- Makes Enabled and EnableAIOwnership server-controlled; clients ignore their local values, and only logging remains local. Both switches require a server restart; update server and clients together.
+- Restores guarded interactive handoffs after delayed join negotiation or stale owner replication. The extra 1.0.15 handoff protocol is now experimental and opt-in (EnableExperimentalInteractionProtection=false); existing inventory, refill, active-use and overlap safeguards remain enabled, and the player-simulation mode is unchanged.
+- Adds 6.4-metre cells and live tuning of camera overlap (0–45°, default 30°) and turn prediction (default 0.1s, 0 disables); predicted cells use the inner/red delay. KeepOwnershipOnCellExit=false includes rear fields with a red 3x3 centre, and outdated positions after teleportation no longer block grid transfers; changing cell size requires a server restart.
+```
+
 **1.0.17**
 ```
 - Restores camera-directed grid updates when initial server camera settings are missed; clients retry until synchronization succeeds.

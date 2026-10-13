@@ -25,7 +25,7 @@ namespace TooManyLags
         {
             switch (key)
             {
-                case "EnableLogs": case "CameraHeadingCheckIntervalSeconds": case "MovementRotationCheckIntervalSeconds":
+                case "EnableLogs": case "CameraHeadingCheckIntervalSeconds": case "CameraDirectionOverlapDegrees": case "CameraRotationPredictionSeconds": case "MovementRotationCheckIntervalSeconds":
                 case "InnerTransitionDelaySeconds": case "ForwardTransitionDelaySeconds": case "OuterTransitionDelaySeconds":
                 case "ServerOverlapCooldownSeconds":
                 case "TransitionDelaySeconds": case "ServerFallbackPingMs": case "ServerFallbackRadius": return true;
@@ -90,15 +90,14 @@ namespace TooManyLags
         }
         private static string RestartNotice(string key)
         {
-            return " Takes effect after server restart; the current session is unchanged." +
-                (key == "Enabled" || key == "EnableAIOwnership" ? " Set the same value on every client and restart those clients too." : "");
+            return " Takes effect after server restart; the current session is unchanged.";
         }
         private bool InvalidGrid(string key, object value)
         {
             if (key != "GridCellSizeMeters" && key != "GridCoveragePattern") return false;
-            int size = 0; string pattern = null;
+            float size = 0; string pattern = null;
             foreach (var pair in config)
-                if (pair.Key.Key == "GridCellSizeMeters") size = (int)(key == pair.Key.Key ? value : pair.Value.BoxedValue);
+                if (pair.Key.Key == "GridCellSizeMeters") size = Convert.ToSingle(key == pair.Key.Key ? value : pair.Value.BoxedValue, CultureInfo.InvariantCulture);
                 else if (pair.Key.Key == "GridCoveragePattern") pattern = (string)(key == pair.Key.Key ? value : pair.Value.BoxedValue);
             return size == 4 && pattern == "Square3x3";
         }

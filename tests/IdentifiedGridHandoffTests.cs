@@ -13,10 +13,11 @@ internal static class IdentifiedGridHandoffTests
         internal readonly Dictionary<ZDOID, ZDO> Data = new Dictionary<ZDOID, ZDO>();
         internal readonly FgnOwnerHandoff Handoff;
         internal double Time; internal int Sends, Queries; internal long Token; internal bool ThrowSend;
+        internal bool Matched = true;
         internal World()
         {
             Peers[10] = new ZNetPeer(); Peers[20] = new ZNetPeer(); Peers[30] = new ZNetPeer();
-            Handoff = new FgnOwnerHandoff(99, delegate { return true; }, FindPeer, FindData,
+            Handoff = new FgnOwnerHandoff(99, delegate { return Matched; }, FindPeer, FindData,
                 delegate(ZNetPeer p, ZDOID id, long target, uint revision, long token)
                 { Sends++; Token = token; if (ThrowSend) throw new Exception("uncertain send"); },
                 delegate { Queries++; }, delegate { return Time; });
@@ -33,6 +34,10 @@ internal static class IdentifiedGridHandoffTests
         try
         {
             World w = new World(); ZDO d = w.Add();
+            w.Matched = false;
+            Check("verified TML endpoint does not wait for the separate FGN version greeting", w.Handoff.Request(d, 20) == 1 && w.Sends == 1);
+            Check("separate FGN greeting cannot discard the active identified transaction", w.Handoff.Pending(d) && w.Handoff.Reserved(d));
+            w = new World(); d = w.Add();
             Check("identified commit starts", w.Handoff.Request(d, 20) == 1 && w.Sends == 1 && w.Token > 0);
             long first = w.Token;
             for (int i = 0; i < 10000; i++) w.Handoff.Request(d, 20);
@@ -58,6 +63,26 @@ internal static class IdentifiedGridHandoffTests
             Check("accepted snapshot is not native receipt", w.Reply(d, true, 20, 8) && w.Handoff.Pending(d) && !w.Handoff.Received(d));
             d.Owner = 20; Check("half tuple still protected", w.Handoff.Pending(d) && w.Handoff.Transitioning(d));
             d.OwnerRevision = 8; Check("actual committed tuple completes", !w.Handoff.Pending(d) && w.Handoff.Received(d));
+
+            // A new source can receive Commit before native ownership replication.
+            w = new World(); d = w.Add(); w.Handoff.Request(d, 20);
+            Check("stale-source response is identified", w.Reply(d, true, 30, 6) && w.Handoff.Pending(d));
+            w.Time = .5; w.Handoff.Request(d, 20);
+            Check("stale source requests status promptly without resending the commit", w.Queries == 1 && w.Sends == 1 && d.Owner == 10 && d.OwnerRevision == 7);
+            Check("source catches up with actual current native tuple", w.Reply(d, true, 10, 7) && !w.Handoff.Pending(d));
+            w.Handoff.Request(d, 20);
+            Check("caught-up source retries without an unrelated six-second use veto", w.Sends == 2 && w.Token > 0 && w.Handoff.Pending(d));
+
+            w = new World(); d = w.Add(); w.Handoff.Request(d, 20); first = w.Token;
+            w.Reply(d, true, 30, 6); w.Time = .5; w.Handoff.Request(d, 99);
+            Check("policy change during source repair never executes an uncertain second commit", w.Sends == 1 && w.Queries == 1 && w.Handoff.Pending(d));
+            w.Reply(d, true, 10, 7); w.Handoff.Request(d, 99);
+            Check("repaired source can follow current policy with a fresh fenced command", w.Sends == 2 && w.Token > first);
+            Check("old repair status cannot release current policy command", !w.Handoff.Observed(w.Peers[10].m_rpc, d.m_uid, first, true, true, 10, 7) && w.Handoff.Pending(d));
+
+            w = new World(); d = w.Add(); w.Handoff.Request(d, 20); w.Reply(d, true, 30, 6);
+            d.Owner = 30; d.OwnerRevision = 8;
+            Check("newer native owner discards source-repair reservation without overwriting it", !w.Handoff.Pending(d) && !w.Handoff.Reserved(d) && d.Owner == 30 && d.OwnerRevision == 8);
 
             w = new World(); d = w.Add(); w.Handoff.Request(d, 20);
             Check("gone is a terminal no-commit, not steal consent", w.Reply(d, false, 0, 0) && !w.Handoff.Pending(d) && d.Owner == 10 && d.OwnerRevision == 7);
@@ -86,9 +111,37 @@ internal static class IdentifiedGridHandoffTests
             Check("invalid identifiers never execute", !fence.Begin(0) && !fence.Begin(-1) && !fence.Decided(0));
             for (long i = 14; i < 100000; i++) if (!fence.Begin(i)) throw new Exception("monotonic fence");
             Check("history bounded to one scalar", fence.Decided(99999) && !fence.Begin(100));
+            Greeting();
             Console.WriteLine("PASS: " + checks + " identified handoff/fencing assertions; no live Unity or transport execution.");
         }
         finally { FgnOwnerHandoff.CooperativeClient = null; }
+    }
+    private static void Greeting()
+    {
+        CapabilityGreeting greeting = new CapabilityGreeting();
+        Check("inactive player-simulation/unsupported server sends no grid greeting", !greeting.Waiting(0) && !greeting.Due(0));
+        Check("advertisement is not a server acknowledgement", !greeting.Welcome(false));
+        Check("first valid advertisement requests capability immediately", greeting.Waiting(0) && greeting.Due(0) && greeting.Sent);
+        for (int i = 0; i < 10000; i++) if (greeting.Due(1)) throw new Exception("greeting frame flood");
+        Check("duplicate advertisements cannot confirm a dropped Hello", !greeting.Welcome(false) && greeting.Waiting(1));
+        Check("missing acknowledgement retries only after two seconds", !greeting.Due(1.99) && greeting.Due(2));
+        Check("server confirmation stops greeting work", greeting.Welcome(true) && !greeting.Waiting(2));
+        for (int i = 0; i < 10000; i++) if (greeting.Due(i)) throw new Exception("confirmed greeting retry");
+        Check("delayed advertisement cannot reopen a confirmed session", greeting.Welcome(false) && !greeting.Waiting(100));
+
+        greeting = new CapabilityGreeting(); int attempts = 0;
+        greeting.Welcome(false);
+        for (int i = 0; i < 1000; i++) if (greeting.Due(i)) attempts++;
+        Check("a nonresponding advertised endpoint has a bounded 30-second join window", attempts == 15 && !greeting.Waiting(30));
+        greeting.Welcome(false);
+        Check("late duplicate advertisement does not reset an expired retry window", !greeting.Due(1001) && !greeting.Waiting(1001));
+        Check("late actual acknowledgement is still accepted", greeting.Welcome(true) && !greeting.Waiting(1001));
+
+        greeting = new CapabilityGreeting();
+        Check("old server header-only offer starts negotiation", !greeting.Welcome(null) && greeting.Due(0));
+        Check("old server second header-only Welcome confirms the response", greeting.Welcome(null) && !greeting.Waiting(0));
+        greeting = new CapabilityGreeting();
+        Check("new connection gets independent fresh greeting state", !greeting.Sent && !greeting.Welcome(false) && greeting.Due(0));
     }
     private static bool LegacyBusy(World w, ZDO d) { w.Handoff.Result(w.Peers[10].m_rpc, d.m_uid, false, "held"); return true; }
 }

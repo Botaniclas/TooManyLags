@@ -2,6 +2,11 @@ $ErrorActionPreference='Stop'
 $authorityCompiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe'
 $authorityOutput=Join-Path $PSScriptRoot 'bin\directional-tests'
 New-Item -ItemType Directory -Force -Path $authorityOutput | Out-Null
+$predictionExe = Join-Path $authorityOutput 'CameraPredictionTests.exe'
+& $authorityCompiler /nologo /optimize+ /warnaserror+ /nowarn:0649 /langversion:5 ('/out:'+$predictionExe) (Join-Path $PSScriptRoot 'src/AuthorityGrid.cs') (Join-Path $PSScriptRoot 'src/CameraPrediction.cs') (Join-Path $PSScriptRoot 'tests/CameraPredictionTests.cs')
+if ($LASTEXITCODE -ne 0) { throw 'Camera prediction compilation failed.' }
+& $predictionExe
+if ($LASTEXITCODE -ne 0) { throw 'Camera prediction regression failed.' }
 $authorityExe=Join-Path $authorityOutput 'DirectionalGridTests.exe'
 & $authorityCompiler /nologo /optimize+ /warnaserror+ /langversion:5 ('/out:'+$authorityExe) (Join-Path $PSScriptRoot 'src\AuthorityGrid.cs') (Join-Path $PSScriptRoot 'tests\DirectionalGridTests.cs')
 if($LASTEXITCODE -ne 0){throw 'Directional compile failed.'}

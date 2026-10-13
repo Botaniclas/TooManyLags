@@ -33,8 +33,9 @@ internal static class FieldCacheTests
             world.Tick(a, 0); world.Tick(a, 3);
             Check("completed yellow field remembered only when enabled", world.Grid.RememberedCells == (keep ? 1 : 0));
             int attempts = world.Attempts;
-            world.Tick(Peers(P(1, yaw: 180)), 4); world.Tick(Peers(P(1, yaw: 180)), 7);
-            Check("directional rear is no longer covered", world.Grid.Candidate(Yellow) == 0);
+            var outside = Peers(P(1, x: keep ? 0 : 10, yaw: 180));
+            world.Tick(outside, 4); world.Tick(outside, 7);
+            Check("field is vacated by turning with the rear cutout or moving outside the full shape", world.Grid.Candidate(Yellow) == 0);
             world.Tick(a, 8);
             Check("remembered player skips new outer timer", world.Grid.Owner(Yellow) == (keep ? 1 : 0));
             world.Tick(a, 11);

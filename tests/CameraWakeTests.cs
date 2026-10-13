@@ -65,6 +65,10 @@ internal static class CameraWakeTests
             var impostor = new ZDO { m_uid = player.m_uid, Owner = 7, Coverage = 1 };
             Check(!wake.Changed(impostor), "same ID from stale object cannot request a pass");
             player.Coverage = 16;
+            Check(wake.Changed(player) && !wake.Changed(player), "predictive triple wakes one pass");
+            player.Coverage = 32;
+            Check(wake.Changed(player) && !wake.Changed(player), "red forecast coverage wakes one pass");
+            player.Coverage = 56;
             Check(wake.Changed(player) && !wake.Changed(player), "invalid advisory triggers fallback once");
             player.Coverage = Int32.MaxValue;
             Check(!wake.Changed(player), "equivalent invalid advisories do not create repeated work");

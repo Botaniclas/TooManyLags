@@ -8,7 +8,7 @@ foreach ($dep in @('BepInEx.dll','0Harmony.dll','MonoMod.Utils.dll','MonoMod.Run
     Copy-Item -LiteralPath (Join-Path $taskCore $dep) -Destination $taskOutput -Force
 }
 $taskExe = Join-Path $taskOutput 'ConfigConsoleTests.exe'
-$taskSources = @('src/ConfigCommands.cs','src/ConfigConsole.cs','tests/ConfigConsoleTests.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ }
+$taskSources = @('src/ConfigCommands.cs','src/ConfigConsole.cs','src/ServerSession.cs','tests/ConfigConsoleTests.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ }
 & $taskCompiler /nologo /target:exe /optimize+ /langversion:5 /warnaserror+ ('/reference:'+(Join-Path $taskCore 'BepInEx.dll')) ('/reference:'+(Join-Path $taskCore '0Harmony.dll')) ('/out:'+$taskExe) $taskSources
 if ($LASTEXITCODE -ne 0) { throw 'Live-config fixture compilation failed.' }
 & $taskExe $taskOutput

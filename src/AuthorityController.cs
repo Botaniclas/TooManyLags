@@ -23,7 +23,8 @@ namespace TooManyLags
         private readonly CompatibilityBridge compatibility;
         private readonly Action<Exception> fault, requestFault;
         private readonly bool staticEnabled, defaultInteractives, refillStations, keepOnExit;
-        private readonly int cellSize;
+        private readonly float cellSize;
+        private readonly int subdivisions;
         private readonly GridCoveragePattern pattern;
         private readonly bool directional;
         private float innerDelay, outerDelay, forwardDelay, overlapCooldown;
@@ -53,14 +54,15 @@ namespace TooManyLags
         internal FgnOwnerHandoff Cooperative { get; private set; }
         internal AuthorityController(Kinds kinds, float delay, CompatibilityBridge compatibility,
             Action<Exception> fault, bool staticEnabled, Action<Exception> requestFault, float checkIntervalSeconds,
-            bool defaultInteractives, bool refillStations, int cellSize, GridCoveragePattern pattern, bool keepOnExit,
+            bool defaultInteractives, bool refillStations, float cellSize, GridCoveragePattern pattern, bool keepOnExit,
             bool directional = false, float innerDelay = 0f, float outerDelay = 3f, float forwardDelay = .2f, float overlapCooldown = 0f)
         {
             this.kinds = kinds; this.delay = delay; cadence = new OwnershipCadence(checkIntervalSeconds);
             this.compatibility = compatibility; this.fault = fault; this.requestFault = requestFault; this.staticEnabled = staticEnabled;
             this.defaultInteractives = defaultInteractives; this.refillStations = refillStations;
             this.keepOnExit = keepOnExit;
-            this.cellSize = cellSize == 4 || cellSize == 16 ? cellSize : 8;
+            this.cellSize = Cell.Subdivisions(cellSize) != 0 ? cellSize : 8f;
+            subdivisions = Cell.Subdivisions(this.cellSize);
             this.directional = directional; this.innerDelay = innerDelay; this.outerDelay = outerDelay; this.forwardDelay = forwardDelay;
             this.overlapCooldown = overlapCooldown;
             this.pattern = pattern == GridCoveragePattern.Rounded5x5 || pattern == GridCoveragePattern.Rounded7x7 ? pattern : GridCoveragePattern.Square3x3;
@@ -136,7 +138,11 @@ namespace TooManyLags
                     if (peer == null || !peer.IsReady() || peer.m_uid == 0 || peer.m_uid == server || !peerIds.Add(peer.m_uid)) continue;
                     ZDO player = peer.m_characterID.IsNone() ? null : world.GetZDO(peer.m_characterID); Cell cell;
                     Vector3 position = player != null && player.IsValid() ? player.GetPosition() : new Vector3(Single.NaN, 0, Single.NaN);
-                    bool valid = Cell.At(position.x, position.z, cellSize, out cell);
+                    // A reference-area update can precede the character ZDO
+                    // after teleporting. An obsolete character outside its own
+                    // native loaded area must not contribute an old footprint.
+                    bool valid = Cell.At(position.x, position.z, cellSize, out cell) &&
+                        ZNetScene.InActiveArea(position, ZoneSystem.GetZone(peer.GetRefPos()));
                     if (valid)
                     {
                         peers.Add(GridPeer.Covered(peer.m_uid, cell, !coarseEnabled && directional ? CameraHeading.Read(player, peer.m_uid, cameras) : 0));
@@ -218,13 +224,13 @@ namespace TooManyLags
             {
                 NativeNode node; if (!nodes.TryGetValue(data.m_uid, out node) || !ReferenceEquals(node.Data, data)) return;
                 Vector3 pos = data.GetPosition(); if (!Finite(pos)) { Remove(node); return; }
-                float left = node.Cell.X * cellSize - 32f, bottom = node.Cell.Z * cellSize - 32f;
-                if (pos.x >= left && pos.x < left + cellSize && pos.z >= bottom && pos.z < bottom + cellSize) return;
+                if (node.ContainsPosition(pos)) return;
                 Cell next; if (!Cell.At(pos.x, pos.z, cellSize, out next)) { Remove(node); return; }
                 // The destination, not the former cell, decides whether this
                 // movement needs policy work. The loaded-object index still
                 // follows animals/carts so shared entry can find them cheaply.
-                bool schedule = NeedsGrid(next) || (refillStations && node.ServerStation) || ProtectedTransfer(data);
+                node.CacheCellGeometry(next);
+                bool schedule = NeedsGrid(node) || (refillStations && node.ServerStation) || ProtectedTransfer(data);
                 indexed.Move(node, next, Time.unscaledTime, schedule);
             }
             catch (Exception error) { Fail(error); }
@@ -288,7 +294,7 @@ namespace TooManyLags
                 if (!active || failed || !persistent || !ReferenceEquals(world, ZDOMan.instance) || BakedObjects.IsBaked(data)) return persistent;
                 NativeNode node; bool known = nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data);
                 if (known && (node.UseProtected() || ProtectedTransfer(data) ||
-                    (node.Managed && node.ManagedOwner == data.GetOwner() && (NeedsGrid(node.Cell) || (refillStations && node.ServerStation)))) &&
+                    (node.Managed && node.ManagedOwner == data.GetOwner() && (NeedsGrid(node) || (refillStations && node.ServerStation)))) &&
                     node.Identity() && node.Controllable() && AvailableOwner(data.GetOwner(), data.GetPosition()))
                 {
                     return false;
@@ -311,9 +317,10 @@ namespace TooManyLags
             if (peer == null || !peer.IsReady() || !Cell.At(position.x, position.z, cellSize, out cell)) return false;
             OwnerCell key = new OwnerCell { Owner = owner, Cell = cell, Center = ZoneSystem.GetZone(peer.GetRefPos()) };
             bool result; if (available.TryGetValue(key, out result)) return result;
-            float x = cell.X * cellSize - 32f, z = cell.Z * cellSize - 32f;
-            result = ZNetScene.InActiveArea(new Vector3(x, 0, z), key.Center) && ZNetScene.InActiveArea(new Vector3(x + cellSize, 0, z), key.Center) &&
-                ZNetScene.InActiveArea(new Vector3(x, 0, z + cellSize), key.Center) && ZNetScene.InActiveArea(new Vector3(x + cellSize, 0, z + cellSize), key.Center);
+            float x = (float)Cell.Edge(cell.X, subdivisions), z = (float)Cell.Edge(cell.Z, subdivisions);
+            float right = (float)Cell.Edge(cell.X + 1, subdivisions), top = (float)Cell.Edge(cell.Z + 1, subdivisions);
+            result = ZNetScene.InActiveArea(new Vector3(x, 0, z), key.Center) && ZNetScene.InActiveArea(new Vector3(right, 0, z), key.Center) &&
+                ZNetScene.InActiveArea(new Vector3(x, 0, top), key.Center) && ZNetScene.InActiveArea(new Vector3(right, 0, top), key.Center);
             available[key] = result; return result;
         }
         private bool AreaReady(Vector3 position)
@@ -340,7 +347,12 @@ namespace TooManyLags
         {
             NativeNode node;
             if (nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data) && !node.Removed)
-                node.Recipient.Include(recipient, revision, state);
+            {
+                // Delayed source/status replies must not erase a requirement
+                // belonging to the newer native owner tuple.
+                if (revision >= data.OwnerRevision && revision >= node.Recipient.Revision)
+                    node.Recipient.Include(recipient, revision, state);
+            }
         }
         internal bool TryRecipientState(ZDO data, long recipient, out uint state)
         {
@@ -356,11 +368,11 @@ namespace TooManyLags
                 if (node.Data.GetOwner() == uid || indexed.Grid.Owner(node.Cell) == uid) indexed.Changed(node, Time.unscaledTime, NeedsPolicy(node));
             cadence.Request();
         }
-        private bool NeedsGrid(Cell cell) { return !coarseEnabled || regions.Contains(cell, cellSize); }
+        private bool NeedsGrid(NativeNode node) { return !coarseEnabled || regions.ContainsZone(node.NativeZone); }
         private bool ProtectedTransfer(ZDO data)
         { return Inventory.Transitioning(data) || Cooperative.Transitioning(data) || TransferPending(data) || Cooperative.Reserved(data); }
         private bool NeedsPolicy(NativeNode node)
-        { return NeedsGrid(node.Cell) || (refillStations && node.ServerStation) || ProtectedTransfer(node.Data); }
+        { return NeedsGrid(node) || (refillStations && node.ServerStation) || ProtectedTransfer(node.Data); }
         internal RegionContentionGate RegionGate { get { return regions; } }
         internal int ScheduledAttempts { get { return indexed == null ? 0 : indexed.Attempts; } }
         internal int FieldUpdates { get { return indexed == null ? 0 : indexed.Grid.PlayerUpdates; } }
@@ -402,6 +414,8 @@ namespace TooManyLags
             internal uint Revision;
             internal GridHandoffs.RecipientRequirement Recipient;
             internal int Requests;
+            internal Cell NativeZone;
+            private double cellLeft, cellRight, cellBottom, cellTop;
             private float refillAt, refillUntil, inventoryAt, inventoryUntil;
             private long refillOwner, inventoryOwner;
             private uint refillRevision;
@@ -411,6 +425,7 @@ namespace TooManyLags
             internal NativeNode(AuthorityController owner, ZDO data, ZNetView view, Kinds kind, Cell cell, Tameable animal, Character character)
             {
                 this.owner = owner; Data = data; Id = data.m_uid; View = view; Kind = kind; Cell = cell;
+                CacheCellGeometry(cell);
                 coveredBefore = owner.indexed.Grid.Candidate(cell) != 0;
                 wear = view.GetComponent<WearNTear>(); ship = kind == Kinds.Vehicles && view.GetComponent<Ship>();
                 if (kind == Kinds.Vehicles) cart = view.GetComponent<Vagon>();
@@ -426,6 +441,14 @@ namespace TooManyLags
                     view.GetComponentInChildren<ShieldGenerator>(true) || view.GetComponentInChildren<Turret>(true) || kind == Kinds.Incinerators;
                 ObservedOwner = data.GetOwner(); Revision = data.OwnerRevision;
             }
+            internal void CacheCellGeometry(Cell cell)
+            {
+                NativeZone = Cell.Zone(cell, owner.cellSize);
+                cellLeft = Cell.Edge(cell.X, owner.subdivisions); cellRight = Cell.Edge(cell.X + 1, owner.subdivisions);
+                cellBottom = Cell.Edge(cell.Z, owner.subdivisions); cellTop = Cell.Edge(cell.Z + 1, owner.subdivisions);
+            }
+            internal bool ContainsPosition(Vector3 position)
+            { return position.x >= cellLeft && position.x < cellRight && position.z >= cellBottom && position.z < cellTop; }
             internal override long CurrentOwner { get { return Data.GetOwner(); } }
             internal override bool CanRemember(long fieldOwner)
             {
@@ -472,7 +495,7 @@ namespace TooManyLags
             private long DesiredOwner(long fieldOwner)
             {
                 if (owner.refillStations && serverStation) return owner.server;
-                if (!owner.NeedsGrid(Cell)) return 0;
+                if (!owner.NeedsGrid(this)) return 0;
                 // Remember coverage only for this loaded instance. An unrelated
                 // later event must not turn its vacated field into a return job.
                 if (owner.indexed.Grid.Candidate(Cell) == 0)
@@ -488,7 +511,7 @@ namespace TooManyLags
             internal override ApplyResult Apply(long target)
             {
                 if (!Identity() || Summoned) { owner.Remove(this); return ApplyResult.Dropped; }
-                if (!(owner.refillStations && serverStation) && !owner.NeedsGrid(Cell))
+                if (!(owner.refillStations && serverStation) && !owner.NeedsGrid(this))
                 {
                     // Stop policy work, not native in-flight transactions. Never
                     // resubmit a vetoed handoff or force an onward owner write
@@ -516,7 +539,7 @@ namespace TooManyLags
                 if (target == 0) return ApplyResult.Done;
                 Vector3 position = Data.GetPosition(); Cell current;
                 if (!Finite(position) || !Cell.At(position.x, position.z, owner.cellSize, out current)) return ApplyResult.Dropped;
-                if (!current.Equals(Cell)) { owner.indexed.Move(this, current, Time.unscaledTime); return ApplyResult.Pending; }
+                if (!current.Equals(Cell)) { CacheCellGeometry(current); owner.indexed.Move(this, current, Time.unscaledTime); return ApplyResult.Pending; }
                 if (!owner.AvailableOwner(target, position)) return ApplyResult.Pending;
                 // A capability check replaces an exact-version lock. Connected
                 // clients lacking identified commits/readiness retain native ownership.

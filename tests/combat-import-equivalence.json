@@ -6,7 +6,7 @@
     {
       "file": "FgnCombatOwnership.cs",
       "source_sha256": "1EEEA58FF57EBBB0E8CC3A271A45D2D43C82BE94D97AEE1B579C6C87CBD70C14",
-      "import_sha256": "A53D1E79B8FFA137EE9697023F9741A1D03845ED2E0C13827A906FBCC45546B6",
+      "import_sha256": "129B34E985678B48FF6B7F24CF9155ABC6094094B9E15FBC5B4B86F2AA6CF425",
       "namespace_branding_protocol_only": false,
       "additional_changes": [
         "Config section/descriptions/default adapted for required FGN and 09 - AI Mob Ownership.",
@@ -16,7 +16,8 @@
         "1.0.3 adds the narrow non-player Character.Faction.Players exclusion to AI eligibility/watches/reports/queued handoff veto/server loading/lease cleanup/late-hit forwarding. Current-player-only targets and original protections/caps remain unchanged.",
         "1.0.3 uses weak cached loaded actor references for current live faction and a scene-scoped 1024-entry FIFO cache of prefab Character references for unloaded ZDO classification. Missing prefabs are retried; session/fault/scene lifecycle clears caches; current cached faction is read instead of storing an immutable boolean.",
         "1.0.8 changes only configuration descriptions in this imported module: expands FiresGhettoNetworking and Server-Side Simulation, and explains the player-simulation fallback. Runtime AI logic unchanged.",
-        "1.0.10 adds server/client scope and live-console descriptions; executable AI logic remains unchanged. Threshold entries were already read dynamically."
+        "1.0.10 adds server/client scope and live-console descriptions; executable AI logic remains unchanged. Threshold entries were already read dynamically.",
+        "1.0.23 makes the config description server-only and adds ConnectCurrentServer for one-time registration/query after authenticated lazy client startup. AI selection, attacks, leases, collision guards and transfer algorithms are unchanged."
       ]
     },
     {

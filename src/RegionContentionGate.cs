@@ -32,14 +32,11 @@ namespace TooManyLags
         internal int CachedZones { get { return zones.Count; } }
         internal int CachedPeers { get { return previous.Count; } }
         internal bool Shared(long uid) { return shared.Contains(uid); }
-        internal bool Contains(Cell fine, int size)
-        {
-            // Supported subdivisions divide 64 by a power of two. Arithmetic
-            // shift is floor division, including negative cells; no integer
-            // divisions/remainders in the native per-object persistence hook.
-            int shift = size == 4 ? 4 : size == 16 ? 2 : 3;
-            return uncertain || zones.Contains(new Cell(fine.X >> shift, fine.Z >> shift));
-        }
+        internal bool Contains(Cell fine, float size)
+        { return uncertain || zones.Contains(Cell.Zone(fine, size)); }
+        // Registered objects cache their native zone on cell changes, so the
+        // per-object persistence hook never needs to divide by ten.
+        internal bool ContainsZone(Cell zone) { return uncertain || zones.Contains(zone); }
         internal bool Update(List<RegionPeer> peers)
         {
             bool changed = peers.Count != previous.Count;

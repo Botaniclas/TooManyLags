@@ -153,7 +153,9 @@ internal static class NativeCombatAudit
             Check(Method(data,"GetSaveData").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="s_sessionOnly"),"session-only fields excluded during save");
             TypeDefinition combat=addon.MainModule.Types.Single(t=>t.Name=="FgnCombatOwnership");
             TypeDefinition plugin=addon.MainModule.Types.Single(t=>t.FullName=="TooManyLags.Plugin");
-            var startPolicy=Method(plugin,"Start").Body.Instructions.ToList();
+            var startPolicy=Method(plugin,"InitializeOwnership").Body.Instructions.ToList();
+            Check(new[]{"Start","ApplyServerSession"}.All(name=>Method(plugin,name).Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="InitializeOwnership")),
+                "server startup and authenticated client startup use the same guarded policy initializer");
             int policyCheck=startPolicy.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="MobPolicyHandoff"&&((MethodReference)i.Operand).Name=="Begin"),
                 policyInstall=startPolicy.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="FgnCombatOwnership"&&((MethodReference)i.Operand).Name=="Install");
             Check(policyCheck>=0&&policyInstall>policyCheck,"actual startup suspends previous combat before installing addon hooks");
@@ -167,8 +169,11 @@ internal static class NativeCombatAudit
                 "actual bridge uses module lifecycle methods without editing config or removing guards itself");
             int commit=startPolicy.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="MobPolicyHandoff"&&((MethodReference)i.Operand).Name=="Commit"),
                 dispose=startPolicy.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="MobPolicyHandoff"&&((MethodReference)i.Operand).Name=="Dispose");
-            Check(commit>policyInstall&&dispose>commit&&Method(plugin,"Start").Body.ExceptionHandlers.Any(h=>h.HandlerType==Mono.Cecil.Cil.ExceptionHandlerType.Finally),
-                "actual startup commits successful takeover and always disposes the rollback transaction");
+            Check(commit>policyInstall&&dispose>commit&&Method(plugin,"InitializeOwnership").Body.ExceptionHandlers.Any(h=>h.HandlerType==Mono.Cecil.Cil.ExceptionHandlerType.Finally),
+                "policy startup commits server takeover or retains client rollback and always disposes failed transactions");
+            Check(startPolicy.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="clientTakeover")&&
+                Method(plugin,"ClearClientSession").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="MobPolicyHandoff"&&((MethodReference)i.Operand).Name=="Dispose"),
+                "client session retains and restores its suspended prior policy");
             Check(startPolicy.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).DeclaringType.Name=="FgnCombatOwnership"&&((FieldReference)i.Operand).Name=="Enabled")&&
                 startPolicy.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).DeclaringType.Name=="LocalAgent"&&((FieldReference)i.Operand).Name=="MobsEnabled"),
                 "actual startup checks installed normal combat or ready player-mode mob hooks before committing");

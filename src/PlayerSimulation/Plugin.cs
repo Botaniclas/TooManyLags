@@ -29,6 +29,7 @@ namespace TooManyLags.PlayerSimulation
             harmony = new Harmony(TooManyLags.Plugin.Id + ".playersimulation");
             harmony.CreateClassProcessor(typeof(ConnectionPatch)).Patch();
             harmony.CreateClassProcessor(typeof(ShutdownPatch)).Patch();
+            if (ZNet.instance) foreach (ZNetPeer peer in ZNet.instance.GetPeers()) Network.Register(peer);
             if (serverMode) Activate();
         }
         internal static void Activate()

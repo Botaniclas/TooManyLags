@@ -7,9 +7,11 @@ namespace TooManyLags
     internal sealed class CameraPublisher
     {
         private readonly OwnershipCadence cadence;
+        private readonly CameraPrediction prediction = new CameraPrediction();
         private ZDO previous;
         private ZNet network;
         private ZDOMan world;
+        private Vector3 previousPosition;
         internal CameraPublisher(float interval) { cadence = new OwnershipCadence(interval, .05f); }
         internal void Configure(float interval) { cadence.Configure(interval, .05f); }
         internal void Sample(float now)
@@ -25,6 +27,14 @@ namespace TooManyLags
             ZDO data = view.GetZDO();
             if (data == null || !data.IsValid() || data.m_uid.IsNone() || !ReferenceEquals(ZDOMan.instance.GetZDO(data.m_uid), data)) { Reset(); return; }
             bool fresh = !ReferenceEquals(previous, data) || !ReferenceEquals(network, current) || !ReferenceEquals(world, ZDOMan.instance);
+            if (fresh) prediction.Reset();
+            if (CameraHeading.Prediction > 0f)
+            {
+                Vector3 position = data.GetPosition();
+                float dx = position.x - previousPosition.x, dy = position.y - previousPosition.y, dz = position.z - previousPosition.z;
+                if (dx > 16f || dx < -16f || dy > 16f || dy < -16f || dz > 16f || dz < -16f) prediction.Reset();
+                previousPosition = position;
+            }
             // Horizontal projection ignores pitch and roll. Missing/vertical
             // camera direction restores the server's character-heading fallback.
             GameCamera camera = GameCamera.instance;
@@ -32,8 +42,9 @@ namespace TooManyLags
             if (camera && !GameCamera.InFreeFly())
             {
                 Vector3 forward = camera.transform.forward;
-                heading = CameraHeading.Coverage(forward.x, forward.z);
+                heading = prediction.Sample(forward.x, forward.z, now, CameraHeading.Overlap, CameraHeading.Prediction);
             }
+            else prediction.Reset();
             if (fresh) ZDOExtraData.AddSessionHash(CameraHeading.Key);
             if (fresh || data.GetInt(CameraHeading.Key, -1) != heading)
             {
@@ -52,7 +63,7 @@ namespace TooManyLags
                 previous.Set(CameraHeading.Key, -1);
                 world.ForceSendZDO(previous.m_uid);
             }
-            previous = null; network = null; world = null;
+            prediction.Reset(); previous = null; network = null; world = null;
         }
     }
     [HarmonyPatch(typeof(GameCamera), "LateUpdate")]

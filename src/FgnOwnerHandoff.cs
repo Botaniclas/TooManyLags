@@ -11,6 +11,7 @@ namespace TooManyLags
     internal sealed class FgnOwnerHandoff
     {
         private const double RetrySeconds = 6.0;
+        private const double SourceSyncSeconds = .5;
         internal static Func<ZNetPeer, bool> CooperativeClient { get; set; }
         internal static Action<ZNetPeer, ZDOID, long, uint, long> IdentifiedSend { get; set; }
         internal static Action<ZNetPeer, ZDOID, long> IdentifiedStatus { get; set; }
@@ -26,6 +27,7 @@ namespace TooManyLags
             internal bool InFlight;
             internal long Token;
             internal bool Reconciling;
+            internal bool SourceBehind;
             internal double StatusAt;
         }
 
@@ -109,7 +111,7 @@ namespace TooManyLags
             if (source == 0 || source == server || target == 0 || target == source ||
                 data.OwnerRevision >= UInt16.MaxValue) return 0;
             ZNetPeer sourcePeer = peer(source);
-            if (!Ready(sourcePeer) || !matched(sourcePeer) || !Supports(sourcePeer)) return 0;
+            if (!SourceReady(sourcePeer)) return 0;
             stamp = Create(data, sourcePeer, target);
             pending.Add(data, stamp);
             Retry(stamp);
@@ -163,17 +165,20 @@ namespace TooManyLags
             if (!stamp.InFlight && !stamp.Reconciling) return false;
             // The identified commit has definitely returned. It cannot execute
             // later: status messages never invoke it and the source fences tokens.
+            bool caughtUp = stamp.SourceBehind && present && Unchanged(data, stamp) &&
+                observedOwner == stamp.Source && observedRevision == stamp.Revision;
+            stamp.SourceBehind = present && Unchanged(data, stamp) && observedRevision < stamp.Revision;
             stamp.InFlight = false;
-            stamp.RetryAt = clock() + RetrySeconds;
+            stamp.RetryAt = caughtUp ? clock() : clock() + RetrySeconds;
             stamp.Reconciling = present && (data.GetOwner() != observedOwner || data.OwnerRevision != observedRevision);
-            stamp.StatusAt = clock() + 2;
+            stamp.StatusAt = clock() + (stamp.SourceBehind ? SourceSyncSeconds : 2);
             return true;
         }
 
         private void Probe(Stamp stamp)
         {
             if (stamp.Token == 0 || status == null || (!stamp.InFlight && !stamp.Reconciling) || clock() < stamp.StatusAt) return;
-            stamp.StatusAt = clock() + 2;
+            stamp.StatusAt = clock() + (stamp.SourceBehind ? SourceSyncSeconds : 2);
             try { status(stamp.Peer, stamp.Id, stamp.Token); } catch (Exception) { }
         }
 
@@ -217,7 +222,14 @@ namespace TooManyLags
         {
             ZNetPeer current = peer(stamp.Source);
             return System.Object.ReferenceEquals(current, stamp.Peer) && Ready(current) &&
-                System.Object.ReferenceEquals(current.m_rpc, stamp.Rpc) && matched(current);
+                System.Object.ReferenceEquals(current.m_rpc, stamp.Rpc) && SourceReady(current);
+        }
+        private bool SourceReady(ZNetPeer source)
+        {
+            // Identified TML messages invoke the locally validated FGN callback.
+            // Their own authenticated capability replaces the unrelated FGN
+            // version greeting. Legacy FGN messages still require that greeting.
+            return Ready(source) && (identified != null ? Supports(source) : matched(source));
         }
         private static bool Ready(ZNetPeer value)
         { return value != null && value.IsReady() && value.m_rpc != null; }

@@ -42,7 +42,7 @@ internal static class IntegrationTests
     private static bool loadingObserver;
     private static ZNetPeer observer;
     private static void Check(string label,bool result){checks++;if(!result)throw new Exception(label);}
-    private static void Fresh(Kinds kinds,bool statics=false,bool defaultInteractives=false,bool refillStations=false,int cellSize=8,GridCoveragePattern pattern=GridCoveragePattern.Square3x3,bool keepOnExit=true,bool directional=false,float innerDelay=0,float outerDelay=3,float checkIntervalSeconds=1,float forwardDelay=.2f,bool nativeSolo=false,float overlapCooldown=0)
+    private static void Fresh(Kinds kinds,bool statics=false,bool defaultInteractives=false,bool refillStations=false,float cellSize=8,GridCoveragePattern pattern=GridCoveragePattern.Square3x3,bool keepOnExit=true,bool directional=false,float innerDelay=0,float outerDelay=3,float checkIntervalSeconds=1,float forwardDelay=.2f,bool nativeSolo=false,float overlapCooldown=0)
     {
         if(controller!=null)controller.Reset();
         next=1;failures=0;Time.time=Time.unscaledTime=0;
@@ -153,6 +153,32 @@ internal static class IntegrationTests
         ZNet.instance.Peers.Remove(peer2);Tick(7);Tick(9);Check("station never moves back to peer",station.GetOwner()==99);
         Check("tame returns to current unique covering peer",tame.GetOwner()==1);
         station.OwnerRevision=UInt16.MaxValue;station.SetOwner(3);station.OwnerRevision=UInt16.MaxValue;controller.OwnerChanged(station);Tick(10);Tick(12);Check("addon never causes owner revision wrap",station.GetOwner()==3);
+    }
+    private static void ExperimentalProtectionDisabled()
+    {
+        Check("disabled extra protection installs no capability or recipient delegates",FgnOwnerHandoff.CooperativeClient==null&&FgnOwnerHandoff.IdentifiedSend==null&&FgnOwnerHandoff.IdentifiedStatus==null&&RequestRouter.RecipientReady==null);
+        Fresh(Kinds.Doors|Kinds.Containers|Kinds.Smelters,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true);
+        Peer(1,40);var source=Peer(7,140);FiresGhettoNetworkMod.FgnVersionGate.Match=true;Tick(0);
+        var door=Object(typeof(Door),41);var chest=Object(typeof(Container),41);var station=Object(typeof(Smelter),41);
+        chest.Use=1;var stationNode=controller.RequestNode(station.m_uid,"RPC_AddFuel".GetStableHashCode());
+        Check("station has a loaded refill node",stationNode!=null);stationNode.Refilled("RPC_AddFuel".GetStableHashCode());
+        int handoffs=0,inventoryQueries=0;
+        source.m_rpc.OnInvoke=delegate(string name,object[] values){
+            Check("disabled mode uses the native two-argument FGN handoff",name=="FGN_HandOff"&&values.Length==2&&((ZDOID)values[0]).Equals(door.m_uid)&&(long)values[1]==1);handoffs++;
+        };
+        ZNetScene.instance.FindInstance(chest).OnInvoke=delegate(long target,string method,object[] args){
+            Check("disabled mode retains native inventory acquisition",target==7&&method=="RPC_RequestOpen"&&(long)args[0]==0);inventoryQueries++;
+        };
+        Tick(.1f);Tick(1);
+        Check("distant source can hand off without a TML capability greeting",handoffs==1&&controller.Cooperative.Pending(door)&&door.GetOwner()==7);
+        Check("open inventory and refill lease remain protected with the extra guard off",chest.GetOwner()==7&&station.GetOwner()==7&&inventoryQueries==0);
+        Import(door,1,false);Tick(2);uint state;
+        Check("native receipt completes without adding recipient-readiness work",door.GetOwner()==1&&!controller.Cooperative.Pending(door)&&!controller.TryRecipientState(door,1,out state));
+        ZDOMan.instance.MarkSent(1,door);
+        Check("stable interaction stays on the native fast path",!controller.Router.TryHandle(ZRoutedRpc.instance,Request(door,"UseDoor",1),false)&&ZRoutedRpc.instance.Remote.Count==0);
+        chest.Use=0;Tick(3);
+        Check("closed inventory requests native consent instead of a forced owner write",inventoryQueries==1&&chest.GetOwner()==7&&chest.Writes==0);
+        Check("ten-second refill lease is independent of the experimental mode",station.GetOwner()==7&&station.Writes==0);
     }
     private static void CooperativeAndRouting()
     {
@@ -341,7 +367,8 @@ internal static class IntegrationTests
         Check("stable camera sector repeats no field request",controller.FieldUpdates==updates+1);
         player.Set(CameraHeading.Key,-1);player.Yaw=180;Tick(3);
         Check("camera sentinel follows current body heading",controller.FieldUpdates==updates+2&&player.RotationReads>0);
-        foreach(int invalid in new[]{-1,16,int.MaxValue}){player.Set(CameraHeading.Key,invalid);Check("invalid advisory falls back",CameraHeading.Read(player,1)==4);}
+        player.Set(CameraHeading.Key,16);Check("predictive triple advisory is accepted",CameraHeading.Read(player,1)==16);
+        foreach(int invalid in new[]{-1,56,int.MaxValue}){player.Set(CameraHeading.Key,invalid);Check("invalid advisory falls back",CameraHeading.Read(player,1)==4);}
         player.Set(CameraHeading.Key,0);player.SetOwner(2);Check("foreign owner advisory is ignored",CameraHeading.Read(player,1)==4);
 
         Fresh(Kinds.Doors,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true,checkIntervalSeconds:.05f);
@@ -523,7 +550,7 @@ internal static class IntegrationTests
     }
     private static void GridSettings()
     {
-        foreach(int size in new[]{4,8,16})foreach(GridCoveragePattern shape in new[]{GridCoveragePattern.Square3x3,GridCoveragePattern.Rounded5x5,GridCoveragePattern.Rounded7x7})
+        foreach(float size in new[]{4f,6.4f,8f,16f})foreach(GridCoveragePattern shape in new[]{GridCoveragePattern.Square3x3,GridCoveragePattern.Rounded5x5,GridCoveragePattern.Rounded7x7})
         {
             if(size==4&&shape==GridCoveragePattern.Square3x3)continue;
             Fresh(Kinds.Doors,cellSize:size,pattern:shape);Peer(1);var pieces=new List<ZDO>();int radius=shape==GridCoveragePattern.Rounded7x7?3:shape==GridCoveragePattern.Rounded5x5?2:1;
@@ -848,6 +875,103 @@ internal static class IntegrationTests
         Check("idle tame uses same forward timer",tame.GetOwner()==1);var tameable=ZNetScene.instance.FindInstance(tame).GetComponent<Tameable>();tameable.m_commandable=true;tame.Follow="player";Peer(2);Tick(.3f);Tick(.6f);
         Check("forward timer leaves following tame protected",tame.GetOwner()==1);tame.Follow="";tameable.m_saddle=tameable.gameObject.Add(new Sadle{User=true});Tick(.7f);Check("forward timer leaves ridden tame protected",tame.GetOwner()==1);tameable.m_saddle.User=false;Tick(.8f);Check("idle tame follows settled forward overlap",tame.GetOwner()==99);
     }
+    private static void DistantInteractiveOwner()
+    {
+        Fresh(Kinds.Doors|Kinds.Beehives|Kinds.Containers|Kinds.Smelters|Kinds.Workstations,
+            defaultInteractives:true, cellSize:4, pattern:GridCoveragePattern.Rounded7x7, directional:true);
+        var approaching = Peer(411,-32,0);
+        var distant = Peer(822,100,0);
+        var objects = new List<ZDO>();
+        foreach (Type type in new[]{typeof(Door),typeof(Beehive),typeof(Container),typeof(Smelter),typeof(CraftingStation)})
+            objects.Add(Object(type,1,1,99));
+        Tick(0);
+        foreach (ZDO data in objects) Check("uncovered interactive begins server owned",data.GetOwner()==99);
+        MovePeer(approaching,0,0);
+        Tick(.05f);
+        Check("distant player never requests approaching player's inner cell",Index().Grid.Owner(new Cell(8,8))==411 && Index().Grid.Candidate(new Cell(8,8))==411);
+        foreach (ZDO data in objects)
+        {
+            Check("server to nearby UID across interactive categories",data.GetOwner()==411);
+            Check("settled interactive blocks native owner reassignment",!controller.Persistent(data));
+        }
+        MovePeer(distant,1024,0);
+        Tick(.1f);
+        foreach (ZDO data in objects) Check("other player's later teleport cannot change local owner",data.GetOwner()==411);
+        // A different loaded area retains its exclusive owner on full field exit.
+        var remote = Object(typeof(Door),1025,1,99);
+        Tick(.15f);
+        Check("distant player owns their own inner cell",remote.GetOwner()==822);
+        MovePeer(distant,2048,0);
+        Tick(.2f);
+        Check("fully vacated remote cell retains owner until native release",remote.GetOwner()==822 && controller.Persistent(remote));
+    }
+    private static void LateGridCapability()
+    {
+        var capable = new HashSet<long>();
+        var commands = new Dictionary<ZDOID,long>();
+        int sends = 0;
+        FgnOwnerHandoff.CooperativeClient = delegate(ZNetPeer peer) { return peer != null && capable.Contains(peer.m_uid); };
+        FgnOwnerHandoff.IdentifiedSend = delegate(ZNetPeer peer,ZDOID id,long target,uint revision,long token) {
+            Check("grid sends only to confirmed current source", capable.Contains(peer.m_uid));
+            Check("far player's native owner does not become local grid target", target == 1);
+            commands[id] = token; sends++;
+        };
+        FgnOwnerHandoff.IdentifiedStatus = delegate { };
+        try
+        {
+            Fresh(Kinds.Doors|Kinds.Beehives|Kinds.Smelters|Kinds.Workstations|Kinds.TamedAnimals,
+                defaultInteractives:true, cellSize:4, pattern:GridCoveragePattern.Rounded7x7,
+                directional:true, checkIntervalSeconds:.05f, overlapCooldown:1);
+            Peer(1,40);ZNetPeer source=Peer(7,140);
+            var objects=new List<ZDO>();
+            foreach(Type type in new[]{typeof(Door),typeof(Beehive),typeof(Smelter),typeof(CraftingStation)})
+                objects.Add(Object(type,41,1,7));
+            ZDO animal=Object(typeof(Character),41,1,7);animal.Tamed=true;controller.DataChanged(animal);
+            Tick(0);
+            Check("unconfirmed endpoints keep native ownership with no speculative commit",sends==0);
+            Check("idle tamed animal still transfers through its separate protected path",animal.GetOwner()==1);
+            capable.Add(7);controller.CapabilityChanged(7);Tick(.05f);
+            Check("source alone cannot transfer to an unconfirmed recipient",sends==0);
+            capable.Add(1);controller.CapabilityChanged(1);Tick(.1f);
+            Check("late capability wakes all nearby object categories without player movement",sends==objects.Count);
+            Check("identified TML endpoint works before independent FGN version greeting",!FiresGhettoNetworkMod.FgnVersionGate.Match);
+            foreach(ZDO data in objects)
+            {
+                Check("identified source commit waits rather than forcing the far player's owner",data.GetOwner()==7&&controller.TransferPending(data));
+                Check("source result accepted for its own fenced command",controller.Cooperative.Observed(source.m_rpc,data.m_uid,commands[data.m_uid],true,true,1,(uint)data.OwnerRevision+1));
+                Import(data,1,false);
+            }
+            Tick(.15f);
+            foreach(ZDO data in objects)
+                Check("far owner relinquished and native redistribution cannot undo local result",data.GetOwner()==1&&!controller.TransferPending(data)&&!controller.Persistent(data));
+            for(int i=1;i<=100;i++)Tick(.15f+i*.05f);
+            Check("stable ownership adds no repeated commits or greetings",sends==objects.Count);
+        }
+        finally { FgnOwnerHandoff.CooperativeClient=null;FgnOwnerHandoff.IdentifiedSend=null;FgnOwnerHandoff.IdentifiedStatus=null; }
+    }
+    private static void TeleportFootprint()
+    {
+        Fresh(Kinds.Doors, defaultInteractives:true, cellSize:4, pattern:GridCoveragePattern.Rounded7x7, directional:true);
+        Peer(1); var departing = Peer(2);
+        var door = Object(typeof(Door), 1, 1, 99);
+        Tick(0);
+        Check("two nearby players hold server field", Index().Grid.Owner(new Cell(8,8)) == 99);
+        // Reference-area update has arrived, character ZDO still has old position.
+        departing.Position = new Vector3(1024,0,0);
+        Tick(.1f);
+        Check("teleported peer cannot retain stale old-area footprint", Index().Grid.Owner(new Cell(8,8)) == 1 && door.GetOwner() == 1);
+        // Normal replication skew within a loaded area must stay eligible.
+        departing.Position = new Vector3(20,0,0);
+        Tick(.2f);
+        Check("in-area character/ref skew retains valid overlap", Index().Grid.Owner(new Cell(8,8)) == 99 && door.GetOwner() == 99);
+        // Character position catches up before a new reference update.
+        ZDOMan.instance.GetZDO(departing.m_characterID).Position = new Vector3(1024,0,0);
+        Tick(.3f);
+        Check("far character with old reference adds no unreachable field", Index().Grid.Owner(new Cell(8,8)) == 1);
+        departing.Position = new Vector3(1024,0,0);
+        Tick(.4f);
+        Check("new teleport area becomes eligible once both inputs arrive", Index().Grid.HasPeers && Index().Grid.Candidate(new Cell(264,8)) == 2);
+    }
     private static void SoloRegions()
     {
         Fresh(Kinds.Doors|Kinds.Containers|Kinds.TamedAnimals,nativeSolo:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true);
@@ -1135,6 +1259,8 @@ internal static class IntegrationTests
                 Check("complete cooperative receipt arms inline scope before next policy tick",controller.TryRecipientState(door,1,out minimum));
                 controller.RecordRecipient(door,1,door.OwnerRevision,100);
                 controller.RecordRecipient(door,1,door.OwnerRevision,80);
+                controller.RecordRecipient(door,7,(uint)door.OwnerRevision-1U,999);
+                Check("old source revision cannot replace current recipient readiness",controller.TryRecipientState(door,1,out minimum)&&minimum==100);
                 door.DataRevision=70;
                 controller.RequireRecipient(controller.RequestNode(door.m_uid,"UseDoor".GetStableHashCode()));
                 Check("native source floor survives later lower snapshot",controller.TryRecipientState(door,1,out minimum)&&minimum==100);
@@ -1164,11 +1290,37 @@ internal static class IntegrationTests
             AuthorityController.ReadinessRemoved=null;AuthorityController.ReadinessReset=null;
         }
     }
+    private static void FractionalCellGeometry()
+    {
+        foreach (float size in new[] { 4f, 6.4f, 8f, 16f })
+        {
+            Fresh(Kinds.Doors,defaultInteractives:true,cellSize:size,pattern:GridCoveragePattern.Rounded7x7);
+            Peer(1);Tick(0);var door=Object(typeof(Door),1,1,99);Tick(2);
+            var nodes=(Dictionary<ZDOID,AuthorityController.NativeNode>)typeof(AuthorityController).GetField("nodes",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(controller);
+            var node=nodes[door.m_uid];int writes=door.Writes;
+            foreach(float x in new[]{-96.01f,-96f,-32.01f,-32f,-25.6001f,-25.6f,-25.5999f,-6.4f,0f,6.4f,12.8f,31.99f,32f,96f})
+            {
+                door.Position=new Vector3(x,0,1);controller.Position(door);Cell expected;
+                Check("position event keeps fractional node index consistent",Cell.At(x,1,size,out expected)&&node.Cell.Equals(expected));
+                Check("cached native zone follows actual cell changes",node.NativeZone.Equals(Cell.Zone(expected,size)));
+                foreach(float sample in new[]{x-.01f,x,x+.01f,x-size,x+size})
+                {
+                    Cell other;bool inside=Cell.At(sample,1,size,out other)&&other.Equals(expected);
+                    Check("cached precise bounds agree with fractional cell assignment",node.ContainsPosition(new Vector3(sample,0,1))==inside);
+                }
+                controller.Position(door);
+                Check("unchanged position events do not cause owner writes",door.Writes==writes);
+            }
+            controller.Unregister(ZNetScene.instance.FindInstance(door));
+            Check("unload removes the node holding cached cell geometry",nodes.Count==0&&node.Removed);
+            controller.Reset();Check("world reset keeps the geometry cache empty",nodes.Count==0);
+        }
+    }
     public static void Main()
     {
         try {
-        Fields();Inventories();StationsAndActors();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
-        SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
+        Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
+        FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
         Console.WriteLine("PASS: "+checks+" full-controller/grid/router fixture assertions; no PUP/PupPatch plugin in fixture.");
         Console.WriteLine("LIMIT: simulated transport and Unity registry; no live multiplayer test.");
         } catch(Exception error){Console.Error.WriteLine(error);Environment.ExitCode=1;}

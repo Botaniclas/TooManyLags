@@ -11,18 +11,35 @@ namespace TooManyLags
         internal Cell(int x, int z) { X = x; Z = z; }
         internal static bool At(float x, float z, out Cell cell)
         { return At(x, z, 8, out cell); }
-        internal static bool At(float x, float z, int size, out Cell cell)
+        internal static bool At(float x, float z, float size, out Cell cell)
         {
             cell = default(Cell);
-            if (size != 4 && size != 8 && size != 16) return false;
+            int subdivisions = Subdivisions(size);
+            if (subdivisions == 0) return false;
             if (Single.IsNaN(x) || Single.IsNaN(z) || Single.IsInfinity(x) || Single.IsInfinity(z)) return false;
-            double cx = Math.Floor(((double)x + 32d) / size), cz = Math.Floor(((double)z + 32d) / size);
+            // 10/64 is exactly representable: never divide by the rounded
+            // Single 6.4 value, which would misclassify native zone borders.
+            double scale = subdivisions / 64d;
+            double cx = Math.Floor(((double)x + 32d) * scale), cz = Math.Floor(((double)z + 32d) * scale);
             // Native sector index has a bounded world. No wrapped/aliased cells.
             // Preserve the same physical domain for either subdivision size.
-            int limit = 16384 / size;
+            int limit = 256 * subdivisions;
             if (cx < -limit || cx >= limit || cz < -limit || cz >= limit) return false;
             cell = new Cell((int)cx, (int)cz); return true;
         }
+        internal static int Subdivisions(float size)
+        { return size == 4f ? 16 : size == 6.4f ? 10 : size == 8f ? 8 : size == 16f ? 4 : 0; }
+        internal static double Edge(int coordinate, int subdivisions)
+        { return coordinate * 64d / subdivisions - 32d; }
+        internal static Cell Zone(Cell fine, float size)
+        {
+            if (size == 6.4f)
+                return new Cell(Floor10(fine.X), Floor10(fine.Z));
+            int shift = size == 4f ? 4 : size == 16f ? 2 : 3;
+            return new Cell(fine.X >> shift, fine.Z >> shift);
+        }
+        private static int Floor10(int value)
+        { return value >= 0 ? value / 10 : (value + 1) / 10 - 1; }
         public bool Equals(Cell other) { return X == other.X && Z == other.Z; }
         public override bool Equals(object other) { return other is Cell && Equals((Cell)other); }
         public override int GetHashCode() { unchecked { return X * 397 ^ Z; } }
@@ -75,8 +92,9 @@ namespace TooManyLags
         private readonly List<Cell> due = new List<Cell>();
         internal readonly List<Cell> Changes = new List<Cell>();
         private readonly long server;
-        private readonly Offset[][] footprints = new Offset[16][];
-        private readonly Dictionary<Cell, FieldTier>[] maskTypes = new Dictionary<Cell, FieldTier>[16];
+        internal const int CoverageCount = 56;
+        private readonly Offset[][] footprints = new Offset[CoverageCount][];
+        private readonly Dictionary<Cell, FieldTier>[] maskTypes = new Dictionary<Cell, FieldTier>[CoverageCount];
         internal readonly HashSet<Cell> Accelerations = new HashSet<Cell>();
         private readonly bool directional;
         private readonly bool discardVacant;
@@ -88,7 +106,7 @@ namespace TooManyLags
         internal int PolicyAllocations;
         internal AuthorityGrid(long server, float delay, GridCoveragePattern pattern = GridCoveragePattern.Square3x3,
             bool directional = false, float innerDelay = 0f, float outerDelay = 3f, bool discardVacant = false,
-            bool forward = false, float forwardDelay = .2f, float overlapCooldown = 0f)
+            bool forward = false, float forwardDelay = .2f, float overlapCooldown = 0f, bool fullRear = false)
         {
             this.server = server; Delay = delay;
             this.directional = directional;
@@ -114,13 +132,14 @@ namespace TooManyLags
                         (x == 2 * fx[heading] && (z == fz[heading] || z == 2 * fz[heading])) ||
                         (x == fx[heading] && z == 2 * fz[heading]) : front == 2 && Math.Abs(side) <= 1);
                     if (radius != 1 && x * x + z * z > radius * (radius + 1) && !ahead) continue;
-                    // White: all deeper rear fields and the central rear row.
+                    // Retained ownership uses the rear cutout; return-on-exit keeps the full shape.
                     // The outer rear flanks in the user's second sketch stay.
-                    if (directional && front < 0 && (front < -1 || Math.Abs(side) <= 1)) continue;
+                    if (directional && !fullRear && front < 0 && (front < -1 || Math.Abs(side) <= 1)) continue;
                     bool inner = false;
                     if (directional)
                     {
-                        if (fx[heading] == 0 || fz[heading] == 0) inner = front >= 0 && front <= 1 && Math.Abs(side) <= 1;
+                        if (fullRear) inner = Math.Abs(x) <= 1 && Math.Abs(z) <= 1;
+                        else if (fx[heading] == 0 || fz[heading] == 0) inner = front >= 0 && front <= 1 && Math.Abs(side) <= 1;
                         else inner = (x == 0 && z == 0) || (front == 0 && Math.Abs(x) == 1 && Math.Abs(z) == 1) ||
                             (x == fx[heading] && z == fz[heading]) || (x == fx[heading] && z == 0) || (x == 0 && z == fz[heading]);
                     }
@@ -133,11 +152,12 @@ namespace TooManyLags
             }
             // Adjacent camera directions are one request per player/cell.
             // Build their unions once, retaining the inner/forward priorities.
-            for (int heading = 0; heading < 8; heading++)
+            for (int span = 2; span <= 3; span++) for (int heading = 0; heading < 8; heading++)
             {
-                if (!directional) { footprints[8 + heading] = footprints[heading]; maskTypes[8 + heading] = maskTypes[heading]; continue; }
-                var types = new Dictionary<Cell, FieldTier>(maskTypes[heading]);
-                foreach (Offset offset in footprints[(heading + 1) & 7])
+                int index = (span - 1) * 8 + heading, previousIndex = (span - 2) * 8 + heading;
+                if (!directional) { footprints[index] = footprints[heading]; maskTypes[index] = maskTypes[heading]; continue; }
+                var types = new Dictionary<Cell, FieldTier>(maskTypes[previousIndex]);
+                foreach (Offset offset in footprints[(heading + span - 1) & 7])
                 {
                     FieldTier old;
                     if (!types.TryGetValue(offset.Cell, out old) || offset.Tier == FieldTier.Inner || (old == FieldTier.Outer && offset.Tier == FieldTier.Forward))
@@ -145,17 +165,36 @@ namespace TooManyLags
                 }
                 var footprint = new List<Offset>(types.Count);
                 foreach (var pair in types) footprint.Add(new Offset(pair.Key.X, pair.Key.Z, pair.Value));
-                footprints[8 + heading] = footprint.ToArray(); maskTypes[8 + heading] = types;
+                footprints[index] = footprint.ToArray(); maskTypes[index] = types;
+            }
+            // Prediction keeps the actual mask's tiers. Only cells added by
+            // the forecast get the red/inner delay; compute this once.
+            for (int actual = 0; actual < 16; actual++) for (int side = 0; side < 2; side++)
+            {
+                int index = 24 + side * 16 + actual;
+                if (!directional) { footprints[index] = footprints[actual]; maskTypes[index] = maskTypes[actual]; continue; }
+                int first = actual & 7;
+                int extra = side == 0 ? (first + (actual < 8 ? 1 : 2)) & 7 : (first + 7) & 7;
+                var types = new Dictionary<Cell, FieldTier>(maskTypes[actual]);
+                foreach (Offset offset in footprints[extra])
+                    if (!types.ContainsKey(offset.Cell)) types.Add(offset.Cell, FieldTier.Inner);
+                var footprint = new List<Offset>(types.Count);
+                foreach (var pair in types) footprint.Add(new Offset(pair.Key.X, pair.Key.Z, pair.Value));
+                footprints[index] = footprint.ToArray(); maskTypes[index] = types;
             }
         }
-        internal static int HeadingCoverage(float yaw)
+        internal static int HeadingCoverage(float yaw, float overlapDegrees = 30f)
         {
             if (Single.IsNaN(yaw) || Single.IsInfinity(yaw)) return -1;
             yaw %= 360f; if (yaw < 0f) yaw += 360f;
             int heading = (int)(yaw / 45f); float phase = yaw - heading * 45f;
-            // Each direction covers +/-37.5 degrees: adjacent masks overlap
-            // over 30 degrees. No turn history or intermediate masks needed.
-            return phase < 7.5f ? heading : phase <= 37.5f ? 8 + heading : (heading + 1) & 7;
+            if (Single.IsNaN(overlapDegrees) || Single.IsInfinity(overlapDegrees)) overlapDegrees = 30f;
+            overlapDegrees = Math.Max(0f, Math.Min(45f, overlapDegrees));
+            if (overlapDegrees == 0f) return phase < 22.5f ? heading : (heading + 1) & 7;
+            float start = (45f - overlapDegrees) * .5f, end = (45f + overlapDegrees) * .5f;
+            // At 45 degrees every angle selects an adjacent pair. Direction
+            // centers use the following pair, avoiding a third boundary mask.
+            return phase < start ? heading : phase <= end ? 8 + heading : (heading + 1) & 7;
         }
         private static float SafeDelay(float value, float fallback)
         { return Single.IsNaN(value) || Single.IsInfinity(value) ? fallback : Math.Max(0f, Math.Min(30f, value)); }
@@ -375,7 +414,7 @@ namespace TooManyLags
                 bool exists = previous.TryGetValue(peer.Uid, out state);
                 if (exists) state.Refreshed = false;
                 float yaw = Yaw(peer.Yaw, exists ? state.Yaw : 0f);
-                int heading = !directional ? 0 : peer.Coverage >= 0 && peer.Coverage < 16 ? peer.Coverage :
+                int heading = !directional ? 0 : peer.Coverage >= 0 && peer.Coverage < CoverageCount ? peer.Coverage :
                     exists && (Single.IsNaN(peer.Yaw) || Single.IsInfinity(peer.Yaw)) ? state.Heading : ((int)((yaw + 22.5f) / 45f) & 7);
                 if (!exists || !state.Cell.Equals(peer.Cell) || state.Heading != heading)
                 {
@@ -447,7 +486,7 @@ namespace TooManyLags
         internal int SkippedCells;
         internal AuthorityWorld(long server, float delay, GridCoveragePattern pattern = GridCoveragePattern.Square3x3, bool keepOnExit = true,
             bool directional = false, float innerDelay = 0f, float outerDelay = 3f, bool forward = false, float forwardDelay = .2f, float overlapCooldown = 0f)
-        { Grid = new AuthorityGrid(server, delay, pattern, directional, innerDelay, outerDelay, keepOnExit, forward, forwardDelay, overlapCooldown); this.keepOnExit = keepOnExit; this.server = server; }
+        { Grid = new AuthorityGrid(server, delay, pattern, directional, innerDelay, outerDelay, keepOnExit, forward, forwardDelay, overlapCooldown, !keepOnExit); this.keepOnExit = keepOnExit; this.server = server; }
         internal void Add(AuthorityNode node, float now, bool schedule = true)
         {
             node.Removed = false;

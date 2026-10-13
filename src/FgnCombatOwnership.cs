@@ -56,7 +56,7 @@ namespace TooManyLags
         internal static void Install(ConfigFile config, Assembly assembly, System.Version version, bool allowInstall = true)
         {
             configured = config.Bind("09 - AI Mob Ownership", "EnableAIOwnership", true,
-                "Server and all clients; use the same value; restart required. Use the mob's active player target for FiresGhettoNetworking ownership. Requires two eligible nearby players. Attacks block transfers and retry after attack end. Install the same version on server and clients.");
+                "Server only; restart required. Enable target-based Hostile Mob ownership. Clients follow the server; their local value is ignored. Attacks block transfers until attack end.");
             maximumPing = config.Bind("09 - AI Mob Ownership", "ServerFallbackPingMs", 200,
                 new ConfigDescription("Server only; live console supported. Target ping limit in milliseconds for server fallback with Server-Side Simulation, or a lower-latency nearby player with NoServerSideSimulation=true. Requires another eligible FiresGhettoNetworking player within ServerFallbackRadius. 0: target ping must exceed the best other candidate by 250 ms.", new AcceptableValueRange<int>(0, 2000)));
             nearbyRadius = config.Bind("09 - AI Mob Ownership", "ServerFallbackRadius", 6f,
@@ -311,6 +311,13 @@ namespace TooManyLags
             managed.Clear();
         }
 
+        internal static void ConnectCurrentServer()
+        {
+            ZNetPeer peer = ZNet.instance ? ZNet.instance.GetServerPeer() : null;
+            if (peer == null || !peer.IsReady() || peer.m_rpc == null) return;
+            SessionConnection(peer);
+            if (Enabled) peer.m_rpc.Invoke("TooManyLags_AI_Mode", 1);
+        }
         private static void SessionConnection(ZNetPeer __0)
         {
             if (__0 == null || __0.m_rpc == null) return;

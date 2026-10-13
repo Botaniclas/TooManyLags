@@ -71,6 +71,25 @@ internal static class FgnSessionSettingsTests
         Check(ReferenceEquals(oldClientStations, FiresGhettoNetworkMod.StationRouter.ConfigEnabled), "client station setting untouched");
         Check(FiresGhettoNetworkMod.FiresGhettoNetworkMod.Starts == 0 && !FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive, "no client simulation initializer or completion flag");
         Check(!FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnership.Value && !FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnershipSelective.Value, "client AI bridge sees disabled broad/selective options");
+        foreach (bool useAI in new[] { false, true })
+        {
+            ConfigFile original = Setup(path, false, false); string saved = File.ReadAllText(path);
+            var broad = FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnership;
+            var selective = FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnershipSelective;
+            var creatures = FiresGhettoNetworkMod.CreatureOwnership.ConfigEnabled;
+            IDisposable restore = FgnSessionSettings.ApplyClient(assembly, original, useAI);
+            Check(!FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnership.Value && !FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnershipSelective.Value, "server-directed client session overrides ownership gates");
+            Check(FiresGhettoNetworkMod.CreatureOwnership.ConfigEnabled.Value == useAI && (useAI || ReferenceEquals(creatures, FiresGhettoNetworkMod.CreatureOwnership.ConfigEnabled)), "server AI off preserves native client balancing config");
+            restore.Dispose(); restore.Dispose();
+            Check(ReferenceEquals(broad, FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnership) && ReferenceEquals(selective, FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnershipSelective) && ReferenceEquals(creatures, FiresGhettoNetworkMod.CreatureOwnership.ConfigEnabled), "leaving restores original runtime references idempotently");
+            Check(File.ReadAllText(path) == saved && original.SaveOnConfigSet, "client flags never overwrite saved settings");
+        }
+        ConfigFile changedClient = Setup(path, false, false);
+        var oldBroadClient = FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnership;
+        IDisposable changedRestore = FgnSessionSettings.ApplyClient(assembly, changedClient, true);
+        var foreign = Entry(changedClient, "OtherPolicy", false); FiresGhettoNetworkMod.CreatureOwnership.ConfigEnabled = foreign;
+        changedRestore.Dispose();
+        Check(ReferenceEquals(FiresGhettoNetworkMod.CreatureOwnership.ConfigEnabled, foreign) && ReferenceEquals(FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnership, oldBroadClient), "cleanup preserves a later override from another mod");
         foreach (int blocked in new[] { 0, 1, 2 })
         {
             ConfigFile original = Setup(path, false, false);

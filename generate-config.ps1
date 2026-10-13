@@ -22,7 +22,7 @@ $taskPlugin = Read-Source (Join-Path $PSScriptRoot 'src\Plugin.cs')
 $taskCombat = Read-Source (Join-Path $PSScriptRoot 'src\FgnCombatOwnership.cs')
 $taskCatalog = Read-Source (Join-Path $PSScriptRoot 'src\ObjectCatalog.cs')
 $taskGrid = Read-Source (Join-Path $PSScriptRoot 'src\AuthorityGrid.cs')
-$taskPluginBindings = Extract-Region $taskPlugin "        private void Awake()`n        {`n" '            if (!enabled) return;'
+$taskPluginBindings = Extract-Region $taskPlugin "        private void Awake()`n        {`n" '            // Configuration ends here.'
 $taskCombatBindings = Extract-Region $taskCombat "        internal static void Install(ConfigFile config, Assembly assembly, System.Version version, bool allowInstall = true)`n        {`n" '            StartupError = null;'
 $taskDescription = '        private static string ObjectDescription' + (Extract-Region $taskPlugin '        private static string ObjectDescription' '        private void RuntimeFault')
 $taskKinds = [regex]::Match($taskCatalog, '(?s)\[Flags\]\s+internal enum Kinds\s*\{[^}]+\}').Value

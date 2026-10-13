@@ -12,6 +12,37 @@ namespace TooManyLags
     {
         private const BindingFlags Static = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
 
+        private sealed class ClientOverrides : IDisposable
+        {
+            internal FieldInfo[] Fields;
+            internal object[] Previous, Applied;
+            public void Dispose()
+            {
+                if (Fields == null) return;
+                for (int i = 0; i < Fields.Length; i++)
+                    if (ReferenceEquals(Fields[i].GetValue(null), Applied[i])) Fields[i].SetValue(null, Previous[i]);
+                Fields = null;
+            }
+        }
+        internal static IDisposable ApplyClient(Assembly assembly, ConfigFile original, bool enableAI)
+        {
+            Type plugin = assembly.GetType("FiresGhettoNetworkMod.FiresGhettoNetworkMod", true);
+            List<FieldInfo> fields = new List<FieldInfo>();
+            fields.Add(Field(plugin, "ConfigEnableServerOwnership", typeof(ConfigEntry<bool>)));
+            fields.Add(Field(plugin, "ConfigEnableServerOwnershipSelective", typeof(ConfigEntry<bool>)));
+            if (enableAI) fields.Add(Field(assembly.GetType("FiresGhettoNetworkMod.CreatureOwnership", true), "ConfigEnabled", typeof(ConfigEntry<bool>)));
+            ClientOverrides restore = new ClientOverrides { Fields = fields.ToArray(), Previous = new object[fields.Count], Applied = new object[fields.Count] };
+            for (int i = 0; i < fields.Count; i++) restore.Previous[i] = fields[i].GetValue(null);
+            try { Apply(assembly, original, false, enableAI, false); }
+            catch
+            {
+                for (int i = 0; i < fields.Count; i++) restore.Applied[i] = fields[i].GetValue(null);
+                restore.Dispose(); throw;
+            }
+            for (int i = 0; i < fields.Count; i++) restore.Applied[i] = fields[i].GetValue(null);
+            return restore;
+        }
+
         internal static bool Apply(Assembly assembly, ConfigFile original, bool dedicated, bool enableAI, bool sceneConflict, bool noSimulation = false)
         {
             Type plugin = assembly.GetType("FiresGhettoNetworkMod.FiresGhettoNetworkMod", true);

@@ -1,3 +1,19 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.25 local test build
+
+## Vanilla assignment target selection
+
+Only the assignment target inside ZDOMan.ReleaseNearbyZDOS changes. Its active-owner and active-area branches, release-to-zero write and approximately two-second native cadence remain unchanged. With ServerOwnedInteractivesByDefault=true, enabled stationary interactives outside active grid requests select the dedicated server; settled requests select their existing grid owner, and unsettled requests retain vanilla's proposed owner until the field timer completes. An active existing owner is not stolen by this path. Native reassignment from an inactive owner remains possible. Vehicles, characters, rigid bodies, private/multiple inventories and categories disabled in config retain their previous initial-assignment behavior.
+
+Server defaults remain owned while a ready player's native active area covers their zone. This compensates for vanilla checking the server UID against its own reference position and prevents server-to-zero-to-server churn before instance registration. Active-area results are shared per native zone within the existing pass cadence and cleared on tick/reset; prefab classification is cached separately from the live-instance catalog. No per-object ownership receipts, additional RPCs, timers, simulation hooks or client changes were added. Original inventory, refill, combat, collision and guarded grid-handoff code remains unchanged.
+
+This deliberately minimal experiment uses vanilla loading behavior for the initial assignment. It does not add a new simulation gate or certify server building/collider readiness. Server simulation can start earlier for eligible objects; live multiplayer loading, production drops and stability must still be tested with the actual server mod set. Existing actively owned objects can still wait for the original guarded handoff/readiness path.
+
+Fixture tests exercise the real Harmony rewrite on a simulated native ownership loop: early server assignment before IsAreaReady, no repeated owner writes across a 65-second unready window, unchanged active owners, native inactive-owner reassignment, settled/pending/overlapping fields, category exclusions and release after unload/disconnect. Actual game IL tests verify exactly two added stack instructions, preserved branch labels/exception blocks, unchanged release write, and composition with the imported AI policy in either order. No live Unity multiplayer or measured performance result is claimed.
+
+All 19 verification groups pass for the final build, including 11,608 full-controller/router fixture assertions, 22,496 native release assertions and 50 unchanged Harmony targets against each of FiresGhettoNetworking 1.5.41 and 1.5.36, and the previously introduced latest-provider Pickable check. Established managed objects return through the original persistence fast path before the new zone/prefab checks. Existing 1.0.24 client endpoints remain compatible; this change installs only on the server. No publication or remote Git push was performed. The verified DLL SHA256 is `90F872FD60DD7810A1E9D2AD34885FC081F2EB20DDF59EAE43B9B935D67D6D24`.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.24 hotfix validation
 
 ## Pickable patch composition

@@ -1,5 +1,10 @@
 # Changelog
 
+**Unreleased**
+```
+- With ServerOwnedInteractivesByDefault=true, gives eligible stationary interactives their server owner during vanilla assignment, avoiding an initial player-to-server handoff. Settled grid fields take priority; native active-owner checks and region release remain in place. Server-side change only.
+```
+
 **1.0.24**
 ```
 - Fixes the object ownership grid failing to start when newer FiresGhettoNetworking versions already patch Pickable.RPC_Pick. Preserves its existing server-safe effect actor; harvesting, inventory safeguards and grid timing are unchanged.

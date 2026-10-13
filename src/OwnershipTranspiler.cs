@@ -12,6 +12,7 @@ namespace TooManyLags
         {
             MethodInfo persistent = AccessTools.PropertyGetter(typeof(ZDO), "Persistent");
             MethodInfo setOwner = AccessTools.Method(typeof(ZDO), "SetOwner", new[] { typeof(long) });
+            MethodInfo initial = replacement == null ? null : AccessTools.Method(replacement.DeclaringType, "NativeOwnerTarget", new[] { typeof(ZDO), typeof(long) });
             Type mobPolicy = typeof(OwnershipTranspiler).Assembly.GetType(typeof(OwnershipTranspiler).Namespace + ".FgnCombatOwnership", false);
             MethodInfo mobSetOwner = mobPolicy == null ? null : AccessTools.Method(mobPolicy, "NativeSetOwner", new[] { typeof(ZDO), typeof(long) });
             List<CodeInstruction> result = new List<CodeInstruction>();
@@ -30,7 +31,20 @@ namespace TooManyLags
                     }
                     // The imported AI policy wraps exactly the same two native
                     // writes. Accept that precise wrapper in either patch order.
-                    if (method.Equals(setOwner) || method.Equals(mobSetOwner)) writes++;
+                    if (method.Equals(setOwner) || method.Equals(mobSetOwner))
+                    {
+                        writes++;
+                        if (writes == 2)
+                        {
+                            if (result.Count == 0 || result[result.Count - 1].opcode != OpCodes.Ldarg_2 || initial == null || initial.ReturnType != typeof(long))
+                                throw new NotSupportedException("Native initial owner assignment changed.");
+                            CodeInstruction argument = result[result.Count - 1], duplicate = new CodeInstruction(OpCodes.Dup);
+                            duplicate.labels.AddRange(argument.labels); duplicate.blocks.AddRange(argument.blocks);
+                            argument.labels.Clear(); argument.blocks.Clear();
+                            result.Insert(result.Count - 1, duplicate);
+                            result.Add(new CodeInstruction(OpCodes.Call, initial));
+                        }
+                    }
                     if (method.DeclaringType == typeof(ZNetScene) && method.Name == "InActiveArea") areaTests++;
                 }
                 result.Add(item);

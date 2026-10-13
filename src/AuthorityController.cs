@@ -32,6 +32,7 @@ namespace TooManyLags
         private readonly Dictionary<ZDOID, NativeNode> nodes = new Dictionary<ZDOID, NativeNode>();
         private ConditionalWeakTable<ZNetView, NativeNode> views = new ConditionalWeakTable<ZNetView, NativeNode>();
         private readonly Dictionary<Vector2s, Receipt> readiness = new Dictionary<Vector2s, Receipt>();
+        private readonly Dictionary<Vector2s, bool> defaultAreas = new Dictionary<Vector2s, bool>();
         private readonly Dictionary<OwnerCell, bool> available = new Dictionary<OwnerCell, bool>();
         private readonly List<GridPeer> peers = new List<GridPeer>();
         private readonly HashSet<long> peerIds = new HashSet<long>();
@@ -110,7 +111,7 @@ namespace TooManyLags
                 if (!active) { Router.Flush(); return; }
                 bool useCoarse = !defaultInteractives && ZoneSystem.instance.m_zoneSize == 64f;
                 if (coarseEnabled != useCoarse) { coarseEnabled = useCoarse; regions.Clear(); }
-                readiness.Clear(); available.Clear();
+                readiness.Clear(); available.Clear(); defaultAreas.Clear();
                 if (statics != null) statics.Begin(network, scene, server, 0, true);
                 if (!primed)
                 {
@@ -299,6 +300,12 @@ namespace TooManyLags
                 {
                     return false;
                 }
+                // Keep the established managed-object fast path above. Only
+                // defaults not yet managed need the native-zone cache below.
+                // Vanilla checks the server UID against its own ref-pos; retain
+                // these defaults while a ready peer loads the area instead.
+                if (defaultInteractives && data.GetOwner() == server && (!known || (node.Identity() && node.Controllable())) &&
+                    catalog.NativeDefault(data.GetPrefab(), scene) && DefaultArea(data.GetPosition())) return false;
                 return statics != null && statics.Manage(data) ? false : persistent;
             }
             catch (Exception error) { Fail(error); return persistent; }
@@ -329,6 +336,37 @@ namespace TooManyLags
             if (readiness.TryGetValue(zone, out receipt) && receipt.Epoch == epoch) return receipt.Ready;
             int before = epoch; bool ready = scene.IsAreaReady(position); if (before != epoch) return false;
             readiness[zone] = new Receipt { Epoch = epoch, Ready = ready }; return ready;
+        }
+        private bool DefaultArea(Vector3 position)
+        {
+            if (!Finite(position)) return false;
+            Vector2s zone = ZoneSystem.GetZone(position); bool result;
+            if (defaultAreas.TryGetValue(zone, out result)) return result;
+            result = false;
+            foreach (ZNetPeer peer in network.GetPeers())
+                if (peer != null && peer.IsReady() && ZNetScene.InActiveArea(position, ZoneSystem.GetZone(peer.GetRefPos()))) { result = true; break; }
+            defaultAreas.Add(zone, result); return result;
+        }
+        // This is only a target selector at vanilla's assignment write. Native
+        // active-owner/area tests have already succeeded; no takeover RPC here.
+        internal long NativeOwnerTarget(ZDO data, long nativeOwner)
+        {
+            if (!defaultInteractives || !active || failed || nativeOwner == 0 || !ReferenceEquals(world, ZDOMan.instance) ||
+                !data.IsValid() || !data.Persistent || BakedObjects.IsBaked(data) || data.OwnerRevision == UInt16.MaxValue ||
+                !catalog.NativeDefault(data.GetPrefab(), scene)) return nativeOwner;
+            Vector3 position = data.GetPosition(); Cell cell;
+            if (!Finite(position) || !Cell.At(position.x, position.z, cellSize, out cell)) return nativeOwner;
+            NativeNode node;
+            if (nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data) && (!node.Identity() || !node.Controllable() || node.UseProtected())) return nativeOwner;
+            long candidate = indexed.Grid.Candidate(cell), target = indexed.Grid.Owner(cell);
+            if (candidate != 0)
+            {
+                // Pending fields retain their timer. Settled fields choose their
+                // existing owner, even if another native peer's pass found them.
+                if (target == 0 || !AvailableOwner(target, position)) return nativeOwner;
+                return target;
+            }
+            return server;
         }
         internal NativeNode RequestNode(ZDOID id, int method)
         {
@@ -392,7 +430,7 @@ namespace TooManyLags
             active = false; primed = false; coarseEnabled = false;
             if (Inventory != null) Inventory.Clear(); if (Cooperative != null) Cooperative.Clear();
             Inventory = null; Cooperative = null; nodes.Clear(); views = new ConditionalWeakTable<ZNetView, NativeNode>();
-            readiness.Clear(); available.Clear(); peers.Clear(); peerIds.Clear(); cameras.Clear(); regionPeers.Clear(); characters.Clear(); regions.Clear(); Router.Clear();
+            readiness.Clear(); available.Clear(); defaultAreas.Clear(); peers.Clear(); peerIds.Clear(); cameras.Clear(); regionPeers.Clear(); characters.Clear(); regions.Clear(); Router.Clear();
             indexed = null; catalog = null; statics = null; scene = null; network = null; world = null; epoch = 0;
         }
         private void Fail(Exception error) { failed = true; Reset(); try { fault(error); } catch { } }

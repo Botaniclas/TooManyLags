@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.24.0")]
+[assembly: AssemblyVersion("1.0.25.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.24")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.25")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.24", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.25", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -396,6 +396,11 @@ namespace TooManyLags
         private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> source)
         { return OwnershipTranspiler.Rewrite(source, AccessTools.Method(typeof(OwnershipPatch), "Persistent")); }
         internal static bool Persistent(ZDO data) { return Plugin.Controller == null ? data.Persistent : Plugin.Controller.Persistent(data); }
+        internal static long NativeOwnerTarget(ZDO data, long owner)
+        {
+            try { return Plugin.Controller == null ? owner : Plugin.Controller.NativeOwnerTarget(data, owner); }
+            catch (Exception error) { Plugin.Report("Initial server assignment retained native ownership: " + error.GetBaseException().Message); return owner; }
+        }
     }
     [HarmonyPatch(typeof(ZNetScene), "AddInstance")]
     internal static class AddPatch

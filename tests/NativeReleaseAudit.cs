@@ -601,13 +601,27 @@ internal static class NativeReleaseAudit
         MethodInfo rewrite = authority.GetType("TooManyLags.OwnershipTranspiler", true).GetMethod("Rewrite", Static);
         List<CodeInstruction> before = PatchProcessor.GetOriginalInstructions(original);
         List<CodeInstruction> after = (List<CodeInstruction>)rewrite.Invoke(null, new object[] { before, replacement });
-        Flow(before, after); int changes = 0;
+        List<CodeInstruction> compact = NativeOwnerTargetFlow(authority, before, after); int changes = 0;
         for (int i = 0; i < before.Count; i++)
-            if (before[i].opcode != after[i].opcode || !Object.Equals(before[i].operand, after[i].operand))
-            { changes++; Check(after[i].opcode == OpCodes.Call && replacement.Equals(after[i].operand), "Unexpected native ownership mutation"); }
+            if (before[i].opcode != compact[i].opcode || !Object.Equals(before[i].operand, compact[i].operand))
+            { changes++; Check(compact[i].opcode == OpCodes.Call && replacement.Equals(compact[i].operand), "Unexpected native ownership mutation"); }
         Check(changes == 1, "Exactly one persistent getter substitution required");
         Rejected(rewrite, new object[] { after, replacement }, "already rewritten ownership loop");
-        Console.WriteLine("PASS: Actual ReleaseNearbyZDOS: exactly one getter substitution; native SetOwner/active-area branches untouched; changed preflight rejected.");
+        Console.WriteLine("PASS: Actual ReleaseNearbyZDOS: one getter substitution and one assignment target selector; native release-to-zero and active-area branches untouched; changed preflight rejected.");
+    }
+    private static List<CodeInstruction> NativeOwnerTargetFlow(Assembly authority, List<CodeInstruction> before, List<CodeInstruction> after)
+    {
+        MethodInfo selector = authority.GetType("TooManyLags.OwnershipPatch", true).GetMethod("NativeOwnerTarget", Static);
+        var compact = new List<CodeInstruction>(); foreach (CodeInstruction item in after) compact.Add(new CodeInstruction(item));
+        int index = -1, count = 0;
+        for (int i = 0; i < compact.Count; i++) if (selector.Equals(compact[i].operand)) { index = i; count++; }
+        Check(count == 1 && index >= 2 && index + 1 < compact.Count && after.Count == before.Count + 2, "Exactly one two-instruction initial target insertion required");
+        Check(compact[index].opcode == OpCodes.Call && compact[index-1].opcode == OpCodes.Ldarg_2 && compact[index-2].opcode == OpCodes.Dup, "Initial selector stack contract changed");
+        MethodInfo write = compact[index+1].operand as MethodInfo;
+        Check(write != null && (write.Name == "SetOwner" || write.Name == "NativeSetOwner"), "Initial selector must immediately precede native/AI assignment write");
+        Check(compact[index-1].labels.Count == 0 && compact[index-1].blocks.Count == 0 && compact[index].labels.Count == 0 && compact[index].blocks.Count == 0, "Selector insertion introduced control-flow metadata");
+        compact[index-1].labels.AddRange(compact[index-2].labels); compact[index-1].blocks.AddRange(compact[index-2].blocks);
+        compact.RemoveAt(index); compact.RemoveAt(index-2); Flow(before, compact); return compact;
     }
 
     private static void ComposedOwnership(Assembly authority, Assembly game)
@@ -622,18 +636,18 @@ internal static class NativeReleaseAudit
             List<CodeInstruction> before=PatchProcessor.GetOriginalInstructions(original),after;
             if(gridFirst)after=(List<CodeInstruction>)mob.Invoke(null,new object[]{grid.Invoke(null,new object[]{before,persistent})});
             else after=(List<CodeInstruction>)grid.Invoke(null,new object[]{mob.Invoke(null,new object[]{before}),persistent});
-            Flow(before,after);int getters=0,writes=0,changes=0;
-            for(int i=0;i<after.Count;i++)
+            List<CodeInstruction> compact=NativeOwnerTargetFlow(authority,before,after);int getters=0,writes=0,changes=0;
+            for(int i=0;i<compact.Count;i++)
             {
-                MethodInfo call=after[i].operand as MethodInfo;
+                MethodInfo call=compact[i].operand as MethodInfo;
                 if(persistent.Equals(call))getters++;
                 if(setter.Equals(call))writes++;
-                if(before[i].opcode!=after[i].opcode||!Object.Equals(before[i].operand,after[i].operand))
-                {changes++;Check(after[i].opcode==OpCodes.Call&&(persistent.Equals(call)||setter.Equals(call)),"Unexpected composed ownership mutation");}
+                if(before[i].opcode!=compact[i].opcode||!Object.Equals(before[i].operand,compact[i].operand))
+                {changes++;Check(compact[i].opcode==OpCodes.Call&&(persistent.Equals(call)||setter.Equals(call)),"Unexpected composed ownership mutation");}
             }
             Check(getters==1&&writes==2&&changes==3,"Grid+AI native ownership composition failed: "+gridFirst);
         }
-        Console.WriteLine("PASS: actual native grid+AI ownership transpilers compose in either order; only one persistent getter and two owner calls change.");
+        Console.WriteLine("PASS: actual native grid+AI ownership transpilers compose in either order; one target selector, one persistent getter and two owner calls change.");
     }
     private static void Pickable(Assembly authority, Assembly game, AssemblyDefinition native, Assembly fgn)
     {

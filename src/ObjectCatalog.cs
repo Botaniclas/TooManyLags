@@ -19,6 +19,7 @@ namespace TooManyLags
     internal sealed class ObjectCatalog
     {
         private readonly Dictionary<int, Kinds> prefabs = new Dictionary<int, Kinds>();
+        private readonly Dictionary<int, bool> nativeDefaults = new Dictionary<int, bool>();
         private readonly Kinds enabled;
         private readonly HashSet<int> looseDrops = new HashSet<int>();
         internal bool IsLooseDrop(int hash) { return looseDrops.Contains(hash); }
@@ -50,6 +51,24 @@ namespace TooManyLags
             Kinds.Wards, Kinds.MapTables, Kinds.Wisplights, Kinds.Signs, Kinds.Portals, Kinds.Pickables, Kinds.Offerings
         };
         internal ObjectCatalog(Kinds enabled) { this.enabled = enabled; }
+        // Separate from the live-instance cache: a template with runtime-added
+        // components must never poison the existing grid's classification.
+        internal bool NativeDefault(int hash, ZNetScene scene)
+        {
+            bool eligible; if (nativeDefaults.TryGetValue(hash, out eligible)) return eligible;
+            GameObject prefab = scene.GetPrefab(hash); if (!prefab) return false;
+            Kinds kind = Classify(prefab);
+            eligible = kind != Kinds.None && (kind & enabled) != 0 && kind != Kinds.TamedAnimals && kind != Kinds.Vehicles &&
+                prefab.GetComponentsInChildren<Rigidbody>(true).Length == 0;
+            if (eligible)
+            {
+                int inventories = 0; ZNetView root = prefab.GetComponent<ZNetView>();
+                foreach (Container inventory in prefab.GetComponentsInChildren<Container>(true))
+                    if ((inventory.m_rootObjectOverride ? inventory.m_rootObjectOverride : inventory.GetComponentInParent<ZNetView>()) == root &&
+                        (++inventories > 1 || inventory.m_privacy != Container.PrivacySetting.Public)) { eligible = false; break; }
+            }
+            nativeDefaults.Add(hash, eligible); return eligible;
+        }
         // Native staff companions use these unsummoning rules. Starts-tamed
         // also describes ordinary hens; following can be cleared by commands.
         // Inspect each instance, never cache this exception by prefab hash.

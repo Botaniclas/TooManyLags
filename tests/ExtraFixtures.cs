@@ -69,5 +69,6 @@ namespace TooManyLags
         private static IEnumerable<HarmonyLib.CodeInstruction> Transpiler(IEnumerable<HarmonyLib.CodeInstruction> source)
         {return OwnershipTranspiler.Rewrite(source,HarmonyLib.AccessTools.Method(typeof(OwnershipPatch),"Persistent"));}
         internal static bool Persistent(ZDO data){return Plugin.Controller==null?data.Persistent:Plugin.Controller.Persistent(data);}
+        internal static long NativeOwnerTarget(ZDO data,long owner){return Plugin.Controller==null?owner:Plugin.Controller.NativeOwnerTarget(data,owner);}
     }
 }

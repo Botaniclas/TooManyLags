@@ -658,9 +658,65 @@ internal static class IntegrationTests
             var visitor=Peer(2);Tick(9);Tick(11);Check("new entrant still owns natively released object",door.GetOwner()==2);
             ZNet.instance.Peers.Remove(visitor);Tick(12);Tick(14);Check("disconnected owner is not pinned by exit retention",controller.Persistent(door));
             var other=Peer(3,64);Tick(15);ZDOMan.instance.ReleaseNearbyZDOS(other.Position,3);
-            Check("native orphan reassignment to available peer remains possible",door.GetOwner()==3);
+            Check("native orphan reassignment chooses server default outside active grid",door.GetOwner()==99);
         }
         finally{patcher.UnpatchSelf();}
+    }
+    private static void NativeDefaultAssignments()
+    {
+        var patcher = new Harmony("botanic.authority.test.native-default");
+        patcher.Patch(AccessTools.Method(typeof(ZDOMan),"ReleaseNearbyZDOS"),transpiler:new HarmonyMethod(AccessTools.Method(typeof(OwnershipPatch),"Transpiler")));
+        try
+        {
+            Fresh(Kinds.Doors,defaultInteractives:true);var player=Peer(1);var door=Object(typeof(Door),40,1,0);
+            ZNetScene.instance.Ready=delegate{return false;};Tick(0);int queries=ZNetScene.instance.AreaQueries;
+            ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+            Check("native first assignment uses server before area readiness",door.GetOwner()==99&&door.Writes==1);
+            Check("native selector does not perform a loading scan or takeover RPC",ZNetScene.instance.AreaQueries==queries&&player.m_rpc.Calls==0);
+            controller.OwnerChanged(door);Tick(1);Tick(2);int writes=door.Writes,attempts=controller.ScheduledAttempts;
+            for(int i=3;i<=65;i++){Tick(i);ZDOMan.instance.ReleaseNearbyZDOS(new Vector3(512,0,512),99);ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);}
+            Check("server reference point does not cause repeated release/reclaim",door.GetOwner()==99&&door.Writes==writes);
+            Check("settled initial server ownership produces no further object jobs",controller.ScheduledAttempts==attempts);
+            ZNetScene.instance.Ready=delegate{return true;};Tick(66);
+            Check("area readiness does not cause another ownership change",door.Writes==writes&&door.GetOwner()==99);
+            controller.Unregister(ZNetScene.instance.FindInstance(door));ZNet.instance.Peers.Clear();Tick(67);
+            ZDOMan.instance.ReleaseNearbyZDOS(new Vector3(512,0,512),99);
+            Check("native release survives region unload and no players",door.GetOwner()==0);
+
+            Fresh(Kinds.Doors,defaultInteractives:false);player=Peer(1);door=Object(typeof(Door),40,1,0);Tick(0);
+            ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);Check("default false preserves native player assignment",door.GetOwner()==1);
+
+            Fresh(Kinds.Doors,defaultInteractives:true);player=Peer(1);var old=Peer(7,64);door=Object(typeof(Door),40,1,7);
+            ZNetScene.instance.Ready=delegate{return false;};Tick(0);ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+            Check("active native owner is not stolen before area readiness",door.GetOwner()==7&&door.Writes==0&&old.m_rpc.Calls==0);
+            MovePeer(old,512);Tick(1);ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+            Check("inactive native owner may be reassigned directly to server",door.GetOwner()==99&&door.Writes==1);
+
+            Fresh(Kinds.Doors,defaultInteractives:true);player=Peer(1);var other=Peer(2,64);door=Object(typeof(Door),1,1,0);
+            ZNetScene.instance.Ready=delegate{return false;};Tick(0);
+            ZDOMan.instance.ReleaseNearbyZDOS(other.Position,2);
+            Check("unsettled grid preserves native assignment instead of skipping timer",door.GetOwner()==2);
+            var unowned=Object(typeof(Door),2,1,0);Tick(2);ZDOMan.instance.ReleaseNearbyZDOS(other.Position,2);
+            Check("settled active player field overrides native peer pass",unowned.GetOwner()==1);
+            var staticPiece=Object(null,3,1,0);ZDOMan.instance.ReleaseNearbyZDOS(other.Position,2);
+            Check("noninteractive structures are not mapped to active grid owner",staticPiece.GetOwner()==2);
+
+            Fresh(Kinds.Doors,defaultInteractives:true);player=Peer(1);Peer(2);Tick(0);Tick(2);
+            door=Object(typeof(Door),1,1,0);ZNetScene.instance.Ready=delegate{return false;};
+            ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);Check("settled overlap retains server target",door.GetOwner()==99);
+
+            Fresh(Kinds.Doors|Kinds.Containers|Kinds.TamedAnimals|Kinds.Vehicles,defaultInteractives:true);player=Peer(1);
+            var chest=Object(typeof(Container),40,1,0);var privateChest=Object(typeof(Container),41,1,0);
+            ZNetScene.instance.FindInstance(privateChest).GetComponent<Container>().m_privacy=Container.PrivacySetting.Private;
+            var tame=Object(typeof(Character),42,1,0);tame.Tamed=true;controller.DataChanged(tame);
+            var vehicle=Object(typeof(Vagon),43,1,0);var physics=Object(typeof(Door),44,1,0);ZNetScene.instance.FindInstance(physics).gameObject.Add(new Rigidbody());
+            ZNetScene.instance.Ready=delegate{return false;};
+            Tick(0);ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+            Check("public unowned inventory can get its initial server owner",chest.GetOwner()==99);
+            Check("private inventory retains native initial owner",privateChest.GetOwner()==1);
+            Check("tames vehicles and rigid bodies retain existing loading path",tame.GetOwner()==1&&vehicle.GetOwner()==1&&physics.GetOwner()==1);
+        }
+        finally {patcher.UnpatchSelf();}
     }
     private static void InnerOnlyDepartureController()
     {
@@ -1319,7 +1375,7 @@ internal static class IntegrationTests
     public static void Main()
     {
         try {
-        Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
+        Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
         Console.WriteLine("PASS: "+checks+" full-controller/grid/router fixture assertions; no PUP/PupPatch plugin in fixture.");
         Console.WriteLine("LIMIT: simulated transport and Unity registry; no live multiplayer test.");

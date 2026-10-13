@@ -24,22 +24,34 @@ if (!(Test-Path -LiteralPath $runtime)) { throw 'Actual native interfaces requir
     Set-Content -LiteralPath (Join-Path $output 'NativeReleaseAudit.runtimeconfig.json') -Encoding UTF8
 $hash = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash
 $results = @()
-$actorResult = $null
+$actorResult = @()
 $failed = $false
 foreach ($version in @('1.5.41', '1.5.36')) {
     $fgn = Join-Path $FgnCache ($version + '\VAGhettoNetworking.dll')
+    if (!(Test-Path -LiteralPath $fgn)) { $fgn = Join-Path $FgnCache ($version + '\plugins\FiresGhettoNetworking\VAGhettoNetworking.dll') }
     $lines = @(& $audit $dll $managed $core $fgn $version 2>&1)
     $status = $LASTEXITCODE
     $lines | ForEach-Object { Write-Output $_ }
     $results += [ordered]@{ version = $version; sha256 = (Get-FileHash -LiteralPath $fgn -Algorithm SHA256).Hash; passed = ($status -eq 0); output = ($lines -join [Environment]::NewLine) }
     if ($status -ne 0) { $failed = $true; break }
-    if ($null -eq $actorResult) {
+    if ($actorResult.Count -eq 0) {
         $actorLines = @(& $runtime $audit $dll $managed $core $fgn $version 'pickable' 2>&1)
         $actorStatus = $LASTEXITCODE
         $actorLines | ForEach-Object { Write-Output $_ }
-        $actorResult = [ordered]@{ passed = ($actorStatus -eq 0); output = ($actorLines -join [Environment]::NewLine) }
+        $actorResult += [ordered]@{ version = $version; passed = ($actorStatus -eq 0); output = ($actorLines -join [Environment]::NewLine) }
         if ($actorStatus -ne 0) { $failed = $true; break }
     }
+}
+if (!$failed) {
+    # Latest provider: target the reported Pickable collision. Full networking
+    # and simulation-mode contracts retain their separate validated baselines.
+    $providerVersion = '1.5.53'
+    $provider = Join-Path $FgnCache ($providerVersion + '\plugins\FiresGhettoNetworking\VAGhettoNetworking.dll')
+    $actorLines = @(& $runtime $audit $dll $managed $core $provider $providerVersion 'pickable' 2>&1)
+    $actorStatus = $LASTEXITCODE
+    $actorLines | ForEach-Object { Write-Output $_ }
+    $actorResult += [ordered]@{ version=$providerVersion; providerSha256=(Get-FileHash -LiteralPath $provider -Algorithm SHA256).Hash; passed=($actorStatus -eq 0); output=($actorLines -join [Environment]::NewLine) }
+    if ($actorStatus -ne 0) { $failed = $true }
 }
 $changed = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash -ne $hash
 $verification = [ordered]@{

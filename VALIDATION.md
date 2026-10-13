@@ -1,3 +1,20 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.24 hotfix validation
+
+## Pickable patch composition
+
+The reported failure disables the entire object grid during startup. Published 1.0.23 expects one original Player.m_localPlayer/GetZDOID instruction pair; newer FiresGhettoNetworking's ServerSafePick replaces it with a null-safe LocalPlayerZdoid call and a nop before TooManyLags runs. The original rejection was reproduced with the published DLL, actual native method IL and the actual 1.5.53 helper metadata.
+
+The fix accepts exactly one known safe FiresGhettoNetworking call/nop pair and leaves it untouched. The original vanilla rewrite remains available for older providers. Unknown signatures, missing/duplicate actors and unexpected stack shapes still fail closed. This adds only startup transpiler inspection, with no polling, object scans or per-interaction checks.
+
+Source comparison against the fully verified 1.0.23 source package confirms only PickableServerPatch.cs and Plugin.cs differ in production; Plugin changes are version metadata only. Grid, handoff, inventory, refill, collider and AI code are identical. Four focused verification groups pass for the new binary: native contracts, real-BepInEx session settings, full-controller/router integration and imported combat. These include 50 exact Harmony targets against FiresGhettoNetworking 1.5.41 and 1.5.36, 865 latest-provider Pickable assertions, 74 settings assertions, 11,516 controller/router assertions and 708 combat assertions. The 1.0.23 baseline passed all 19 full verification groups; unrelated suites were not rerun for this narrow hotfix.
+
+The latest-provider Pickable tests inspect the actual FiresGhettoNetworking producer IL and model its two substitutions with the real helper MethodInfo, checking both patch orders on actual native IL and unchanged labels/exception blocks. They do not execute a live Harmony installation: the legacy HarmonyX AccessTools initializer is incompatible with the modern metadata host. No live Unity multiplayer or performance measurement is claimed.
+
+A separate exploratory audit found that FiresGhettoNetworking 1.5.53 wraps startup in AwakeCore and adds the SssQuietPass simulation group. This hotfix certifies its reported Pickable composition, not all latest-provider modes; the existing NoServerSideSimulation installer preflight still rejects unknown simulation groups, and that safety guard is not changed here.
+
+The verified DLL SHA256 is `E9B9B16EF4EA8A02CBF75AD11D761251CA996521E78DA83B8C2EBBD9CBB5A311`. verification.json records the focused results, prior baseline and unchanged production scope for this binary.
+
+---
 # TooManyLags - FiresGhettoNetworking Addon 1.0.23 release validation
 
 ## Server-controlled enable switches

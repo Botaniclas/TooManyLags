@@ -1,5 +1,10 @@
 # Changelog
 
+**1.0.24**
+```
+- Fixes the object ownership grid failing to start when newer FiresGhettoNetworking versions already patch Pickable.RPC_Pick. Preserves its existing server-safe effect actor; harvesting, inventory safeguards and grid timing are unchanged.
+```
+
 **1.0.23**
 ```
 - Makes Enabled and EnableAIOwnership server-controlled; clients ignore their local values, and only logging remains local. Both switches require a server restart; update server and clients together.

@@ -39,7 +39,7 @@ internal static class NativeReleaseAudit
                 using (AssemblyDefinition module = AssemblyDefinition.ReadAssembly(arguments[0], reader))
                 using (AssemblyDefinition native = AssemblyDefinition.ReadAssembly(Path.Combine(arguments[1], "assembly_valheim.dll"), reader))
                 {
-                    if (actorOnly) Pickable(authority, game, native);
+                    if (actorOnly) Pickable(authority, game, native, fgn);
                     else
                     {
                         Metadata(module, native);
@@ -635,7 +635,7 @@ internal static class NativeReleaseAudit
         }
         Console.WriteLine("PASS: actual native grid+AI ownership transpilers compose in either order; only one persistent getter and two owner calls change.");
     }
-    private static void Pickable(Assembly authority, Assembly game, AssemblyDefinition native)
+    private static void Pickable(Assembly authority, Assembly game, AssemblyDefinition native, Assembly fgn)
     {
         MethodInfo original = game.GetType("Pickable", true).GetMethod("RPC_Pick", Instance);
         Type patch = authority.GetType("TooManyLags.PickableServerPatch", true);
@@ -683,6 +683,63 @@ internal static class NativeReleaseAudit
         Check(changes == 2, "Exactly two effect actor substitutions required");
         Rejected(rewrite, new object[] { after }, "already rewritten harvest actor");
         Console.WriteLine("PASS: Actual Pickable.RPC_Pick: only two effect-actor instructions changed; harvest/drop/bonus/ownership behavior untouched; changed preflight rejected.");
+        Type safePick = fgn.GetType("FiresGhettoNetworkMod.ServerSafePick", false);
+        if (safePick == null) return;
+        MethodInfo fgnRewrite = safePick.GetMethod("RpcPickTranspiler", Static);
+        MethodInfo fgnActor = safePick.GetMethod("LocalPlayerZdoid", Static);
+        Check(fgnRewrite != null && fgnActor != null && fgnActor.IsStatic && fgnActor.ReturnType == game.GetType("ZDOID", true) && fgnActor.GetParameters().Length == 0,
+            "Actual FGN safe pick contract changed");
+        using (AssemblyDefinition provider = AssemblyDefinition.ReadAssembly(fgn.Location))
+        {
+            MethodDefinition producer = ByToken(provider.MainModule.GetType("FiresGhettoNetworkMod.ServerSafePick"), fgnRewrite.MetadataToken);
+            bool call = false, nop = false, safe = false;
+            foreach (Mono.Cecil.Cil.Instruction instruction in producer.Body.Instructions)
+            {
+                FieldReference field = instruction.Operand as FieldReference;
+                if (field == null) continue;
+                if (field.DeclaringType.FullName == "System.Reflection.Emit.OpCodes" && field.Name == "Call") call = true;
+                if (field.DeclaringType.FullName == "System.Reflection.Emit.OpCodes" && field.Name == "Nop") nop = true;
+                if (field.DeclaringType.FullName == "FiresGhettoNetworkMod.ServerSafePick" && field.Name == "s_safe") safe = true;
+            }
+            Check(call && nop && safe, "Actual FGN producer must retain the audited safe call/nop rewrite");
+        }
+        // Model the audited provider's two substitutions with its actual helper
+        // MethodInfo. Legacy HarmonyX AccessTools cannot initialize on .NET 8;
+        // this host inspects metadata and never executes Unity/Harmony patching.
+        var fgnFirst = FgnPickRewrite(before, fgnActor);
+        Flow(before, fgnFirst); int safeCalls = 0;
+        for (int i = 0; i + 1 < fgnFirst.Count; i++)
+            if (fgnFirst[i].opcode == OpCodes.Call && fgnActor.Equals(fgnFirst[i].operand) && fgnFirst[i + 1].opcode == OpCodes.Nop) safeCalls++;
+        Check(safeCalls == 1, "FGN must replace exactly one native effect actor");
+        var composed = (List<CodeInstruction>)rewrite.Invoke(null, new object[] { fgnFirst });
+        Flow(fgnFirst, composed);
+        for (int i = 0; i < composed.Count; i++)
+            Check(composed[i].opcode == fgnFirst[i].opcode && Object.Equals(composed[i].operand, fgnFirst[i].operand), "TML must preserve the existing FGN safe actor");
+        var tmlFirst = FgnPickRewrite(after, fgnActor);
+        Flow(after, tmlFirst);
+        for (int i = 0; i < after.Count; i++)
+            Check(tmlFirst[i].opcode == after[i].opcode && Object.Equals(tmlFirst[i].operand, after[i].operand), "FGN must preserve the TML safe actor when TML runs first");
+        var malformed = new List<CodeInstruction>();
+        foreach (CodeInstruction instruction in fgnFirst) malformed.Add(new CodeInstruction(instruction));
+        for (int i = 0; i + 1 < malformed.Count; i++)
+            if (malformed[i].opcode == OpCodes.Call && fgnActor.Equals(malformed[i].operand)) { malformed[i + 1].opcode = OpCodes.Ldnull; break; }
+        Rejected(rewrite, new object[] { malformed }, "changed FGN actor stack shape");
+        Console.WriteLine("PASS: FGN ServerSafePick producer metadata and both modeled patch orders on actual native IL; existing safe actor preserved; unknown stack shape rejected. No live Harmony installation.");
+    }
+    private static List<CodeInstruction> FgnPickRewrite(List<CodeInstruction> source, MethodInfo actor)
+    {
+        var result = new List<CodeInstruction>();
+        foreach (CodeInstruction instruction in source) result.Add(new CodeInstruction(instruction));
+        for (int i = 0; i + 1 < result.Count; i++)
+        {
+            FieldInfo field = result[i].operand as FieldInfo;
+            MethodInfo method = result[i + 1].operand as MethodInfo;
+            if (result[i].opcode != OpCodes.Ldsfld || field == null || field.DeclaringType.FullName != "Player" || field.Name != "m_localPlayer" ||
+                result[i + 1].opcode != OpCodes.Callvirt || method == null || method.DeclaringType.FullName != "Character" || method.Name != "GetZDOID") continue;
+            result[i].opcode = OpCodes.Call; result[i].operand = actor;
+            result[i + 1].opcode = OpCodes.Nop; result[i + 1].operand = null;
+        }
+        return result;
     }
 
     private static void Fgn(Assembly authority, Assembly fgn, Assembly game)

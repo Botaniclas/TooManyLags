@@ -19,15 +19,23 @@ namespace TooManyLags
             MethodInfo id = typeof(Character).GetMethod("GetZDOID", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null);
             MethodInfo actor = typeof(PickableServerPatch).GetMethod("EffectActor", BindingFlags.Static | BindingFlags.NonPublic);
             if (player == null || id == null || actor == null) throw new NotSupportedException("Native Pickable actor API changed.");
-            int changed = 0;
+            int changed = 0, alreadySafe = 0;
             for (int i = 0; i + 1 < result.Count; i++)
             {
+                MethodInfo safe = result[i].operand as MethodInfo;
+                // Newer FGN already replaces this pair with its null-safe
+                // helper and a nop. Keep its patch; reject unknown IL shapes.
+                if (result[i].opcode == OpCodes.Call && safe != null && safe.IsStatic &&
+                    safe.DeclaringType != null && safe.DeclaringType.FullName == "FiresGhettoNetworkMod.ServerSafePick" &&
+                    safe.Name == "LocalPlayerZdoid" && safe.ReturnType == typeof(ZDOID) && safe.GetParameters().Length == 0 &&
+                    result[i + 1].opcode == OpCodes.Nop && result[i + 1].operand == null)
+                { alreadySafe++; continue; }
                 if (result[i].opcode != OpCodes.Ldsfld || !player.Equals(result[i].operand) ||
                     result[i + 1].opcode != OpCodes.Callvirt || !id.Equals(result[i + 1].operand)) continue;
                 result[i].opcode = OpCodes.Ldarg_1; result[i].operand = null;
                 result[i + 1].opcode = OpCodes.Call; result[i + 1].operand = actor; changed++;
             }
-            if (changed != 1) throw new NotSupportedException("Native Pickable effect actor contract changed.");
+            if (changed + alreadySafe != 1) throw new NotSupportedException("Native Pickable effect actor contract changed.");
             return result;
         }
         [HarmonyTranspiler]

@@ -1173,6 +1173,39 @@ internal static class IntegrationTests
         }
         finally { FgnOwnerHandoff.CooperativeClient = null; FgnOwnerHandoff.IdentifiedSend = null; FgnOwnerHandoff.IdentifiedStatus = null; RequestRouter.RecipientReady = null; }
     }
+    private static void DelayedReadinessInteractions()
+    {
+        foreach(bool accept in new[]{false,true})
+        foreach(Type type in new[]{typeof(Door),typeof(CraftingStation)})
+        {
+            long token=0,sequence=0;var probe=new TooManyLags.GridHandoffs.ReadinessProbe();
+            FgnOwnerHandoff.CooperativeClient=delegate{return true;};
+            FgnOwnerHandoff.IdentifiedSend=delegate(ZNetPeer p,ZDOID id,long target,uint revision,long t){token=t;};
+            FgnOwnerHandoff.IdentifiedStatus=delegate{};
+            RequestRouter.RecipientReady=delegate(ZDOMan world,long owner,ZDO data){probe.Query(Time.unscaledTime,ref sequence);return probe.Ready;};
+            try
+            {
+                Fresh(Kinds.Doors|Kinds.Workstations);Peer(1);var source=Peer(7,64);FiresGhettoNetworkMod.FgnVersionGate.Match=true;
+                var data=Object(type);Tick(0);Tick(2);string method=type==typeof(Door)?"UseDoor":"RPC_Repair";
+                Check("door/station handoff starts",token>0&&controller.TransferPending(data));ZDOMan.instance.MarkSent(7,data);
+                Check("interaction waits only while actual handoff pending",controller.Router.TryHandle(ZRoutedRpc.instance,Request(data,method,7),false));
+                long actual=accept?1:7;uint revision=data.OwnerRevision+(accept?1U:0U);
+                Check("definitive source response accepted",controller.Cooperative.Observed(source.m_rpc,data.m_uid,token,true,true,actual,revision));
+                if(accept){data.SetOwner(1);controller.OwnerChanged(data);}
+                controller.RecordRecipient(data,actual,revision,data.DataRevision);ZDOMan.instance.MarkSent(actual,data);
+                controller.Router.Flush();long readinessToken=probe.Token;
+                Check("source consent is settled before recipient wait",!controller.TransferPending(data)&&ZRoutedRpc.instance.Remote.Count==0&&readinessToken>0);
+                Tick(2.6f);Tick(3.2f);
+                Check("slow network retries retain outstanding identity",probe.Token==readinessToken&&sequence==1&&ZRoutedRpc.instance.Remote.Count==0);
+                Check("delayed recipient answer completes",probe.Response(readinessToken,true,3.3f));controller.Router.Flush();
+                Check("door/station action dispatched once at actual owner",ZRoutedRpc.instance.Remote.Count==1&&data.GetOwner()==actual);
+                controller.Router.Flush();Check("late readiness cannot replay action",ZRoutedRpc.instance.Remote.Count==1);
+                var next=Request(data,method,actual);next.m_senderPeerID=2;
+                Check("another sender can use ready owner's native path",!controller.Router.TryHandle(ZRoutedRpc.instance,next,false));
+            }
+            finally{FgnOwnerHandoff.CooperativeClient=null;FgnOwnerHandoff.IdentifiedSend=null;FgnOwnerHandoff.IdentifiedStatus=null;RequestRouter.RecipientReady=null;}
+        }
+    }
     private static void ScopedInteractionDelivery()
     {
         var ready = new HashSet<ZDOID>(); int reads = 0;
@@ -1400,7 +1433,7 @@ internal static class IntegrationTests
         try {
         Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
-        SeparateMobDefaults();
+        SeparateMobDefaults();DelayedReadinessInteractions();
         Console.WriteLine("PASS: "+checks+" full-controller/grid/router fixture assertions; no PUP/PupPatch plugin in fixture.");
         Console.WriteLine("LIMIT: simulated transport and Unity registry; no live multiplayer test.");
         } catch(Exception error){Console.Error.WriteLine(error);Environment.ExitCode=1;}

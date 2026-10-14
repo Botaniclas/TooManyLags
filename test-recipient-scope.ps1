@@ -7,3 +7,8 @@ $recipientExe=Join-Path $recipientOutput 'RecipientRequirementTests.exe'
 if($LASTEXITCODE -ne 0){throw 'Recipient scope compile failed.'}
 & $recipientExe
 if($LASTEXITCODE -ne 0){throw 'Recipient scope tests failed.'}
+$recipientProbeExe=Join-Path $recipientOutput 'ReadinessProbeTests.exe'
+& $recipientCompiler /nologo /optimize+ /warnaserror+ /langversion:5 ('/out:'+$recipientProbeExe) (Join-Path $PSScriptRoot 'src\GridReadinessProbe.cs') (Join-Path $PSScriptRoot 'tests\ReadinessProbeTests.cs')
+if($LASTEXITCODE -ne 0){throw 'Recipient readiness probe compile failed.'}
+& $recipientProbeExe
+if($LASTEXITCODE -ne 0){throw 'Recipient readiness probe tests failed.'}

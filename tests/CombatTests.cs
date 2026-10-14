@@ -21,6 +21,7 @@ internal static partial class FgnCombatTests
     {var map=(System.Collections.IDictionary)service.GetField("watching",flags).GetValue(null);object watch=map[mob.m_uid];watch.GetType().GetField("Acknowledged",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(watch,true);}
     private static void Setup()
     {
+        ZRpc.LegacySend=FgnMobHandoff.Reset; FgnBossPolicy.Configure(false,30f);
         Set("defaultMobs",new ConfigEntry<bool>(false));Set("serverDefaultsConfigured",false);
         Time.AutoAdvance=0;Call("Reset"); FiresGhettoNetworkMod.CreatureOwnership.Clear();
         ZNet.instance=new ZNet();ZDOMan.instance=new ZDOMan();ZNetScene.instance=new ZNetScene();Time.realtimeSinceStartupAsDouble=20;
@@ -122,7 +123,7 @@ internal static partial class FgnCombatTests
         Setup();target.Ping=400;mob.Set(ZDOVars.s_tamed,1);Assert(!Handle(out moved)&&!moved,"tamed excluded");
         Setup();target.Ping=400;mob.Set(ZDOVars.s_user,3);Assert(!Handle(out moved)&&!moved,"controlled excluded");
         Setup();target.Ping=400;mob.Held=true;Assert(!Handle(out moved)&&!moved,"FGN hold respected");
-        Setup();target.Ping=400;ZNetScene.instance.FindInstance(mob).GetComponent<Character>().Boss=true;Assert(!Handle(out moved)&&!moved,"boss cannot enter server exception");
+        Setup();target.Ping=400;ZNetScene.instance.FindInstance(mob).GetComponent<Character>().Boss=true;Assert(!Handle(out moved)&&moved,"boss uses normal high-ping exception with special rule disabled");
         Setup();target.Ping=400;FgnCombatOwnership.Fgn.PerOwner[1]=6;Assert(!Handle(out moved)&&!moved,"six handoffs per owner cap preserved");
         Setup();target.Ping=400;Set("passMoves",16);Assert(!Handle(out moved)&&!moved,"sixteen handoffs per pass cap preserved");
         Setup();target.Ping=400;FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]=30;Assert(!Handle(out moved)&&!moved,"FGN declined cooldown preserved");
@@ -184,7 +185,7 @@ internal static partial class FgnCombatTests
         Assert((bool)localHit.Invoke(null,hitArgs),"server mode OFF keeps original client damage veto");
         ZNetPeer server=new ZNetPeer{m_uid=100,m_server=true};ZNet.instance.ServerPeer=server;ZNet.instance.LocalPlayerCharacterID=old.m_characterID;Call("SessionConnection",server);
         server.m_rpc.Receive(4);Assert(!FgnCombatOwnership.ShouldOverride(mob.m_uid),"old server without attack-ready protocol retains stock FGN behavior");
-        server.m_rpc.Receive(5);Call("ReceiveWatch",server,mob.m_uid,1L,(long)mob.OwnerRevision);
+        server.m_rpc.Receive(7);Call("ReceiveWatch",server,mob.m_uid,1L,(long)mob.OwnerRevision);
         Assert(FgnCombatOwnership.ShouldOverride(mob.m_uid),"authoritative new-server mode and renewed watch permit override");
         Call("Fail",new Exception("fixture"));Assert(ZDOMan.instance.GetZDO(old.m_characterID).GetLong("toomanylags.fgn.ai.protocol".GetStableHashCode(),0)==0,"feature failure revokes owned player capability");
         Setup();Call("Fail",new Exception("server fixture"));Assert(!FgnCombatOwnership.Enabled&&old.m_rpc.LastMode==3&&target.m_rpc.LastMode==3&&other.m_rpc.LastMode==3,"server feature failure sends OFF to every ready client");
@@ -238,6 +239,7 @@ internal static partial class FgnCombatTests
         NativeReadinessTests();
         FriendlyCreatureTests();
         DefaultMobTests();
+        IdentifiedHandoffTests(); BossTargetTests();
         Console.WriteLine("PASS: "+count+" production FGN combat/target/lease/runtime-transpiler assertions; managed doubles, not live Unity/transport.");
     }
 
@@ -536,7 +538,7 @@ internal static partial class FgnCombatTests
 
             current=reject();actor=ZNetScene.instance.FindInstance(mob).GetComponent<Humanoid>();
             ai.Target=ZNetScene.instance.FindInstance(ZDOMan.instance.GetZDO(other.m_characterID)).GetComponent<Player>();end(current);
-            Assert(ZNet.instance.ServerPeer.m_rpc.AttackReadySent==0&&ZNet.instance.ServerPeer.m_rpc.TargetId==other.m_characterID,"changed current target sends its normal target event, not a stale ready notification");
+            Assert(ZNet.instance.ServerPeer.m_rpc.AttackReadySent==1&&ZNet.instance.ServerPeer.m_rpc.TargetId==other.m_characterID,"changed current target sends target event plus readiness for a still-pending veto reply");
             Server();Call("ReceiveTarget",old,mob.m_uid,other.m_characterID,(long)mob.OwnerRevision);
             Assert(old.m_rpc.Destination==3,"attack-end retry uses latest player target instead of capturing old destination");
 
@@ -800,7 +802,7 @@ internal static partial class FgnCombatTests
         Set("configured",new ConfigEntry<bool>(true));Set("detectedVersion",new Version(1,5,36));
         FiresGhettoNetworkMod.CreatureOwnership.Hit(mob.m_uid,3);
         string status=String.Join("\n",new List<string>(FgnCombatOwnership.DescribeStatus()).ToArray());
-        Assert(status.Contains("server balance=True")&&status.Contains("protocol=3"),"diagnostics show actual balance and peer protocol rather than config alone");
+        Assert(status.Contains("server balance=True")&&status.Contains("protocol=5"),"diagnostics show actual balance and peer protocol rather than config alone");
         int writes=mob.Writes,owners=mob.OwnerWrites,sent=old.m_rpc.Sent,watchSent=old.m_rpc.WatchSent,targetSent=ZNet.instance.ServerPeer.m_rpc.TargetSent;
         string line=FgnCombatOwnership.DescribeMob(mob,ai);
         Assert(line.Contains("rule=AI target")&&line.Contains("last attacker=3")&&line.Contains("report="),"diagnostics expose AI rule and differing raw last attacker");
@@ -828,7 +830,7 @@ internal static partial class FgnCombatTests
     {
         Setup();Call("RemoveWatch",mob.m_uid);
         string line=FgnCombatOwnership.DescribeServerMob(mob.m_uid);
-        Assert(line.Contains("FGN candidates=3")&&line.Contains("eligible near mob=3")&&line.Contains("owner protocol=3")&&line.Contains("server watch=missing"),"server diagnostic distinguishes candidate count, owner capability and missing watch");
+        Assert(line.Contains("FGN candidates=3")&&line.Contains("eligible near mob=3")&&line.Contains("owner protocol=5")&&line.Contains("server watch=missing"),"server diagnostic distinguishes candidate count, owner capability and missing watch");
         Assert(line.Contains("prefab=True")&&line.Contains("type=True")&&line.Contains("scan pass="),"server diagnostic reads original FGN prefab/type filters and actual addon pass");
         Assert(line.Contains("reported target peer=2")&&line.Contains("transfer pending=False")&&line.Contains("cooldown=0.0s"),"server diagnostic maps reported target to peer without reading a replica's local AI");
         FgnCombatOwnership.Fgn.MarkPending(mob.m_uid,2,Time.realtimeSinceStartupAsDouble);FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]=26;
@@ -998,7 +1000,7 @@ internal static partial class FgnCombatTests
 
         // Actual event calls share stock per-owner counters and one global 16-request budget.
         Setup();Set("collecting",false);var fourth=Peer(4,50,new Vector3(103,0,100));
-        ZDOMan.instance.GetZDO(fourth.m_characterID).Set("toomanylags.fgn.ai.protocol".GetStableHashCode(),3L);
+        ZDOMan.instance.GetZDO(fourth.m_characterID).Set("toomanylags.fgn.ai.protocol".GetStableHashCode(),5L);
         FiresGhettoNetworkMod.CreatureOwnership.Candidates(ZNet.instance.Peers);
         for(int i=0;i<20;i++)
         {

@@ -1,3 +1,62 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.29 local test build
+
+## Interaction-readiness retry identity
+
+The prior experimental receiver gate allocated a new readiness token on every 0.5-second retry. With regular response delays above that interval and continuing interaction flushes, each response referred to an older token and could be discarded indefinitely, despite an actually loaded current owner. This was a source-level waiting-loop defect, not proof that every previously reported ownership problem had the same cause.
+
+ReadinessProbe now keeps one outstanding identity through unanswered retries. A completed unavailable response retires it; a higher required state floor, changed owner/revision/transport, unloading and scene/peer cleanup still invalidate readiness. Available replies retain the unload-notification token. Stale responses after invalidation cannot restore readiness. The inline value type adds no per-probe allocation, physics polling, new timeout, forced ownership or changed wire protocol. Actual owner consent, state and loading proofs remain required. The only other gameplay change here is EnableExperimentalInteractionProtection=true for newly generated configs; saved values are preserved, and ServerOwnedMobsByDefault stays false. Other pending mob/boss work in the shared checkout was preserved.
+
+Native CraftingStation.Interact opens the local crafting UI after native distance/roof/fire checks without checking ownership or making an owner-directed opening RPC. Door.UseDoor and owner-directed damage/repair actions use the routed path. Added controller fixtures exercise accepted and rejected source handoffs, delayed readiness across repeated retries, single door/repair delivery and subsequent interaction from another sender. These fixtures simulate transport; they do not execute a Unity crafting menu or door animation.
+
+All 20 verification groups pass on the final DLL. This includes 28 production probe checks with 0.05-, 0.6-, 1.2-, 3- and 10-second reply delays, state-floor changes, missing replies/retries and unloading/stale responses; 11,678 controller/grid/router assertions; 22,538 native release assertions and 50 unchanged Harmony targets against each audited native provider; and the existing mob, boss, inventory/refill, startup and optional-client groups. Actual compiled protocol metadata confirms use of the tested inline probe for query, response and invalidation. No live multiplayer result or measured performance improvement is claimed. Verified DLL SHA256: `659956640B7924E7825773923B659404BA6891B05377A6EB7D333EBDD6A28FF8`. Not published or pushed.
+
+---
+
+# TooManyLags - FiresGhettoNetworking Addon 1.0.28 local test build
+
+## Target-driven boss ownership
+
+`BossAlwaysServerOwned=true` and `BossPlayerRadius=30` are server-only, restart-only settings. Native AI player-target acquisition, change and loss drive the policy. A living current player target and two living eligible FiresGhettoNetworking players inside the boss radius select a guarded server handoff when Server-Side Simulation is active. Otherwise bosses use the ordinary Hostile Mob target/high-ping policy. Disabling the boss option or Server-Side Simulation performs no boss radius checks. This option does not change idle server-default exclusions. The separate NoServerSideSimulation=true player-simulation module retains its pre-existing boss exclusion; this change applies to the FiresGhettoNetworking/Server-Side Simulation combat module.
+
+The existing FiresGhettoNetworking prefab scan now includes bosses. Only an authenticated, revision-matched TooManyLags source commit can bypass its final boss-only veto. Original attack, stagger, dead, tame, riding, holding, possession and loaded/collision-readiness checks remain. Foreign/legacy requests still receive the native boss veto. Protocol 5 requires this version on server and participating clients; older peers retain native behavior.
+
+Player movement, rotation, entering/leaving the radius and unchanged owner-renewal reports do not recompute a boss radius. The next actual player-target change does. New watches bootstrap the authoritative target once. Pending requests, readiness/attack retries and existing native passes reuse the decision; none add a boss timer or movement/physics hook. Weak ZDO keys do not keep world objects or scene instances alive, and session reset discards decisions.
+
+Native source review found no timed AI suspension in FiresGhettoNetworking's handoff: final veto, ForceSendZDO, SetOwner, hit forwarding and reply run sequentially. The old owner's AI stops updating once it no longer owns the local replica; the new owner runs once ownership replication arrives and its update is due. A handover gap can therefore depend on network delay, replication scheduling and simulation load; there is no guaranteed duration. The native five-second pending window and six-second rejection cooldown schedule requests, not AI pauses. The latter is removed only for authenticated managed replies by the existing handoff fix. TargetSync adopts a valid enemy target within 60 metres; otherwise native MonsterAI target acquisition uses its usual two-/six-second search cadence. Attack blocking lets the existing owner finish its attack.
+
+All 20 verification groups pass. The combat suite passes 1,831 assertions on CLR and embedded Valheim Mono, including the new two-player boss choice, exact 30-metre boundary, dead-player exclusion, same-target owner renewal, zero repeated radius work over 10,000 retries, disabled rule, attack/stagger vetoes, collider wait, in-flight retargeting, legacy veto and reset. Actual prefab-scan/veto contracts pass against FiresGhettoNetworking 1.5.36, 1.5.41 and 1.5.53; the separate movement/physics code remains untouched. Existing grid, inventory/refill and handoff checks also pass. The generated config contains 50 settings, preserving previous defaults.
+
+Verified DLL SHA256: `6BCFC9106733699A18C81FE2C842367E4CAD41D4655D0117D69E65104EF319F3`.
+
+Local source changes only. No live multiplayer boss test, publication or remote push performed. Final verification results are recorded in verification.json.
+
+---
+
+# TooManyLags - FiresGhettoNetworking Addon 1.0.27 local test build
+
+## Latest-target mob handoffs
+
+Only managed Hostile Mob handoffs change. The source still executes FiresGhettoNetworking's original commit, including its final attack/stagger/control vetoes, ForceSendZDO ordering and late-hit forwarding. Immediately before that commit, TooManyLags refreshes the real local AI target. An outdated target rejects the old request; its authenticated reply releases the pending slot and immediately retries the latest server report. This keeps high-ping fallback decisions on the server, instead of silently redirecting to a different player without rechecking that policy. No attack is cancelled or delayed by this change.
+
+An actual attack veto still arms the existing weak attack-end ticket. Attack end rereads the target and sends readiness even when the target changed, so an older delayed veto reply can consume that readiness immediately. Animation/attack chaining, stagger, holding, possession, riding, friendly summons, taming, boss and collision/loading restrictions remain effective. Existing FiresGhettoNetworking passes remain a fallback when the native animation still reports an attack after Stop.
+
+Requests carry a token and source owner revision. Only one identified commit can be in flight per mob; a native five-second timeout does not permit an overlapping commit. Accepted replies wait for actual owner replication rather than forcing the server replica. Replication then clears the native pending stamp and watches the new owner immediately. Duplicate source commits, late/foreign replies, changed revisions, destroyed objects and disconnected sources cannot complete a newer request. Matching server/client protocol support is required; older peers retain native FiresGhettoNetworking behavior.
+
+The native six-second rejection cooldown is removed only for an authenticated identified managed reply; a pre-existing or different cooldown is preserved. Native counters/cleanup and all actual vetoes remain. This is not a general bypass of other mods' ownership restrictions.
+
+## Runtime cost
+
+No new Update, FixedUpdate, physics polling or repeating timer is added. Empty replication callbacks perform a count check. Only outstanding requests are reconciled by received ZDO packets and the existing FiresGhettoNetworking balance pass. Records contain pending ZDO/peer references, not a world-wide completed-object cache; world reset, invalid/unloaded objects, owner revisions, active-area exit and disconnects prune them. Source token fences use weak connection keys. Stable AI targets still produce no repeated target writes or RPCs. No live performance measurement is claimed.
+
+## Verification
+
+All 20 verification groups pass. The combat suite passes 1,795 assertions on CLR and embedded Valheim Mono, including pending target changes, attack-end target changes with an overdue veto reply, source replay, acceptance before replication, high-ping re-evaluation, unrelated cooldown preservation, legacy fallback and cleanup. Actual native/compiled IL contracts pass for FiresGhettoNetworking 1.5.36, 1.5.41 and 1.5.53. Inventory/refill/grid safeguards, optional PUP readiness and generated configuration checks also pass. These are managed/runtime and metadata checks, not a live multiplayer session.
+
+Not published or pushed. Update server and participating clients together for the new mob handoff behavior.
+Verified DLL SHA256: `97A1374CC1C796CAF440AC67C09A5077079429C01DA3745B28A9E4BE27729D2B`.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.26 local test build
 
 ## Optional mob defaults

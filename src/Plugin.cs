@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.26.0")]
+[assembly: AssemblyVersion("1.0.29.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.26")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.29")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.26", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.29", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -83,7 +83,7 @@ namespace TooManyLags
             if (Single.IsNaN(interval) || Single.IsInfinity(interval)) interval = IntervalConfig.Default;
             bool keepOnExit = Config.Bind("04 - Grid Settings", "KeepOwnershipOnCellExit", true,
                 "Server only; restart required. true: keep ownership after everyone leaves. In directional mode, when one player remains, only red fields transfer automatically; orange/yellow wait for that player's next cell/heading change. Completed player fields are cached until relevant changes/unloading. false: complete directional footprint with a red 3x3 centre, normal departure transfers and no cache. Native release and pinned stations still apply.").Value;
-            bool interactionProtection = Config.Bind("07 - Experimental Interaction Protection", "EnableExperimentalInteractionProtection", false,
+            bool interactionProtection = Config.Bind("07 - Experimental Interaction Protection", "EnableExperimentalInteractionProtection", true,
                 "Server only; restart required. Experimental extra protection introduced in 1.0.15: identified source handoffs, recipient-readiness checks and client relays during ownership changes. false uses the earlier handoff path. Existing inventory, refill and active-use protection stays enabled. Client value is ignored. Ignored with NoServerSideSimulation=true.").Value;
             Kinds kinds = Kinds.None;
             foreach (Kinds kind in Enum.GetValues(typeof(Kinds)))

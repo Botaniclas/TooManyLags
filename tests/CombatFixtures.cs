@@ -148,13 +148,32 @@ public class MonsterAI : BaseAI
     [MethodImpl(MethodImplOptions.NoInlining)] public override bool UpdateAI(float dt){if(!base.UpdateAI(dt))return false;if(Sleeping)return true;bool hear,see;UpdateTarget(null,dt,out hear,out see);return true;}
     [MethodImpl(MethodImplOptions.NoInlining)] private void UpdateTarget(Humanoid human,float dt,out bool hear,out bool see) { hear=see=true; }
 }
+public class ZPackage
+{
+    private readonly System.IO.MemoryStream stream=new System.IO.MemoryStream();
+    public void Write(uint value){new System.IO.BinaryWriter(stream).Write(value);}
+    public void Write(long value){new System.IO.BinaryWriter(stream).Write(value);}
+    public void Write(bool value){new System.IO.BinaryWriter(stream).Write(value);}
+    public void Write(string value){new System.IO.BinaryWriter(stream).Write(value);}
+    public void Write(ZDOID value){Write(value.UserID);Write(value.ID);}
+    public uint ReadUInt(){return new System.IO.BinaryReader(stream).ReadUInt32();}
+    public long ReadLong(){return new System.IO.BinaryReader(stream).ReadInt64();}
+    public bool ReadBool(){return new System.IO.BinaryReader(stream).ReadBoolean();}
+    public string ReadString(){return new System.IO.BinaryReader(stream).ReadString();}
+    public ZDOID ReadZDOID(){return new ZDOID(ReadLong(),ReadUInt());}
+    public ZPackage Rewind(){stream.Position=0;return this;}
+}
 public class ZRpc
 {
+    // Earlier suites intentionally deliver legacy native RPCs by hand. The
+    // identified suite disables this adapter and exercises the real new endpoints.
+    public static Action LegacySend;
     public int Sent,ModeSent,LastMode; public long Destination; public ZDOID Mob; private Action<ZRpc,int> receive;
     public int WatchSent,TargetSent; public long WatchOwner,WatchRevision,TargetRevision; public ZDOID WatchMob,TargetMob,TargetId;
     public int StatusRequests,StatusReplies,StatusTicket; public string StatusLine;
     public int HandoffResults; public bool HandoffAccepted; public string HandoffReason;
     public int AttackReadySent; public ZDOID AttackReadyMob; public long AttackReadyRevision;
+    public long CommitToken,ResultToken; public ZPackage CommitPayload,ResultPayload; public int CommitResults;
     private readonly Dictionary<string,Delegate> handlers=new Dictionary<string,Delegate>();
     public void Register<T>(string name,Action<ZRpc,T> handler){receive=(rpc,value)=>handler(rpc,(T)(object)value);}
     public void Register<T,U>(string name,Action<ZRpc,T,U> handler){handlers[name]=handler;}
@@ -163,10 +182,14 @@ public class ZRpc
     public void ReceiveWatch(ZDOID id,long owner,long revision){((Action<ZRpc,ZDOID,long,long>)handlers["TooManyLags_AI_Watch"])(this,id,owner,revision);}
     public void ReceiveTarget(ZDOID id,ZDOID target,long revision){((Action<ZRpc,ZDOID,ZDOID,long>)handlers["TooManyLags_AI_Target"])(this,id,target,revision);}
     public void ReceiveAttackReady(ZDOID id,long revision){((Action<ZRpc,ZDOID,long>)handlers["TooManyLags_AI_AttackReady"])(this,id,revision);}
+    public void ReceiveCommit(ZDOID id,long token,ZPackage payload){((Action<ZRpc,ZDOID,long,ZPackage>)handlers["TooManyLags_AI_Commit"])(this,id,token,payload.Rewind());}
+    public void ReceiveCommitResult(ZDOID id,long token,ZPackage payload){((Action<ZRpc,ZDOID,long,ZPackage>)handlers["TooManyLags_AI_CommitResult"])(this,id,token,payload.Rewind());}
     public void ReceiveStatus(ZDOID id,int ticket){((Action<ZRpc,ZDOID,int>)handlers["TooManyLags_AI_Status"])(this,id,ticket);}
     public void ReceiveStatusReply(int ticket,string line){((Action<ZRpc,int,string>)handlers["TooManyLags_AI_StatusReply"])(this,ticket,line);}
     public void Invoke(string name,params object[] data)
     {if(name=="FGN_HandOff"){Sent++;Mob=(ZDOID)data[0];Destination=(long)data[1];}
+     else if(name=="TooManyLags_AI_Commit"){Sent++;Mob=(ZDOID)data[0];CommitToken=(long)data[1];CommitPayload=(ZPackage)data[2];CommitPayload.Rewind();CommitPayload.ReadUInt();Destination=CommitPayload.ReadLong();CommitPayload.Rewind();if(LegacySend!=null)LegacySend();}
+     else if(name=="TooManyLags_AI_CommitResult"){CommitResults++;Mob=(ZDOID)data[0];ResultToken=(long)data[1];ResultPayload=(ZPackage)data[2];}
      else if(name=="TooManyLags_AI_Mode"){ModeSent++;LastMode=(int)data[0];}
      else if(name=="TooManyLags_AI_Watch"){WatchSent++;WatchMob=(ZDOID)data[0];WatchOwner=(long)data[1];WatchRevision=(long)data[2];}
      else if(name=="TooManyLags_AI_Target"){TargetSent++;TargetMob=(ZDOID)data[0];TargetId=(ZDOID)data[1];TargetRevision=(long)data[2];}
@@ -220,6 +243,7 @@ public static class ZoneSystem
 }
 public class ZDOMan
 {
+    [MethodImpl(MethodImplOptions.NoInlining)] private void RPC_ZDOData(){}
     public static ZDOMan instance; public static long Session=100; public int Forced;
     public readonly Dictionary<ZDOID,ZDO> Data=new Dictionary<ZDOID,ZDO>();
     public static long GetSessionID(){return Session;} public ZDO GetZDO(ZDOID id){ZDO d;return Data.TryGetValue(id,out d)?d:null;}
@@ -298,6 +322,8 @@ namespace FiresGhettoNetworkMod
         internal static int RawHits { get { return s_lastHitBy.Count; } }
         [MethodImpl(MethodImplOptions.NoInlining)] private static void Balance(ZDOMan world)
         { if(!Active()||UnityEngine.Time.realtimeSinceStartupAsDouble<s_nextPass)return; s_nextPass=UnityEngine.Time.realtimeSinceStartupAsDouble+2; }
+        [MethodImpl(MethodImplOptions.NoInlining)] private static void ScanPrefabs()
+        { Character actor=new Character{Boss=true}; if(actor.IsBoss())return; }
         [MethodImpl(MethodImplOptions.NoInlining)] private static bool TryHandOffCreature(ZDO data,double now)
         {
             // Original FGN1.5.36 selection flow, using managed peer/data doubles.

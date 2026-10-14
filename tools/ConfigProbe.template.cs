@@ -23,7 +23,7 @@ namespace TooManyLags
         private ConfigFile Config;
         private bool logs;
         private ConfigEntry<bool> configured;
-        private ConfigEntry<bool> defaultMobs;
+        private ConfigEntry<bool> defaultMobs; private ConfigEntry<bool> bossAlwaysServerOwned; private ConfigEntry<float> bossPlayerRadius;
         private bool serverDefaultsConfigured;
         private ConfigEntry<int> maximumPing;
         private ConfigEntry<float> nearbyRadius;
@@ -79,7 +79,7 @@ namespace TooManyLags
             reloaded.Config.SaveOnConfigSet = false;
             reloaded.Bind(); VerifyDefaults(reloaded.Config); reloaded.Config.Save();
             if (File.ReadAllText(path) != generated) throw new Exception("Generated config changed during actual BepInEx reload/save.");
-            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 48 settings in ten ordered English feature sections.");
+            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 50 settings in ten ordered English feature sections.");
             Console.WriteLine("PASS: camera/movement defaults remain 0.05; angular overlap defaults to 30 degrees (0-45); prior settings are preserved; object categories stay last.");
             Console.WriteLine("PASS: actual BepInEx camera and server movement ranges accept 0.05 seconds and clamp to 0.05-5.");
         }
@@ -128,11 +128,12 @@ namespace TooManyLags
                 {"05 - Directional Grid Mode/ForwardTransitionDelaySeconds", "0.2"}, {"05 - Directional Grid Mode/OuterTransitionDelaySeconds", "3"},
                 {"05 - Directional Grid Mode/ServerOverlapCooldownSeconds", "1"},
                 {"06 - Full Grid Mode/TransitionDelaySeconds", "2"},
-                {"07 - Experimental Interaction Protection/EnableExperimentalInteractionProtection", "false"},
+                {"07 - Experimental Interaction Protection/EnableExperimentalInteractionProtection", "true"},
                 {"08 - Camera Heading/CameraHeadingCheckIntervalSeconds", "0.05"},
                 {"08 - Camera Heading/CameraDirectionOverlapDegrees", "30"},
                 {"08 - Camera Heading/CameraRotationPredictionSeconds", "0.1"},
-                {"09 - AI Mob Ownership/EnableAIOwnership", "true"}, {"09 - AI Mob Ownership/ServerFallbackPingMs", "200"},
+                {"09 - AI Mob Ownership/EnableAIOwnership", "true"}, {"09 - AI Mob Ownership/BossAlwaysServerOwned", "true"},
+                {"09 - AI Mob Ownership/BossPlayerRadius", "30"}, {"09 - AI Mob Ownership/ServerFallbackPingMs", "200"},
                 {"09 - AI Mob Ownership/ServerFallbackRadius", "6"}
             };
             foreach (string category in new[] {
@@ -140,7 +141,7 @@ namespace TooManyLags
                 "SapCollectors", "Wards", "MapTables", "Wisplights", "TamedAnimals", "Containers", "ItemStands", "Signs",
                 "Portals", "Fermenters", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables"
             }) expected.Add("10 - Object Categories/" + category, "true");
-            if (config.Count != 48) throw new Exception("Expected 48 config entries; found " + config.Count + ".");
+            if (config.Count != 50) throw new Exception("Expected 50 config entries; found " + config.Count + ".");
             int categoryNotes = 0;
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> entry in config) {
                 string key = entry.Key.Section + "/" + entry.Key.Key, value = Convert.ToString(entry.Value.BoxedValue, CultureInfo.InvariantCulture), wanted;

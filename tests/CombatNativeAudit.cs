@@ -57,9 +57,10 @@ internal static class NativeCombatAudit
         string inputHash;
         using(SHA256 sha=SHA256.Create())using(Stream stream=File.OpenRead(args[0]))
             inputHash=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","");
-        bool possessionRelease=inputHash=="C11FF8A96B1A7AE4BB76A433BC26447BD914C31797C6E1EBA557217C2FB9399D";
+        bool possessionRelease=inputHash=="C11FF8A96B1A7AE4BB76A433BC26447BD914C31797C6E1EBA557217C2FB9399D"||
+            inputHash=="41B18BF36F837620DC5A76DE3BEE0569555B699AAA10722B8D95C07A70A638B2";
         Check(possessionRelease||inputHash=="75F5446AD4E43529F57D2C56F8CE34E061A78B289AE88DE6DE6B3CE69506E292",
-            "audit input is exact original FGN1.5.36 or1.5.41; hash is test provenance, not runtime gating");
+            "audit input is exact original FGN1.5.36,1.5.41 or1.5.53; hash is test provenance, not runtime gating");
         using(AssemblyDefinition fgn=AssemblyDefinition.ReadAssembly(args[0]))
         using(AssemblyDefinition native=AssemblyDefinition.ReadAssembly(Path.Combine(args[1],"assembly_valheim.dll")))
         using(AssemblyDefinition core=AssemblyDefinition.ReadAssembly(Path.Combine(args[1],"mscorlib.dll")))
@@ -71,7 +72,7 @@ internal static class NativeCombatAudit
             Check(dictionary.Methods.Count(m=>m.Name=="TryGetValue"&&m.IsPublic)==1,"remaining name-only Dictionary read lookup is unambiguous in actual Unity corelib");
             MethodDefinition bridgeCtor=Method(addon.MainModule.Types.Single(t=>t.Name=="FgnCombatBridge"),".ctor");
             Check(!bridgeCtor.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.FullName=="System.Type"&&((MethodReference)i.Operand).Name=="GetMethod"&&((MethodReference)i.Operand).Parameters.Count==1),"bridge constructor has no ambiguous name-only method lookup");
-            Check(bridgeCtor.Body.Instructions.Count(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="GetMethod"&&((MethodReference)i.Operand).Parameters.Count==2&&((MethodReference)i.Operand).Parameters[1].ParameterType.FullName=="System.Type[]")==2,"both dictionary removal delegates bind explicit key-only overload");
+            Check(bridgeCtor.Body.Instructions.Count(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="GetMethod"&&((MethodReference)i.Operand).Parameters.Count==2&&((MethodReference)i.Operand).Parameters[1].ParameterType.FullName=="System.Type[]")==2,"existing dictionary removal delegates bind explicit key-only overload");
             TypeDefinition ownership=fgn.MainModule.Types.Single(t=>t.FullName=="FiresGhettoNetworkMod.CreatureOwnership");
             foreach(var expected in new[]{Tuple.Create("PassSeconds",(object)2.0),Tuple.Create("PendingSeconds",(object)5.0),
                 Tuple.Create("DeclinedCooldownSeconds",(object)6.0),Tuple.Create("ForwardHitsSeconds",(object)5.0),
@@ -107,10 +108,34 @@ internal static class NativeCombatAudit
                 sendAt=receive.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="ForceSendZDO"),
                 ownerAt=receive.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="SetOwner");
             Check(vetoAt>=0&&sendAt>vetoAt&&ownerAt>sendAt,"actual FGN receive final veto precedes ForceSend and owner assignment");
+            foreach(var method in new[]{handoff,Method(ownership,"OnHandOff")})
+                Check(method.Body.Instructions.Count(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="ZRpc"&&((MethodReference)i.Operand).Name=="Invoke")==1,
+                    "exact single native mob request/result RPC site "+method.Name);
+            TypeDefinition identified=addon.MainModule.Types.Single(t=>t.Name=="FgnMobHandoff");
+            Check(Method(identified,"ReceiveCommit").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="Commit")&&
+                !Method(identified,"ReceiveCommit").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="SetOwner"),
+                "identified receiver delegates source commit to original FGN without new ownership writes");
+            Check(Method(combatType(addon),"Install").Body.Instructions.Any(i=>i.OpCode.Name=="ldstr"&&(string)i.Operand=="RPC_ZDOData"),
+                "owner replication uses native packet event rather than new physics polling");
             Check(!veto.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="GetTargetCreature"),"original final FGN veto does not revalidate current AI player target");
             Check(veto.Body.Instructions.Count(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="TryGetValue")==1,"exact single damage-memory veto read");
             foreach(string guard in new[]{"IsDead","IsBoss","IsTamed","InAttack","IsStaggering","HaveValidUser"})
                 Check(veto.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name==guard),"FGN veto remains "+guard);
+            var scan=Method(ownership,"ScanPrefabs");
+            Check(scan.IsStatic&&scan.Parameters.Count==0&&scan.Body.Instructions.Count(i=>i.Operand is MethodReference&&
+                ((MethodReference)i.Operand).DeclaringType.Name=="Character"&&((MethodReference)i.Operand).Name=="IsBoss")==1,
+                "actual FGN prefab scan has exactly one boss exclusion for narrow replacement");
+            TypeDefinition boss=addon.MainModule.Types.Single(t=>t.Name=="FgnBossPolicy");
+            Check(Method(boss,"VetoBoss").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="AuthorizesBoss"),
+                "boss veto exception requires an identified managed source commit");
+            Check(Method(boss,"Record").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="TwoNearby")&&
+                !Method(boss,"WantsServer").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="TwoNearby"),
+                "boss radius evaluates on target report and handoff retries reuse cached decision");
+            Check(!boss.Methods.Any(m=>m.Name=="Update"||m.Name=="FixedUpdate"||m.Name.Contains("Movement")||m.Name.Contains("Position")),
+                "boss module adds no physics/frame/movement polling");
+            Check(Method(ownership,"OnHandOff").Body.Instructions.All(i=>!(i.Operand is MethodReference)||
+                !new[]{"Sleep","ThreadSleep","SetSleeping","SetActive"}.Contains(((MethodReference)i.Operand).Name)),
+                "native FGN handoff imposes no timed AI suspension");
             if(possessionRelease)
             {
                 Check(veto.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="IsPossessed"),"FGN1.5.41 native possession veto retained");
@@ -258,7 +283,8 @@ internal static class NativeCombatAudit
             Check(Method(combat,"OnAttackEnded").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="GetTargetCreature")&&
                 !Method(combat,"OnAttackEnded").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="SetOwner"),"end callback rechecks actual current target without forcing ownership");
             Check(Method(combat,"ReceiveAttackReady").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="Pending")&&
-                Method(combat,"ResultPostfix").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="AttackReady"),"early ready events wait for pending result and are consumed after its cleanup");
+                Method(combat,"HandoffAttackRejected").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="AttackReady")&&
+                Method(combat,"ResultPostfix").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="HandoffAttackRejected"),"early ready events wait for pending result and are consumed after its cleanup");
             Check(Method(combat,"ServerReady").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.FullName=="TooManyLags.NativePup"&&((MethodReference)i.Operand).Name=="ReadyPoint"),"server takeover reuses verified PUP1.0.34 readiness");
             Check(!addon.MainModule.Types.Any(t=>t.Name=="CollisionGuard"||t.Name=="FgnTakeover"||t.Name=="Statics"),"imported combat policy adds no PupPatch body/support hook modules");
             TypeDefinition nativeAdapter=addon.MainModule.Types.Single(t=>t.Name=="NativePup");
@@ -310,4 +336,6 @@ internal static class NativeCombatAudit
             Console.WriteLine("PASS: "+assertions+" actual FGN/native/addon IL contracts; no native Unity methods executed.");
         }
     }
+    private static TypeDefinition combatType(AssemblyDefinition assembly)
+    { return assembly.MainModule.Types.Single(t=>t.Name=="FgnCombatOwnership"); }
 }

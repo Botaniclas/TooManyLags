@@ -10,7 +10,9 @@ namespace TooManyLags
     // Private FGN contracts are bound once. No reflection/boxing on a balance pass.
     internal sealed class FgnCombatBridge
     {
-        internal readonly MethodInfo Balance, TryHandOff, Veto, OnResult;
+        internal readonly MethodInfo Balance, TryHandOff, Veto, OnResult, OnHandOff;
+        internal readonly Action<ZRpc, ZDOID, long> Commit;
+        internal readonly Action<ZRpc, ZDOID, bool, string> Result;
         internal readonly Func<ZDO, double, bool> TryTransfer;
         internal readonly Func<bool> Active, Simulation;
         internal readonly Func<double> NextPass;
@@ -22,7 +24,7 @@ namespace TooManyLags
         internal readonly Func<ZDO, bool> Held, Possessed;
         internal readonly Func<ZDOID, double, bool> Pending;
         internal readonly Action<ZDOID, long, double> MarkPending;
-        internal readonly Action<ZDOID> ClearStreak, ClearOwned;
+        internal readonly Action<ZDOID> ClearStreak, ClearOwned, ClearPending;
         internal readonly Dictionary<long, int> PerOwner;
         internal readonly Dictionary<ZDOID, double> Cooldowns;
         internal readonly List<ZNetPeer> Candidates;
@@ -45,6 +47,9 @@ namespace TooManyLags
             TryTransfer = Bind<Func<ZDO, double, bool>>(TryHandOff);
             Veto = Method(type, "Veto", typeof(string), typeof(ZDO), typeof(long));
             OnResult = Method(type, "OnResult", typeof(void), typeof(ZRpc), typeof(ZDOID), typeof(bool), typeof(string));
+            Result = Bind<Action<ZRpc, ZDOID, bool, string>>(OnResult);
+            OnHandOff = Method(type, "OnHandOff", typeof(void), typeof(ZRpc), typeof(ZDOID), typeof(long));
+            Commit = Bind<Action<ZRpc, ZDOID, long>>(OnHandOff);
             Active = Bind<Func<bool>>(Method(type, "Active", typeof(bool)));
             NextPass = Static<double>(Field(type, "s_nextPass", typeof(double)));
             Rtt = Bind<Func<ZNetPeer, float>>(Method(type, "Rtt", typeof(float), typeof(ZNetPeer)));
@@ -77,6 +82,7 @@ namespace TooManyLags
                 throw new NotSupportedException("FGN stamp contract changed.");
             Pending = PendingReader(pending, stamp);
             MarkPending = StampWriter(pending, stamp);
+            ClearPending = Remover(pending);
             FieldInfo streaks = type.GetField("s_streaks", Flags);
             if (streaks == null || !streaks.IsStatic || !streaks.FieldType.IsGenericType ||
                 streaks.FieldType.GetGenericTypeDefinition() != typeof(Dictionary<,>) || streaks.FieldType.GetGenericArguments()[0] != typeof(ZDOID))
@@ -105,6 +111,13 @@ namespace TooManyLags
         }
 
         private static T Bind<T>(MethodInfo method) where T : class { return (T)(object)Delegate.CreateDelegate(typeof(T), method); }
+        private static Action<ZDOID> Remover(FieldInfo field)
+        {
+            DynamicMethod method = new DynamicMethod("TooManyLagsCombatClearPending", typeof(void), new[] { typeof(ZDOID) }, typeof(FgnCombatBridge).Module, true);
+            ILGenerator il = method.GetILGenerator(); il.Emit(OpCodes.Ldsfld, field); il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Callvirt, field.FieldType.GetMethod("Remove", new[] { typeof(ZDOID) })); il.Emit(OpCodes.Pop); il.Emit(OpCodes.Ret);
+            return (Action<ZDOID>)method.CreateDelegate(typeof(Action<ZDOID>));
+        }
         private static bool NoPossession(ZDO data) { return false; }
         private static void RequireConstant(Type type, string name, object expected)
         {

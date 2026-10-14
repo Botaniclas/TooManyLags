@@ -93,6 +93,12 @@ internal static class NativeReleaseAudit
         int record = ScopeCall(ready, controller.FullName, "TryRecipientState");
         int peer = ScopeCall(ready, "ZNet", "GetPeer");
         Check(record >= 0 && peer > record, "Inline recipient scope must precede peer/capability work in the compiled production gate");
+        TypeDefinition probe = authority.MainModule.GetType("TooManyLags.GridHandoffs.ReadinessProbe");
+        Check(probe != null && probe.IsValueType && ScopeCall(ready, probe.FullName, "Query") >= 0,
+            "Production readiness gate must use the allocation-free outstanding probe");
+        Check(ScopeCall(ScopeMethod(protocol, "Receive"), probe.FullName, "Response") >= 0 &&
+            ScopeCall(ScopeMethod(protocol, "Receive"), probe.FullName, "Lost") >= 0 && ScopeCall(ready, probe.FullName, "Invalidate") >= 0,
+            "Production responses, unload notices and increased state floors must share probe invalidation");
         Check(ScopeCall(ScopeMethod(controller, "TryRecipientState"), "TooManyLags.GridHandoffs.RecipientRequirement", "Matches") >= 0,
             "Inline recipient query must check the current owner tuple");
         Check(ScopeCall(ScopeMethod(protocol, "SetFloor"), controller.FullName, "RecordRecipient") >= 0 &&
@@ -233,6 +239,8 @@ internal static class NativeReleaseAudit
             // Imported AI contracts and optional direct PUP readiness have their
             // own actual-IL audits; the original grid restrictions stay scoped.
             if(type.FullName.StartsWith("TooManyLags.FgnCombat",StringComparison.Ordinal)||
+                type.FullName.StartsWith("TooManyLags.FgnMobHandoff",StringComparison.Ordinal)||
+                type.FullName.StartsWith("TooManyLags.FgnBossPolicy",StringComparison.Ordinal)||
                 type.FullName.StartsWith("TooManyLags.FgnTargetEvents",StringComparison.Ordinal)||
                 type.FullName.StartsWith("TooManyLags.FgnAttackRetry",StringComparison.Ordinal)||
                 type.FullName.StartsWith("TooManyLags.NativePup",StringComparison.Ordinal)||

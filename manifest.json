@@ -1,6 +1,6 @@
 {
   "name": "TooManyLags_FGN_Addon",
-  "version_number": "1.0.26",
+  "version_number": "1.0.29",
   "website_url": "https://github.com/Botaniclas/TooManyLags",
   "description": "FiresGhettoNetworking addon aiming for no noticeable latency for every player whenever possible, and the lowest possible latency otherwise. Dynamic object and mob ownership completely removes the impact of other players' lag.",
   "dependencies": [

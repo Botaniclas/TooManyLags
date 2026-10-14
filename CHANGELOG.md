@@ -1,6 +1,24 @@
 # Changelog
 
-**Unreleased**
+**1.0.29**
+```
+- Enables experimental interaction protection by default for new configs. Existing saved values remain unchanged.
+- Fixes interactions waiting indefinitely when recipient-readiness replies take longer than 0.5 seconds. Retries keep the pending request identity; changed ownership, state and unloading still invalidate readiness. Server-side fix; existing client protocol unchanged.
+```
+
+**1.0.28**
+```
+- Adds BossAlwaysServerOwned (default on): boss player-target changes choose the server with at least two living players within BossPlayerRadius (default 30 metres); otherwise bosses use normal Hostile Mob rules. Server ownership requires Server-Side Simulation. Unchanged targets reuse their decision without movement or radius polling.
+- Bosses can use guarded target ownership when the option is off. Only identified TooManyLags handoffs bypass FiresGhettoNetworking's boss exclusion; attack, stagger, control and loading safeguards remain. Update server and clients together.
+```
+
+**1.0.27**
+```
+- Replaces outdated Hostile Mob handoffs with the latest target after the pending reply, without the six-second rejection lock. Attacks still block transfers; attack end checks the current target again. Ping fallback and other native safeguards remain active.
+- Identifies mob requests and waits for actual owner replication before another transfer, preventing late replies from affecting newer handoffs. Update server and clients together; older peers retain native FiresGhettoNetworking ownership.
+```
+
+**1.0.26**
 ```
 - With ServerOwnedInteractivesByDefault=true, gives eligible stationary interactives their server owner during vanilla assignment, avoiding an initial player-to-server handoff. Settled grid fields take priority; native active-owner checks and region release remain in place. Server-side change only.
 - Adds ServerOwnedMobsByDefault (off): idle tamed animals use server ownership outside player fields, and Hostile Mobs without a player target use guarded server ownership, including with one player online. Player targets and active-use/loading safeguards remain in place. Requires Server-Side Simulation; Hostile Mobs also require EnableAIOwnership.

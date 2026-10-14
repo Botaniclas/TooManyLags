@@ -1,12 +1,12 @@
 {
   "source": "BotanicPupPatch-2.1.0",
-  "target": "TooManyLags-FGNAddon-1.0.26",
+  "target": "TooManyLags-FGNAddon-1.0.28",
   "original_source_preserved": true,
   "files": [
     {
       "file": "FgnCombatOwnership.cs",
       "source_sha256": "1EEEA58FF57EBBB0E8CC3A271A45D2D43C82BE94D97AEE1B579C6C87CBD70C14",
-      "import_sha256": "E714FED442632D1C7E6CC6A9D351BE2B32F3B8ADCB7EDDE1211AD1792B2A97BB",
+      "import_sha256": "A3376EF23BCDE86F85A0DA73566D93984298AF66881EB316C2203846B6498058",
       "namespace_branding_protocol_only": false,
       "additional_changes": [
         "Config section/descriptions/default adapted for required FGN and 09 - AI Mob Ownership.",
@@ -18,15 +18,19 @@
         "1.0.8 changes only configuration descriptions in this imported module: expands FiresGhettoNetworking and Server-Side Simulation, and explains the player-simulation fallback. Runtime AI logic unchanged.",
         "1.0.10 adds server/client scope and live-console descriptions; executable AI logic remains unchanged. Threshold entries were already read dynamically.",
         "1.0.23 makes the config description server-only and adds ConnectCurrentServer for one-time registration/query after authenticated lazy client startup. AI selection, attacks, leases, collision guards and transfer algorithms are unchanged.",
-        "1.0.26 adds optional server-owned idle Hostile Mobs through existing target reports and guarded FGN handoffs; loaded-only lifecycle tracking supports solo sessions. Existing player targets, readiness, attacks, consent, caps, possession/friendly/boss exclusions and vanilla region release remain protected. Stable server defaults skip collider readiness work; disabled mode retains its previous behavior."
+        "1.0.26 adds optional server-owned idle Hostile Mobs through existing target reports and guarded FGN handoffs; loaded-only lifecycle tracking supports solo sessions. Existing player targets, readiness, attacks, consent, caps, possession/friendly/boss exclusions and vanilla region release remain protected. Stable server defaults skip collider readiness work; disabled mode retains its previous behavior.",
+        "1.0.27 identifies managed target handoffs, revalidates the target on the source owner, serializes pending commits across target changes and owner replication, and removes the six-second rejection lock only for authenticated managed replies. Existing attack-end revalidation, native vetoes, high-ping decision, caps, exclusions and readiness remain active. Protocol 4 requires matching client/server support; legacy peers retain native FiresGhettoNetworking.",
+        "1.0.28 enables bosses in the existing FiresGhettoNetworking scan. The optional two-player server rule evaluates only authoritative player-target changes; weak decisions survive same-target handoffs. Identified source commits bypass only the native boss veto. All other vetoes, readiness, caps and target validation remain. Protocol 5 requires matching clients and server."
       ]
     },
     {
       "file": "FgnCombatBridge.cs",
       "source_sha256": "6DA9D9FFC3CE4456EE1CF0AD6B643B63FF142712503EC371E510A5298D0F90F1",
-      "import_sha256": "E5B01760602EB788D14EBD7E1171DE204EA746A4C28A397600BBE474FBEF54FC",
-      "namespace_branding_protocol_only": true,
-      "additional_changes": null
+      "import_sha256": "DF602C74D5D7E0E9971DC252DB04012FB78DF8441DC5B9EDE69F24376941FACF",
+      "namespace_branding_protocol_only": false,
+      "additional_changes": [
+        "Binds the native source-owner commit/result and key-only pending removal delegates once for identified mob handoffs. Existing timing, budget and eligibility contracts stay verified."
+      ]
     },
     {
       "file": "FgnTargetEvents.cs",
@@ -83,6 +87,24 @@
       "namespace_branding_protocol_only": false,
       "additional_changes": [
         "New pure helper: live non-player Character.GetFaction()==Character.Faction.Players. No prefab names, Tameable/unsummon heuristic, world/cache references or ownership mutations."
+      ]
+    },
+    {
+      "file": "FgnMobHandoff.cs",
+      "source_sha256": null,
+      "import_sha256": "4E3B40CB53A491A3B2BD7D8263C8909B55BC1C9C6B4A6A2CE69AF2EF83DADC72",
+      "namespace_branding_protocol_only": false,
+      "additional_changes": [
+        "New identified source-owner mob request/result wrapper around native FiresGhettoNetworking commits. Current target is revalidated, stale requests are retried from the latest server report, and authenticated declines do not add the six-second lock. Attacks, native vetoes, readiness, ping fallback, caps and damage forwarding remain native. Only pending handoffs use replication events; weak source token fences and unload/session/disconnect cleanup prevent replay and indefinite world caches."
+      ]
+    },
+    {
+      "file": "FgnBossPolicy.cs",
+      "source_sha256": null,
+      "import_sha256": "F8F8DB7737D86E79B8595EB198EC30A1879B4A58027CE26F8C0A6B2AE4E8EFFA",
+      "namespace_branding_protocol_only": false,
+      "additional_changes": [
+        "New target-event-only boss decision helper. Two-player radius checks short-circuit; unchanged targets and retries reuse weak ZDO decisions. Native boss predicate replacements are structurally validated and the final veto exception requires an identified commit. No movement or physics hooks."
       ]
     }
   ],

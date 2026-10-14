@@ -24,6 +24,11 @@ $authorityCombatLines=@(& $authorityCombatAudit $authorityFgnOlder (Join-Path $V
 if($LASTEXITCODE -ne 0){throw 'Imported AI actual native contracts failed with FGN 1.5.36.'}
 $authorityCombatLines | ForEach-Object {Write-Output $_}
 $authorityResults += [ordered]@{test='combat-native-fgn-1.5.36';passed=$true;output=($authorityCombatLines -join [Environment]::NewLine)}
+$authorityFgnCurrent=Join-Path $authorityModCache 'VerdantsAscent-FiresGhettoNetworking\1.5.53\plugins\FiresGhettoNetworking\VAGhettoNetworking.dll'
+$authorityCombatLines=@(& $authorityCombatAudit $authorityFgnCurrent (Join-Path $ValheimDirectory 'valheim_Data\Managed') $authorityDll $authorityPup)
+if($LASTEXITCODE -ne 0){throw 'Managed mob handoff contracts failed with FGN 1.5.53.'}
+$authorityCombatLines | ForEach-Object {Write-Output $_}
+$authorityResults += [ordered]@{test='combat-native-fgn-1.5.53';passed=$true;output=($authorityCombatLines -join [Environment]::NewLine)}
 if((Get-FileHash -LiteralPath $authorityDll -Algorithm SHA256).Hash -ne $authorityVerifiedHash){throw 'DLL changed during validation.'}
 $authorityNative=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'bin\native-audit\verification.json') -Raw | ConvertFrom-Json
 if($authorityNative.authority_sha256 -ne $authorityVerifiedHash -or $authorityNative.production_changed_during_audit){throw 'Native audit does not match final build.'}
@@ -53,7 +58,7 @@ if(Test-Path -LiteralPath $authorityRegionBenchmarkPath){
     }
 }
 [ordered]@{
-    version='1.0.26';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
+    version='1.0.29';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
     benchmark=$authorityBenchmark;regionBenchmark=$authorityRegionBenchmark;import=$authorityImport;artifactHashes=$authorityHashes;liveMultiplayerTested=$false
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Encoding UTF8
 Write-Output ('Verified release SHA256: '+$authorityVerifiedHash)

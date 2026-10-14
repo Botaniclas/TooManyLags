@@ -12,7 +12,7 @@ New-Item -ItemType Directory -Force -Path $taskTests | Out-Null
 $taskHarmony = Join-Path $BepInExDirectory 'core\0Harmony.dll'
 Copy-Item -LiteralPath $taskHarmony -Destination $taskTests
 Get-ChildItem -LiteralPath (Join-Path $BepInExDirectory 'core') -Filter 'Mono*.dll' | Copy-Item -Destination $taskTests
-$taskSources = @('src\FriendlyCreatures.cs','src\FieldReader.cs','src\FgnCombatBridge.cs','src\FgnCombatOwnership.cs','src\FgnTargetEvents.cs','src\FgnAttackRetry.cs','src\FgnCombatStatus.cs','tests\CombatFixtures.cs','tests\CombatTests.cs','tests\CombatFriendlyTests.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ }
+$taskSources = @('src\FriendlyCreatures.cs','src\FieldReader.cs','src\FgnCombatBridge.cs','src\FgnCombatOwnership.cs','src\FgnMobHandoff.cs','src\FgnBossPolicy.cs','src\FgnTargetEvents.cs','src\FgnAttackRetry.cs','src\FgnCombatStatus.cs','tests\CombatFixtures.cs','tests\CombatTests.cs','tests\CombatFriendlyTests.cs','tests\CombatHandoffTests.cs','tests\CombatBossTests.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ }
 $taskAssembly = Join-Path $taskTests 'CombatRegression.dll'
 & $taskCompiler '/nologo' '/target:exe' '/optimize+' '/langversion:5' '/warnaserror+' ('/reference:' + $taskHarmony) ('/out:' + $taskAssembly) $taskSources
 if ($LASTEXITCODE -ne 0) { throw 'Combat fixture compilation failed.' }

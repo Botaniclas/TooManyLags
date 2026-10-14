@@ -18,9 +18,9 @@ namespace TooManyLags.GridHandoffs
         private sealed class Advertisement { internal ZNetPeer Peer; internal ZDOID Id; internal long Token; }
         private sealed class Readiness
         {
-            internal ZDO Data; internal ZRpc Rpc; internal long Owner, Token;
+            internal ZDO Data; internal ZRpc Rpc; internal long Owner;
             internal uint Revision, MinimumState;
-            internal float Next; internal bool Ready;
+            internal ReadinessProbe Probe;
         }
         private sealed class KindCache { internal Kinds Kind; }
         private sealed class Lease { internal float Until; }
@@ -142,13 +142,13 @@ namespace TooManyLags.GridHandoffs
                     if (message == Message.ReadyResult)
                     {
                         ZDOID id = packet.ReadZDOID(); long token = packet.ReadLong(); bool available = packet.ReadBool(); Readiness r;
-                        if (ready.TryGetValue(id, out r) && ReferenceEquals(r.Rpc, rpc) && r.Token == token) { r.Ready = available; r.Next = Time.unscaledTime + .5f; }
+                        if (ready.TryGetValue(id, out r) && ReferenceEquals(r.Rpc, rpc)) r.Probe.Response(token, available, Time.unscaledTime);
                         Plugin.Controller.Router.Flush(id); return;
                     }
                     if (message == Message.ReadyLost)
                     {
                         ZDOID id = packet.ReadZDOID(); long token = packet.ReadLong(); Readiness r;
-                        if (ready.TryGetValue(id, out r) && ReferenceEquals(r.Rpc, rpc) && r.Token == token) { r.Ready = false; r.Next = 0; }
+                        if (ready.TryGetValue(id, out r) && ReferenceEquals(r.Rpc, rpc)) r.Probe.Lost(token);
                         return;
                     }
                     if (message == Message.Relay)
@@ -252,12 +252,12 @@ namespace TooManyLags.GridHandoffs
                 r.Revision != data.OwnerRevision || !ReferenceEquals(r.Rpc, peer.m_rpc))
             { r = new Readiness { Data = data, Rpc = peer.m_rpc, Owner = owner, Revision = data.OwnerRevision, MinimumState = data.DataRevision }; ready[data.m_uid] = r; }
             if (minimum > r.MinimumState)
-            { r.MinimumState = minimum; r.Ready = false; r.Next = 0; }
-            if (r.Ready) return true;
-            if (Time.unscaledTime >= r.Next)
+            { r.MinimumState = minimum; r.Probe.Invalidate(); }
+            if (r.Probe.Ready) return true;
+            if (r.Probe.Query(Time.unscaledTime, ref readinessToken))
             {
-                r.Next = Time.unscaledTime + .5f; r.Token = ++readinessToken; world.ForceSendZDO(owner, data.m_uid);
-                try { Send(peer, Message.Ready, delegate(ZPackage p) { p.Write(data.m_uid); p.Write(r.Token); p.Write(owner); p.Write(r.Revision); p.Write(r.MinimumState); }); }
+                world.ForceSendZDO(owner, data.m_uid);
+                try { Send(peer, Message.Ready, delegate(ZPackage p) { p.Write(data.m_uid); p.Write(r.Probe.Token); p.Write(owner); p.Write(r.Revision); p.Write(r.MinimumState); }); }
                 catch (Exception error) { Plugin.Warn("Recipient readiness query failed: " + error.GetBaseException().Message); }
             }
             return false;

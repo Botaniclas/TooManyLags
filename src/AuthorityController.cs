@@ -32,7 +32,10 @@ namespace TooManyLags
         private float innerDelay, outerDelay, forwardDelay, overlapCooldown;
         private StaticBuildings statics;
         private readonly Dictionary<ZDOID, NativeNode> nodes = new Dictionary<ZDOID, NativeNode>();
-        private readonly Dictionary<Cell, HashSet<NativeNode>> waitingIncinerators = new Dictionary<Cell, HashSet<NativeNode>>();
+        private readonly HashSet<NativeNode> loadingObjects = new HashSet<NativeNode>();
+        private readonly List<NativeNode> retiringInitialObjects = new List<NativeNode>();
+        private readonly HashSet<Vector2s> loadingCenters = new HashSet<Vector2s>(), nextLoadingCenters = new HashSet<Vector2s>();
+        private readonly Dictionary<Cell, HashSet<NativeNode>> waitingFieldRequests = new Dictionary<Cell, HashSet<NativeNode>>();
         private ConditionalWeakTable<ZNetView, NativeNode> views = new ConditionalWeakTable<ZNetView, NativeNode>();
         private readonly Dictionary<Vector2s, Receipt> readiness = new Dictionary<Vector2s, Receipt>();
         private readonly Dictionary<Vector2s, bool> defaultAreas = new Dictionary<Vector2s, bool>();
@@ -179,6 +182,7 @@ namespace TooManyLags
                     // Do not hold character ZDOs after this sampling pass.
                     characters.Clear();
                 }
+                PruneInitialObjects(nativePeers);
                 peers.Sort(peerOrder); indexed.Tick(peers, Time.unscaledTime); Router.Flush();
             }
             catch (Exception error) { Fail(error); }
@@ -194,6 +198,14 @@ namespace TooManyLags
                 if (nodes.TryGetValue(data.m_uid, out old))
                 {
                     if (ReferenceEquals(old.Data, data) && ReferenceEquals(old.View, view)) return;
+                    if (ReferenceEquals(old.Data, data) && old.AwaitingInstance && ObjectCatalog.InitialRoot(view.gameObject, old.Kind))
+                    {
+                        // Keep queued picks, exact recipient state and the field
+                        // request when the normal server scene catches up.
+                        old.Attach(view); loadingObjects.Remove(old);
+                        views.Remove(view); views.Add(view, old);
+                        indexed.Received(old, Time.unscaledTime); cadence.Request(); return;
+                    }
                     Remove(old);
                 }
                 Kinds kind = catalog.Instance(data.GetPrefab(), view);
@@ -218,10 +230,52 @@ namespace TooManyLags
         }
         private void Remove(NativeNode node)
         {
-            ForgetIncineratorWait(node);
+            ForgetFieldWait(node);
             Inventory.Forget(node.Data); Cooperative.Forget(node.Data);
             if (ReadinessRemoved != null) ReadinessRemoved(node.Data);
-            indexed.Remove(node); nodes.Remove(node.Id); views.Remove(node.View); Router.Remove(node);
+            indexed.Remove(node); nodes.Remove(node.Id); loadingObjects.Remove(node);
+            if (!ReferenceEquals(node.View, null)) views.Remove(node.View);
+            Router.Remove(node);
+        }
+        private void TrackInitialObject(ZDO data)
+        {
+            if (!defaultInteractives || !active || DestinationLoaded == null || data.GetOwner() == 0 ||
+                !data.IsValid() || !data.Persistent || data.Created || data.m_uid.IsNone() ||
+                !ReferenceEquals(world.GetZDO(data.m_uid), data) || BakedObjects.IsBaked(data) ||
+                !catalog.NativeDefault(data.GetPrefab(), scene) || scene.FindInstance(data)) return;
+            Kinds kind = catalog.NativeDefaultKind(data.GetPrefab(), scene);
+            if (kind == Kinds.None || kind == Kinds.WorldMarkers) return;
+            Vector3 position = data.GetPosition(); Cell cell;
+            if (!Finite(position) || !Cell.At(position.x, position.z, cellSize, out cell) || !DefaultArea(position)) return;
+            NativeNode node = new NativeNode(this, data, null, kind, cell, null, null);
+            nodes.Add(node.Id, node); loadingObjects.Add(node);
+            indexed.Add(node, Time.unscaledTime); cadence.Request();
+        }
+        private void PruneInitialObjects(List<ZNetPeer> nativePeers)
+        {
+            if (loadingObjects.Count == 0) { loadingCenters.Clear(); return; }
+            nextLoadingCenters.Clear();
+            foreach (ZNetPeer peer in nativePeers)
+                if (peer != null && peer.IsReady() && Finite(peer.GetRefPos())) nextLoadingCenters.Add(ZoneSystem.GetZone(peer.GetRefPos()));
+            // Native loaded coverage changes only with a peer's reference zone
+            // or membership. Stationary peers never rescan loading objects.
+            if (loadingCenters.Count != 0 && loadingCenters.SetEquals(nextLoadingCenters)) return;
+            loadingCenters.Clear(); loadingCenters.UnionWith(nextLoadingCenters);
+            retiringInitialObjects.Clear();
+            foreach (NativeNode node in loadingObjects)
+                if (!node.Identity()) retiringInitialObjects.Add(node);
+            foreach (NativeNode node in retiringInitialObjects) Remove(node);
+            retiringInitialObjects.Clear();
+        }
+        internal void DataDestroyed(ZDO data)
+        {
+            if (indexed == null || data == null) return;
+            try
+            {
+                NativeNode node;
+                if (nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data) && node.AwaitingInstance) Remove(node);
+            }
+            catch (Exception error) { Fail(error); }
         }
         internal void Position(ZDO data)
         {
@@ -232,7 +286,7 @@ namespace TooManyLags
                 Vector3 pos = data.GetPosition(); if (!Finite(pos)) { Remove(node); return; }
                 if (node.ContainsPosition(pos)) return;
                 Cell next; if (!Cell.At(pos.x, pos.z, cellSize, out next)) { Remove(node); return; }
-                ForgetIncineratorWait(node);
+                ForgetFieldWait(node);
                 // The destination, not the former cell, decides whether this
                 // movement needs policy work. The loaded-object index still
                 // follows animals/carts so shared entry can find them cheaply.
@@ -268,6 +322,7 @@ namespace TooManyLags
                 if (!nodes.TryGetValue(data.m_uid, out node) || !ReferenceEquals(node.Data, data))
                 {
                     long recipient = data.GetOwner();
+                    if (active && ownershipField && node == null && recipient != 0) TrackInitialObject(data);
                     if (active && ownershipField && catalog.IsLooseDrop(data.GetPrefab()) && recipient != 0 && recipient != server && data.IsValid() && ReferenceEquals(world.GetZDO(data.m_uid), data))
                     {
                         ZNetPeer peer = network.GetPeer(recipient); ZNetView drop = scene.FindInstance(data);
@@ -330,38 +385,40 @@ namespace TooManyLags
             }
             catch (Exception error) { Fail(error); }
         }
-        private void WaitForIncineratorRequest(NativeNode node)
+        private void WaitForFieldRequest(NativeNode node)
         {
             if (node.WaitingForRequest) return;
             node.WaitingForRequest = true; node.WaitingCell = node.Cell;
             HashSet<NativeNode> waiting;
-            if (!waitingIncinerators.TryGetValue(node.Cell, out waiting))
-            { waiting = new HashSet<NativeNode>(); waitingIncinerators.Add(node.Cell, waiting); }
+            if (!waitingFieldRequests.TryGetValue(node.Cell, out waiting))
+            { waiting = new HashSet<NativeNode>(); waitingFieldRequests.Add(node.Cell, waiting); }
             waiting.Add(node); Inventory.Forget(node.Data);
             indexed.Changed(node, Time.unscaledTime, false);
-            indexed.Grid.Renewed = RenewIncineratorRequests;
+            indexed.Grid.Renewed = RenewFieldRequests;
         }
-        private void ForgetIncineratorWait(NativeNode node)
+        private void ForgetFieldWait(NativeNode node)
         {
             if (!node.WaitingForRequest) return;
             node.WaitingForRequest = false;
+            node.WaitingForServer = false;
             HashSet<NativeNode> waiting;
-            if (waitingIncinerators.TryGetValue(node.WaitingCell, out waiting))
-            { waiting.Remove(node); if (waiting.Count == 0) waitingIncinerators.Remove(node.WaitingCell); }
-            if (waitingIncinerators.Count == 0 && indexed != null) indexed.Grid.Renewed = null;
+            if (waitingFieldRequests.TryGetValue(node.WaitingCell, out waiting))
+            { waiting.Remove(node); if (waiting.Count == 0) waitingFieldRequests.Remove(node.WaitingCell); }
+            if (waitingFieldRequests.Count == 0 && indexed != null) indexed.Grid.Renewed = null;
         }
-        private void RenewIncineratorRequests(Cell cell)
+        private void RenewFieldRequests(Cell cell)
         {
             HashSet<NativeNode> waiting;
-            if (!waitingIncinerators.TryGetValue(cell, out waiting)) return;
-            waitingIncinerators.Remove(cell);
+            if (!waitingFieldRequests.TryGetValue(cell, out waiting)) return;
+            waitingFieldRequests.Remove(cell);
             foreach (NativeNode node in waiting)
             {
                 node.WaitingForRequest = false;
+                node.WaitingForServer = false;
                 if (NeedsPolicy(node)) indexed.RenewRequest(node, Time.unscaledTime);
                 else indexed.Changed(node, Time.unscaledTime, false);
             }
-            if (waitingIncinerators.Count == 0) indexed.Grid.Renewed = null;
+            if (waitingFieldRequests.Count == 0) indexed.Grid.Renewed = null;
         }
         internal bool AvailableOwner(long owner, Vector3 position)
         {
@@ -424,7 +481,8 @@ namespace TooManyLags
         }
         internal NativeNode RequestNode(ZDOID id, int method)
         {
-            NativeNode node; return active && !failed && nodes.TryGetValue(id, out node) && ObjectCatalog.OwnerRequest(node.Kind, method) && node.Identity() ? node : null;
+            NativeNode node; return active && !failed && nodes.TryGetValue(id, out node) &&
+                ObjectCatalog.OwnerRequest(node.Kind, method) && node.Identity() ? node : null;
         }
         internal bool IsActive { get { return active && !failed; } }
         // Explicit admin request only. No polling/counters in ownership hot paths.
@@ -489,7 +547,8 @@ namespace TooManyLags
                 AddOwnerSample(samples, item, rank, point);
             }
             output.Append("\nzone=(").Append(zone.x).Append(',').Append(zone.y).Append("); server=").Append(server).Append("; player=").Append(requester)
-                .Append("; serverAreaReady=").Append(scene.IsAreaReady(point)).Append("; loadedNodes=").Append(nodes.Count)
+                .Append("; serverAreaReady=").Append(scene.IsAreaReady(point)).Append("; loadedNodes=").Append(nodes.Count - loadingObjects.Count)
+                .Append("; loadingObjects=").Append(loadingObjects.Count)
                 .Append("\nsector ZDOs=").Append(data.Count).Append("; initialEligible=").Append(eligible).Append("; liveOnly=").Append(liveOnly)
                 .Append("; serverOwned=").Append(serverOwned).Append("; playerOwned=").Append(playerOwned).Append("; unowned=").Append(unowned).Append("; withoutNode=").Append(unloaded)
                 .Append("; filteredSamples=").Append(filtered).Append("; samples=").Append(samples.Count);
@@ -522,6 +581,13 @@ namespace TooManyLags
         internal static Action<ZDO> ReadinessRemoved { get; set; }
         internal static Action ReadinessReset { get; set; }
         internal static Func<ZDO, long, bool> DestinationLoaded { get; set; }
+        internal static Func<ZNetPeer, bool> InitialClient { get; set; }
+        internal bool InitialObject(ZDO data)
+        { NativeNode node; return nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data) && node.AwaitingInstance; }
+        internal Kinds InitialKind(ZDO data)
+        { NativeNode node; return nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data) && node.AwaitingInstance ? node.Kind : Kinds.None; }
+        internal Kinds CommitKind(ZDO data)
+        { NativeNode node; return nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data) && (node.AwaitingInstance || node.InventoryBacked) ? node.Kind : Kinds.None; }
         internal void Wake() { cadence.Request(); }
         internal void WaitForDestination(ZDO data, long target, float next)
         {
@@ -591,7 +657,8 @@ namespace TooManyLags
             active = false; primed = false; coarseEnabled = false;
             if (Inventory != null) Inventory.Clear(); if (Cooperative != null) Cooperative.Clear();
             Inventory = null; Cooperative = null; nodes.Clear(); views = new ConditionalWeakTable<ZNetView, NativeNode>();
-            waitingIncinerators.Clear(); if (indexed != null) indexed.Grid.Renewed = null;
+            loadingObjects.Clear(); retiringInitialObjects.Clear(); loadingCenters.Clear(); nextLoadingCenters.Clear();
+            waitingFieldRequests.Clear(); if (indexed != null) indexed.Grid.Renewed = null;
             readiness.Clear(); available.Clear(); defaultAreas.Clear(); peers.Clear(); peerIds.Clear(); cameras.Clear(); regionPeers.Clear(); characters.Clear(); regions.Clear(); Router.Clear();
             indexed = null; catalog = null; statics = null; scene = null; network = null; world = null; epoch = 0;
         }
@@ -602,17 +669,19 @@ namespace TooManyLags
             private readonly AuthorityController owner;
             internal readonly ZDO Data;
             internal readonly ZDOID Id;
-            internal readonly ZNetView View;
+            internal ZNetView View;
+            internal bool AwaitingInstance { get { return ReferenceEquals(View, null); } }
             internal readonly Kinds Kind;
             internal bool WaitingForRequest;
+            internal bool WaitingForServer;
             internal Cell WaitingCell;
-            private readonly WearNTear wear;
-            private readonly Character actor;
-            private readonly Tameable tameable;
-            private readonly bool ship, serverStation, multipleInventories, stationary;
-            private readonly Vagon cart;
-            private readonly Container container;
-            private readonly Incinerator incinerator;
+            private WearNTear wear;
+            private Character actor;
+            private Tameable tameable;
+            private bool ship, serverStation, multipleInventories, stationary, hasInventory;
+            private Vagon cart;
+            private Container container;
+            private Incinerator incinerator;
             internal long ObservedOwner;
             internal uint Revision;
             internal GridHandoffs.RecipientRequirement Recipient;
@@ -624,11 +693,12 @@ namespace TooManyLags
             private uint refillRevision;
             private bool coveredBefore;
             private bool loadPending;
-            private long loadTarget;
+            private long loadTarget, loadOwner;
             private float loadNext;
             private ushort loadRevision;
             private Vector3 loadPosition;
             internal bool ServerStation { get { return serverStation; } }
+            internal bool InventoryBacked { get { return hasInventory; } }
             internal string OwnerStatus()
             {
                 float now = Time.unscaledTime;
@@ -637,7 +707,7 @@ namespace TooManyLags
                     "; refillLease=" + (now < refillUntil) + "; openingLease=" + (now < inventoryUntil) +
                     "; requests=" + Requests + "; awaitRequest=" + WaitingForRequest + "; jobDelay=" + Math.Max(0, NotBefore - now).ToString("0.0", CultureInfo.InvariantCulture) +
                     "; stationary=" + stationary + "; serverStation=" + serverStation + "; loadPending=" + loadPending + "; loadTarget=" + loadTarget +
-                    "; loadRetry=" + Math.Max(0, loadNext - now).ToString("0.0", CultureInfo.InvariantCulture);
+                    "; loadRetry=" + Math.Max(0, loadNext - now).ToString("0.0", CultureInfo.InvariantCulture) + "; awaitingInstance=" + AwaitingInstance;
             }
             internal bool Summoned { get { return Kind == Kinds.TamedAnimals && (ObjectCatalog.IsSummoned(tameable) || FriendlyCreatures.IsFriendly(actor)); } }
             internal NativeNode(AuthorityController owner, ZDO data, ZNetView view, Kinds kind, Cell cell, Tameable animal, Character character)
@@ -645,11 +715,22 @@ namespace TooManyLags
                 this.owner = owner; Data = data; Id = data.m_uid; View = view; Kind = kind; Cell = cell;
                 CacheCellGeometry(cell);
                 coveredBefore = owner.indexed.Grid.Candidate(cell) != 0;
-                wear = view.GetComponent<WearNTear>(); ship = kind == Kinds.Vehicles && view.GetComponent<Ship>();
-                stationary = ObjectCatalog.Stationary(view.gameObject, kind);
-                if (kind == Kinds.Vehicles) cart = view.GetComponent<Vagon>();
-                if (kind == Kinds.Incinerators) incinerator = view.GetComponent<Incinerator>();
+                ObservedOwner = data.GetOwner(); Revision = data.OwnerRevision;
+                if (ReferenceEquals(view, null))
+                {
+                    stationary = true; serverStation = owner.catalog.NativeRefillDefault(data.GetPrefab(), owner.scene);
+                    hasInventory = owner.catalog.NativeInventoryDefault(data.GetPrefab(), owner.scene); return;
+                }
                 if (kind == Kinds.TamedAnimals) { actor = character; tameable = animal; }
+                Attach(view);
+            }
+            internal void Attach(ZNetView view)
+            {
+                View = view;
+                wear = view.GetComponent<WearNTear>(); ship = Kind == Kinds.Vehicles && view.GetComponent<Ship>();
+                stationary = ObjectCatalog.Stationary(view.gameObject, Kind);
+                if (Kind == Kinds.Vehicles) cart = view.GetComponent<Vagon>();
+                if (Kind == Kinds.Incinerators) incinerator = view.GetComponent<Incinerator>();
                 foreach (Container inventory in view.GetComponentsInChildren<Container>(true))
                 {
                     ZNetView root = inventory.m_rootObjectOverride ? inventory.m_rootObjectOverride : inventory.GetComponentInParent<ZNetView>(true);
@@ -659,7 +740,7 @@ namespace TooManyLags
                 serverStation = view.GetComponentInChildren<Smelter>(true) || view.GetComponentInChildren<CookingStation>(true) ||
                     view.GetComponentInChildren<Fireplace>(true) || view.GetComponentInChildren<Fermenter>(true) ||
                     view.GetComponentInChildren<ShieldGenerator>(true) || view.GetComponentInChildren<Turret>(true);
-                ObservedOwner = data.GetOwner(); Revision = data.OwnerRevision;
+                hasInventory = container;
             }
             internal void CacheCellGeometry(Cell cell)
             {
@@ -686,23 +767,30 @@ namespace TooManyLags
             internal bool UseProtected()
             {
                 float now = Time.unscaledTime;
+                // No server instance means no server-side interaction has run.
+                // Queued requests must not delay the first client acquisition.
+                if (AwaitingInstance && Data.GetOwner() == owner.server) return false;
                 return (incinerator && View.IsOwner() && IncineratorProtection.Busy(incinerator)) ||
                     (refillOwner != 0 && now >= refillAt && now < refillUntil && Data.GetOwner() == refillOwner && Data.OwnerRevision == refillRevision) ||
-                    (container && (container.IsInUse() || (now >= inventoryAt && now < inventoryUntil && inventoryOwner != 0) || Data.GetInt(ZDOVars.s_inUse) != 0));
+                    (hasInventory && ((container && container.IsInUse()) || (now >= inventoryAt && now < inventoryUntil && inventoryOwner != 0) || Data.GetInt(ZDOVars.s_inUse) != 0));
             }
             internal void ObserveUse()
             {
                 // Once native open use has arrived, its flag protects the open
                 // inventory. Closing it needs no arbitrary remaining lease.
-                if (container && Data.GetInt(ZDOVars.s_inUse) != 0) { inventoryOwner = 0; inventoryUntil = 0; }
+                if (hasInventory && Data.GetInt(ZDOVars.s_inUse) != 0) { inventoryOwner = 0; inventoryUntil = 0; }
             }
             internal bool Identity()
             {
-                return !Removed && Data.IsValid() && Data.m_uid == Id && ReferenceEquals(owner.world.GetZDO(Id), Data) && View && View.IsValid() &&
-                    ReferenceEquals(View.GetZDO(), Data) && View.gameObject.activeInHierarchy && !View.m_distant && View.transform.parent == null && !BakedObjects.IsBaked(Data);
+                if (Removed || !Data.IsValid() || Data.m_uid != Id || !ReferenceEquals(owner.world.GetZDO(Id), Data) || BakedObjects.IsBaked(Data)) return false;
+                if (AwaitingInstance) return !Data.Created && !owner.scene.FindInstance(Data) && Data.Persistent &&
+                    owner.catalog.NativeDefaultKind(Data.GetPrefab(), owner.scene) == Kind && owner.DefaultArea(Data.GetPosition());
+                return View && View.IsValid() && ReferenceEquals(View.GetZDO(), Data) && View.gameObject.activeInHierarchy &&
+                    !View.m_distant && View.transform.parent == null;
             }
             internal bool Controllable()
             {
+                if (AwaitingInstance) return Data.Persistent && (Data.GetOwner() == owner.server || Data.GetLong(ZDOVars.s_user, 0) == 0);
                 if (Kind == Kinds.Incinerators && (!IncineratorProtection.Active || !IncineratorProtection.Supported ||
                     !incinerator || !container || incinerator.m_container != container)) return false;
                 if (multipleInventories || (container && container.m_privacy != Container.PrivacySetting.Public)) return false;
@@ -731,8 +819,12 @@ namespace TooManyLags
             private bool HasServerDefault { get { return owner.defaultInteractives || (owner.defaultMobs && Kind == Kinds.TamedAnimals); } }
             private void CancelDestinationLoad()
             {
+                bool pending = loadPending;
                 loadPending = false; loadTarget = 0; loadNext = 0;
-                if (ReadinessRemoved != null) ReadinessRemoved(Data);
+                // A consumed preflight may already be followed by the owner's
+                // actual delivery proof. Clearing our local transaction fields
+                // must not discard that newer proof and query the client again.
+                if (pending && ReadinessRemoved != null) ReadinessRemoved(Data);
             }
             internal void WaitForLoad(long target, float next)
             {
@@ -743,21 +835,27 @@ namespace TooManyLags
             {
                 if (!loadPending || loadTarget != target) return;
                 loadNext = 0;
-                if (Data.GetOwner() == owner.server && Data.OwnerRevision == loadRevision && Data.GetPosition() == loadPosition &&
+                if (Data.GetOwner() == loadOwner && Data.OwnerRevision == loadRevision && Data.GetPosition() == loadPosition &&
                     DesiredOwner(owner.indexed.Grid.Owner(Cell)) == target) NotBefore = Math.Min(NotBefore, Time.unscaledTime);
             }
-            internal void RejectAutomaticRequest()
-            { if (loadPending) CancelDestinationLoad(); Managed = false; owner.WaitForIncineratorRequest(this); }
+            internal void RejectAutomaticRequest(bool unreadyServer = false)
+            { if (loadPending) CancelDestinationLoad(); Managed = false; WaitingForServer = unreadyServer; owner.WaitForFieldRequest(this); }
             internal override ApplyResult Apply(long target)
             {
                 if (!Identity() || Summoned) { owner.Remove(this); return ApplyResult.Dropped; }
-                if (WaitingForRequest) return ApplyResult.Done;
+                if (WaitingForRequest)
+                {
+                    // Discarded server acquisition must not block a different
+                    // player policy after the overlap itself has disappeared.
+                    if (!WaitingForServer || target == 0 || target == owner.server) return ApplyResult.Done;
+                    owner.ForgetFieldWait(this);
+                }
                 // Retain the fast server-area completion check. While the
                 // same request is awaiting a reply, skip the repeated object
                 // and protocol work; changed fields/data or a reply wake it.
-                if (loadPending && Time.unscaledTime < loadNext && Data.GetOwner() == owner.server &&
+                if (loadPending && Time.unscaledTime < loadNext && Data.GetOwner() == loadOwner &&
                     Data.OwnerRevision == loadRevision && Data.GetPosition() == loadPosition &&
-                    DesiredOwner(target) == loadTarget && !owner.AreaReady(loadPosition)) return ApplyResult.Pending;
+                    DesiredOwner(target) == loadTarget && (AwaitingInstance || !owner.AreaReady(loadPosition))) return ApplyResult.Pending;
                 if (!(owner.refillStations && serverStation) && !owner.NeedsGrid(this))
                 {
                     if (loadPending) CancelDestinationLoad();
@@ -785,7 +883,7 @@ namespace TooManyLags
                     HasServerDefault && owner.indexed.Grid.Candidate(Cell) != 0)
                     return ApplyResult.Pending;
                 target = DesiredOwner(target);
-                if (loadPending && target != loadTarget) CancelDestinationLoad();
+                if (loadTarget != 0 && target != loadTarget) CancelDestinationLoad();
                 if (target == 0) return ApplyResult.Done;
                 Vector3 position = Data.GetPosition(); Cell current;
                 if (!Finite(position) || !Cell.At(position.x, position.z, owner.cellSize, out current)) return ApplyResult.Dropped;
@@ -800,6 +898,9 @@ namespace TooManyLags
                      !FgnOwnerHandoff.CooperativeClient(owner.network.GetPeer(Data.GetOwner())))))
                 { if (loadPending) CancelDestinationLoad(); Managed = false; return ApplyResult.Done; }
                 long old = Data.GetOwner(); uint revision = Data.OwnerRevision;
+                if (AwaitingInstance && old != owner.server && old != 0 && owner.AvailableOwner(old, position) &&
+                    (InitialClient == null || !InitialClient(owner.network.GetPeer(old))))
+                { if (loadPending) CancelDestinationLoad(); Managed = false; return ApplyResult.Done; }
                 // Older clients cannot expose the private burning state. They
                 // keep native incinerator ownership until guarded support exists.
                 if (Kind == Kinds.Incinerators &&
@@ -809,7 +910,7 @@ namespace TooManyLags
                 { if (loadPending) CancelDestinationLoad(); Managed = false; return ApplyResult.Done; }
                 bool transfer = owner.TransferPending(Data);
                 if (old == target && !transfer && (!container || !owner.Inventory.Received(Data) || owner.Inventory.Acquire(Data, View, container) == 2))
-                { if (loadPending) CancelDestinationLoad(); Managed = true; ManagedOwner = target; owner.Inventory.Forget(Data); owner.Cooperative.Forget(Data); return ApplyResult.Done; }
+                { if (loadTarget != 0) CancelDestinationLoad(); Managed = true; ManagedOwner = target; owner.Inventory.Forget(Data); owner.Cooperative.Forget(Data); return ApplyResult.Done; }
                 if (UseProtected() && owner.AvailableOwner(old, position))
                 {
                     if (Kind == Kinds.Incinerators) { RejectAutomaticRequest(); return ApplyResult.Done; }
@@ -817,21 +918,33 @@ namespace TooManyLags
                 }
                 // An unrelated missing instance in the server's broad native
                 // area must not stall a loaded static object's handoff. Only
-                // an already server-owned object can use the destination's
+                // an existing stationary object can use the destination's
                 // authenticated, revision-matched local-area proof instead.
-                if (!owner.AreaReady(position))
+                // A source commit already sent after that proof must settle
+                // without re-querying the same destination or waiting for a
+                // newly attached server instance's wider loading area.
+                bool completingInitial = loadTarget == target && loadOwner == old && loadRevision == revision && loadPosition == position &&
+                    old != owner.server && owner.Cooperative.Pending(Data);
+                if (!completingInitial && (AwaitingInstance || !owner.AreaReady(position)))
                 {
-                    if (!(stationary && old == owner.server && target != owner.server && DestinationLoaded != null))
+                    // A shared field must not park a delayed server takeover.
+                    // Keep its available player owner and wait for a fresh real
+                    // coverage update. In-flight native commits still settle.
+                    if (Kind != Kinds.TamedAnimals && target == owner.server && old != 0 && old != owner.server &&
+                        owner.indexed.Grid.Owner(Cell) == owner.server && owner.AvailableOwner(old, position) && !owner.ProtectedTransfer(Data))
+                    { RejectAutomaticRequest(true); return ApplyResult.Done; }
+                    if (!(stationary && (old == owner.server || AwaitingInstance) && target != owner.server && DestinationLoaded != null))
                     { if (loadPending) CancelDestinationLoad(); return ApplyResult.Pending; }
-                    loadPending = true; loadTarget = target; loadRevision = Data.OwnerRevision; loadPosition = position;
+                    loadPending = true; loadTarget = target; loadOwner = old; loadRevision = Data.OwnerRevision; loadPosition = position;
                     if (!DestinationLoaded(Data, target)) return ApplyResult.Pending;
-                    loadPending = false; loadTarget = 0; loadNext = 0;
+                    loadPending = false; loadNext = 0;
                 }
                 else if (loadPending) CancelDestinationLoad();
-                if (Kind != Kinds.TamedAnimals && (ObjectCatalog.Classify(View.gameObject) != Kind || (wear && wear.m_staticPosition && (View.transform.position - position).sqrMagnitude > .0025f))) return ApplyResult.Dropped;
+                if (!AwaitingInstance && Kind != Kinds.TamedAnimals && (ObjectCatalog.Classify(View.gameObject) != Kind || (wear && wear.m_staticPosition && (View.transform.position - position).sqrMagnitude > .0025f))) return ApplyResult.Dropped;
                 if (!Identity() || !Controllable() || Data.GetOwner() != old || Data.OwnerRevision != revision || Data.GetPosition() != position || !owner.AvailableOwner(target, position)) return ApplyResult.Pending;
                 if (revision == UInt16.MaxValue) { Managed = false; return ApplyResult.Dropped; }
-                if (container)
+                bool completingCooperative = container && (owner.Cooperative.Pending(Data) || owner.Cooperative.Received(Data));
+                if (container && !completingCooperative)
                 {
                     // RequestOpen commits at the real source; its reply is not a
                     // free-standing permission for a later forced server steal.

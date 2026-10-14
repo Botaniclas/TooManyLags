@@ -145,6 +145,7 @@ internal static partial class IntegrationTests
         NormalDestinationWork();
         DeferredStartupProof();
         WaitingDestinationWork();
+        HarvestLoading();
         Console.WriteLine("PASS: "+(checks-initial)+" actual grid-protocol/controller assertions: authenticated object/world proof, stable retries, normal/legacy zero-RPC path, open-use/physics guards and lifecycle cleanup.");
     }
     private static void DestinationStateTraffic()

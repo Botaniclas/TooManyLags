@@ -23,6 +23,7 @@ public sealed class Pickable : UnityEngine.MonoBehaviour, Interactable
     public void Pick(long sender, int bonus) { RPC_Pick(sender, bonus); }
 }
 public sealed class PickableItem : UnityEngine.MonoBehaviour, Interactable { }
+public sealed class Plant : UnityEngine.MonoBehaviour { }
 public sealed class ItemDrop : UnityEngine.MonoBehaviour, Interactable
 {
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

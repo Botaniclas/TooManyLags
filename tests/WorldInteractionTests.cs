@@ -134,10 +134,10 @@ internal static partial class IntegrationTests
             var plain=Object(typeof(Container),2,1,99);var chest=ZNetScene.instance.FindInstance(plain).GetComponent<Container>();
             chest.RPC_RequestOpen(1,0);Check("ordinary chest opening remains native",chest.NativeRequests==1);
             data.SetOwner(99);controller.OwnerChanged(data);station.Burning(true);Tick(34);Tick(35);
-            Check("busy incinerator enters sparse request wait",((System.Collections.IDictionary)typeof(AuthorityController).GetField("waitingIncinerators",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(controller)).Count==1);
+            Check("busy incinerator enters sparse request wait",((System.Collections.IDictionary)typeof(AuthorityController).GetField("waitingFieldRequests",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(controller)).Count==1);
             controller.Unregister(view);int remaining=controller.ScheduledAttempts;Tick(36);
             Check("unloaded incinerator has no pending ownership job",controller.ScheduledAttempts==remaining);
-            Check("unloading removes sparse request wait entries",((System.Collections.IDictionary)typeof(AuthorityController).GetField("waitingIncinerators",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(controller)).Count==0);
+            Check("unloading removes sparse request wait entries",((System.Collections.IDictionary)typeof(AuthorityController).GetField("waitingFieldRequests",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(controller)).Count==0);
         }
         finally{TooManyLags.GridHandoffs.Protocol.Stop();ZDOMan.SessionID=99;}
         Check("protocol shutdown clears incinerator capability and activation",!IncineratorProtection.Active&&IncineratorProtection.Client==null);

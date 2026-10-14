@@ -21,7 +21,7 @@ namespace TooManyLags
         private readonly Dictionary<int, Kinds> prefabs = new Dictionary<int, Kinds>();
         // Prefab-only eligibility: stationary, permanent refill, incinerator,
         // and default-only world markers. No scene-loading scan here.
-        private readonly Dictionary<int, byte> nativeDefaults = new Dictionary<int, byte>();
+        private readonly Dictionary<int, ulong> nativeDefaults = new Dictionary<int, ulong>();
         private readonly Kinds enabled;
         private readonly HashSet<int> looseDrops = new HashSet<int>();
         internal bool IsLooseDrop(int hash) { return looseDrops.Contains(hash); }
@@ -64,9 +64,13 @@ namespace TooManyLags
         { return (NativeDefaultFlags(hash, scene) & 4) != 0; }
         internal bool NativeWorldDefault(int hash, ZNetScene scene)
         { return (NativeDefaultFlags(hash, scene) & 8) != 0; }
-        private byte NativeDefaultFlags(int hash, ZNetScene scene)
+        internal Kinds NativeDefaultKind(int hash, ZNetScene scene)
+        { return (Kinds)(NativeDefaultFlags(hash, scene) >> 8); }
+        internal bool NativeInventoryDefault(int hash, ZNetScene scene)
+        { return (NativeDefaultFlags(hash, scene) & 16) != 0; }
+        private ulong NativeDefaultFlags(int hash, ZNetScene scene)
         {
-            byte flags; if (nativeDefaults.TryGetValue(hash, out flags)) return flags;
+            ulong flags; if (nativeDefaults.TryGetValue(hash, out flags)) return flags;
             GameObject prefab = scene.GetPrefab(hash); if (!prefab) return 0;
             Kinds kind = Classify(prefab);
             bool eligible = kind != Kinds.None && (kind & enabled) != 0 && kind != Kinds.TamedAnimals && kind != Kinds.Vehicles &&
@@ -77,19 +81,34 @@ namespace TooManyLags
                 eligible = IncineratorProtection.Active && IncineratorProtection.Supported && station && station.m_container &&
                     (station.m_container.m_rootObjectOverride ? station.m_container.m_rootObjectOverride : station.m_container.GetComponentInParent<ZNetView>(true)) == prefab.GetComponent<ZNetView>();
             }
+            bool hasInventory = false;
             if (eligible)
             {
                 int inventories = 0; ZNetView root = prefab.GetComponent<ZNetView>();
                 foreach (Container inventory in prefab.GetComponentsInChildren<Container>(true))
                     if ((inventory.m_rootObjectOverride ? inventory.m_rootObjectOverride : inventory.GetComponentInParent<ZNetView>(true)) == root &&
                         (++inventories > 1 || inventory.m_privacy != Container.PrivacySetting.Public)) { eligible = false; break; }
+                hasInventory = inventories != 0;
             }
-            flags = eligible ? (byte)1 : (byte)0;
+            flags = eligible ? 1UL | ((ulong)(uint)kind << 8) : 0UL;
             if (eligible && kind == Kinds.Incinerators) flags |= 4;
             if (eligible && kind == Kinds.WorldMarkers) flags |= 8;
+            if (eligible && hasInventory) flags |= 16;
             if (eligible && (kind == Kinds.Smelters || kind == Kinds.CookingStations || kind == Kinds.Fireplaces ||
                 kind == Kinds.Fermenters || kind == Kinds.ShieldGenerators || (kind == Kinds.Defenses && prefab.GetComponentInChildren<Turret>(true)))) flags |= 2;
             nativeDefaults.Add(hash, flags); return flags;
+        }
+        // Structural eligibility only. Use protection belongs to the actual
+        // owner, not an inactive prefab or a first-load server placeholder.
+        internal static bool InitialRoot(GameObject root, Kinds expected)
+        {
+            if (expected == Kinds.None || expected == Kinds.TamedAnimals || expected == Kinds.Vehicles || expected == Kinds.WorldMarkers ||
+                root.transform.parent != null || Classify(root) != expected || !Stationary(root, expected)) return false;
+            ZNetView view = root.GetComponent<ZNetView>(); int count = 0;
+            foreach (Container inventory in root.GetComponentsInChildren<Container>(true))
+                if ((inventory.m_rootObjectOverride ? inventory.m_rootObjectOverride : inventory.GetComponentInParent<ZNetView>(true)) == view &&
+                    (++count > 1 || inventory.m_privacy != Container.PrivacySetting.Public)) return false;
+            return true;
         }
         internal static bool Stationary(GameObject root, Kinds kind)
         {

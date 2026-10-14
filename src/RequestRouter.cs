@@ -22,10 +22,13 @@ namespace TooManyLags
         {
             internal ZRoutedRpc.RoutedRPCData Packet;
             internal float At;
+            internal bool Cancellable;
         }
-        // Only cancellable native inventory requests expire. Damage, material
-        // inserts and other gameplay calls keep their existing delivery policy.
+        // Native inventory requests and picks held before a server instance
+        // exists can be retried without consuming materials. Do not execute a
+        // startup click much later. Existing gameplay delivery stays unchanged.
         internal const float InventoryRequestLifetime = 5f;
+        internal static readonly int Pick = "RPC_Pick".GetStableHashCode();
         private static readonly int open = "RPC_RequestOpen".GetStableHashCode(),
             stack = "RPC_RequestStack".GetStableHashCode(), take = "RPC_RequestTakeAll".GetStableHashCode();
         private sealed class Waiting
@@ -66,7 +69,7 @@ namespace TooManyLags
                 Waiting entry;
                 if (waiting.TryGetValue(node.Id, out entry)) { Hold(entry, Copy(data)); return true; }
                 bool pending = controller.TransferPending(node.Data);
-                if (available && !pending && target == data.m_targetPeerID && (target == controller.Server ? local : Knows(target, node.Data))) return false;
+                if (available && !pending && target == data.m_targetPeerID && (target == controller.Server ? local && !node.AwaitingInstance : Knows(target, node.Data))) return false;
                 ZRoutedRpc.RoutedRPCData copy = Copy(data);
                 if (available && !pending && Deliver(rpc, node, copy, target)) return true;
                 entry = new Waiting { Node = node }; waiting.Add(node.Id, entry);
@@ -115,6 +118,7 @@ namespace TooManyLags
             if (controller.IsActive && controller.TransferPending(node.Data)) return;
             long target = node.Data.GetOwner();
             if (!controller.AvailableOwner(target, node.Data.GetPosition())) return;
+            if (target == controller.Server && node.AwaitingInstance) return;
             if (target != controller.Server && !Knows(target, node.Data)) { Force(entry, target); return; }
             // Dequeue before delivery: a legitimate Remove/Damage request can
             // destroy this object and remove its remaining work.
@@ -134,6 +138,7 @@ namespace TooManyLags
         }
         private bool Deliver(ZRoutedRpc rpc, AuthorityController.NativeNode node, ZRoutedRpc.RoutedRPCData request, long target)
         {
+            if (target == controller.Server && node.AwaitingInstance) return false;
             if (target != controller.Server && !Knows(target, node.Data)) return false;
             request.m_targetPeerID = target; request.m_parameters.SetPos(0);
             node.Refilled(request.m_methodHash);
@@ -163,9 +168,10 @@ namespace TooManyLags
         private static void Hold(Waiting entry, ZRoutedRpc.RoutedRPCData request)
         {
             float now = UnityEngine.Time.unscaledTime;
-            entry.Requests.Enqueue(new QueuedRequest { Packet = request, At = now }); entry.Node.Requests++;
             int method = request.m_methodHash;
-            if (method == open || method == stack || method == take) entry.NextExpiry = Math.Min(entry.NextExpiry, now + InventoryRequestLifetime);
+            bool cancel = method == open || method == stack || method == take || (entry.Node.AwaitingInstance && method == Pick);
+            entry.Requests.Enqueue(new QueuedRequest { Packet = request, At = now, Cancellable = cancel }); entry.Node.Requests++;
+            if (cancel) entry.NextExpiry = Math.Min(entry.NextExpiry, now + InventoryRequestLifetime);
         }
         private void Expire(Waiting entry)
         {
@@ -178,10 +184,10 @@ namespace TooManyLags
                 QueuedRequest queued = entry.Requests.Dequeue();
                 int method = queued.Packet.m_methodHash;
                 string response = ResponseName(method);
-                if (response == null || (now >= queued.At && now - queued.At < InventoryRequestLifetime))
+                if (!queued.Cancellable || (now >= queued.At && now - queued.At < InventoryRequestLifetime))
                 {
                     entry.Requests.Enqueue(queued);
-                    if (response != null) entry.NextExpiry = Math.Min(entry.NextExpiry, queued.At + InventoryRequestLifetime);
+                    if (queued.Cancellable) entry.NextExpiry = Math.Min(entry.NextExpiry, queued.At + InventoryRequestLifetime);
                     continue;
                 }
                 entry.Node.Requests--;

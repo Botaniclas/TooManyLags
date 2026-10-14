@@ -2,6 +2,8 @@
 
 **Unreleased**
 ```
+- Fixes stationary interactions, including harvestables, torches, doors and public chests, waiting for server instantiation before entering a loaded client's grid after login. Requires updated clients and experimental protection; recipient loading, field delays and source-use protection remain mandatory. Pending source commits reuse their loading proof and survive server instantiation without restarting the handoff.
+- Unready overlap takeovers now keep the available player owner and wait for a fresh covering grid request. Server loading completion alone never replays that takeover; a later exclusive player policy remains usable.
 - Fixes delayed initial server ownership for fixed doors/gates with animated kinematic child bodies. Moving roots, synchronized/dynamic physics and normal loading/use safeguards remain excluded or protected.
 - Adds guarded grid/default ownership for incinerators. Burning/open inventories reject transfers until a fresh covering player update; requires experimental protection and updated clients. Older clients keep native incinerator ownership.
 - Adds optional WorldMarkers server defaults for existing dungeon-entrance/Vegvisir network objects with ServerOwnedInteractivesByDefault=true. Local objects without a ZDO remain unchanged; native active-owner and region-release rules stay intact.

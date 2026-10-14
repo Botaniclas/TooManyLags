@@ -506,7 +506,7 @@ internal static class NativeReleaseAudit
                 PatchParameters(type, target); targets++;
             }
         }
-        Check(configTargets == 3 && targets == 53, "Unexpected Harmony target count: " + targets);
+        Check(configTargets == 3 && targets == 54, "Unexpected Harmony target count: " + targets);
     }
     private static IEnumerable<TypeDefinition> HandoffTargets(AssemblyDefinition module)
     {

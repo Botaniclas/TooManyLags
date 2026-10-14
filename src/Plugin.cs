@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.39.0")]
+[assembly: AssemblyVersion("1.0.40.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.39")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.40")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.39", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.40", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -426,6 +426,12 @@ namespace TooManyLags
     {
         [HarmonyPostfix]
         private static void Postfix(ZDO zdo, ZNetView nview) { if (Plugin.Controller != null) Plugin.Controller.Register(zdo, nview); }
+    }
+    [HarmonyPatch(typeof(ZNetScene), "OnZDODestroyed")]
+    internal static class InitialDestroyedPatch
+    {
+        [HarmonyPrefix]
+        private static void Prefix(ZDO __0) { if (Plugin.Controller != null) Plugin.Controller.DataDestroyed(__0); }
     }
     [HarmonyPatch]
     internal static class RemovePatch

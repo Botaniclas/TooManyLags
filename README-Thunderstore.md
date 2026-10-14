@@ -69,7 +69,7 @@ Configure **all gameplay settings on the server** in `BepInEx/config/botanic.too
 
 **Console:** `tml_config list` lists settings; `tml_config <Key>` reads one; `tml_config <Key> <Value>` saves a change. Only admins can change server settings.
 
-**Diagnostics:** With Server-Side Simulation, admins can use `tml_config owner_status` for a one-time ownership/loading snapshot in the console and server's `BepInEx/LogOutput.log`, even with `EnableLogs=false`. No background checks; existing clients support the command.
+**Diagnostics:** With Server-Side Simulation, admins can use `tml_config owner_status` for a one-time ownership/loading snapshot in the console and server's `BepInEx/LogOutput.log`, even with `EnableLogs=false`. Add part of a prefab name, e.g. `tml_config owner_status torch`, to inspect that object type. No background checks; existing clients support the command.
 
 Intervals, delays and mob fallback limits apply immediately. Other settings, including `Enabled` and `EnableAIOwnership`, take effect after a server restart; clients receive the new mode when reconnecting.
 

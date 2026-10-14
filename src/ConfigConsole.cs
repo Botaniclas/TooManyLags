@@ -87,10 +87,10 @@ namespace TooManyLags
                 string reply;
                 if (peer.m_socket == null || !current.IsAdmin(peer.m_socket.GetHostName()))
                     reply = "Server configuration requires admin rights (adminlist.txt).";
-                else if (String.Equals(command, "owner_status", StringComparison.OrdinalIgnoreCase))
+                else if (String.Equals(command, "owner_status", StringComparison.OrdinalIgnoreCase) || command.StartsWith("owner_status ", StringComparison.OrdinalIgnoreCase))
                 {
                     if (now < nextOwnerStatus) reply = "Owner status is limited to one snapshot every two seconds.";
-                    else { nextOwnerStatus = now + 2; reply = Plugin.OwnerStatus(peer.m_uid); }
+                    else { nextOwnerStatus = now + 2; reply = Plugin.OwnerStatus(peer.m_uid, command.Length > 12 ? command.Substring(12).Trim() : null); }
                 }
                 else reply = Plugin.ConfigCommand(command, true);
                 try { rpc.Invoke(ReplyRpc, reply, id); } catch (Exception) { }

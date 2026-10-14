@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.36.0")]
+[assembly: AssemblyVersion("1.0.37.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.36")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.37")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.36", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.37", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -308,13 +308,13 @@ namespace TooManyLags
             try { return instance.commands.Execute(command, server); }
             catch (Exception error) { return "Config request failed: " + error.GetBaseException().Message; }
         }
-        internal static string OwnerStatus(long peer)
+        internal static string OwnerStatus(long peer, string prefabFilter = null)
         {
             string status;
             if (Controller == null) status = "SERVER owner status: object grid unavailable; check Enabled and NoServerSideSimulation.";
             else
             {
-                try { status = Controller.OwnerStatus(peer); }
+                try { status = Controller.OwnerStatus(peer, prefabFilter); }
                 catch (Exception error) { status = "SERVER owner status unavailable: " + error.GetBaseException().Message; }
             }
             // Explicit admin diagnostics remain available with ordinary logging disabled.

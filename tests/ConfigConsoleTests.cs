@@ -61,7 +61,7 @@ namespace TooManyLags
 {
     internal static class Plugin
     {
-        internal static int Calls, OwnerCalls; internal static long OwnerPeer; internal static bool Server;
+        internal static int Calls, OwnerCalls; internal static long OwnerPeer; internal static string OwnerFilter; internal static bool Server;
         internal static float Interval = .1f, Applied, Overlap = 30f, AppliedOverlap;
         internal static float CameraInterval() { return Interval; }
         internal static void ApplyCameraInterval(float interval) { Applied = interval; }
@@ -69,7 +69,7 @@ namespace TooManyLags
         internal static float CameraPredictionSeconds() { return .1f; }
         internal static void ApplyCameraSettings(float interval, float overlap, float prediction = 0f) { Applied = interval; AppliedOverlap = overlap; }
         internal static string ConfigCommand(string text, bool server) { Calls++; Server = server; return "reply"; }
-        internal static string OwnerStatus(long peer) { OwnerCalls++; OwnerPeer=peer; return "SERVER owner status"; }
+        internal static string OwnerStatus(long peer, string filter = null) { OwnerCalls++; OwnerPeer=peer; OwnerFilter=filter; return "SERVER owner status"; }
         internal static int SessionFlags() { return 3; }
         internal static void ApplyServerSession(bool enabled, bool mobs) { }
         internal static void ClearClientSession() { }
@@ -103,9 +103,17 @@ internal static class ConfigConsoleTests
         Check(Plugin.OwnerCalls==1&&peer.m_rpc.Text.Contains("two seconds"),"ownership snapshot has separate on-demand rate limit");
         UnityEngine.Time.realtimeSinceStartupAsDouble=102;peer.m_rpc.Receive("TooManyLags_Config_1","owner_status",4);
         Check(Plugin.OwnerCalls==2,"explicit snapshot can run again after its rate limit");
-        ZNet.instance.Peer=new ZNetPeer();UnityEngine.Time.realtimeSinceStartupAsDouble=104;
+        UnityEngine.Time.realtimeSinceStartupAsDouble=104;peer.m_rpc.Receive("TooManyLags_Config_1","OWNER_STATUS   torch  ",5);
+        Check(Plugin.OwnerCalls==3&&Plugin.OwnerFilter=="torch"&&Plugin.OwnerPeer==peer.m_uid&&Plugin.Calls==calls,"legacy RPC accepts a trimmed prefab filter through the same admin diagnostic endpoint");
+        peer.m_rpc.Receive("TooManyLags_Config_1","owner_status Pickable",6);
+        Check(Plugin.OwnerCalls==3&&peer.m_rpc.Text.Contains("two seconds"),"filtered snapshots cannot bypass the shared diagnostic throttle");
+        UnityEngine.Time.realtimeSinceStartupAsDouble=106;peer.m_rpc.Receive("TooManyLags_Config_1","owner_statusExtra torch",7);
+        Check(Plugin.OwnerCalls==3&&Plugin.Calls==calls+1,"similar config keys do not execute diagnostics");
+        ZNet.instance.Admin=false;UnityEngine.Time.realtimeSinceStartupAsDouble=108;peer.m_rpc.Receive("TooManyLags_Config_1","owner_status torch",8);
+        Check(Plugin.OwnerCalls==3&&peer.m_rpc.Text.Contains("admin rights"),"filtered snapshots retain admin authorization");
+        ZNet.instance.Peer=new ZNetPeer();UnityEngine.Time.realtimeSinceStartupAsDouble=110;
         peer.m_rpc.Receive("TooManyLags_Config_1","owner_status",5);
-        Check(Plugin.OwnerCalls==2,"detached socket cannot inspect ownership");ConfigConsole.Reset();
+        Check(Plugin.OwnerCalls==3,"detached socket cannot inspect ownership");ConfigConsole.Reset();
     }
     private static void Service(string folder)
     {

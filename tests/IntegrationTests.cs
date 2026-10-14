@@ -1553,12 +1553,41 @@ internal static partial class IntegrationTests
         Check("snapshot performs only its one explicit native readiness query",ZNetScene.instance.AreaQueries==area+1&&status.Length<6000);
         controller.Reset();Check("snapshot safely reports world teardown",controller.OwnerStatus(1).Contains("No initialized server world"));
     }
+    private static void TargetedOwnerStatusSnapshot()
+    {
+        Fresh(Kinds.Doors|Kinds.Fireplaces|Kinds.Pickables,defaultInteractives:true);var player=Peer(1);Peer(7,64);
+        var clutter=new List<ZDO>();
+        for(int i=0;i<12;i++)
+        {
+            var gate=Object(typeof(Door),40+i,1,7);var gateView=ZNetScene.instance.FindInstance(gate);
+            gateView.gameObject.name="darkwood_gate_fixture";gateView.gameObject.Add(new Rigidbody());clutter.Add(gate);
+        }
+        var torch=Object(typeof(Fireplace),1,1,99);ZNetScene.instance.FindInstance(torch).gameObject.name="piece_groundtorch_fixture";
+        var pickable=Object(typeof(Pickable),2,1,99);ZNetScene.instance.FindInstance(pickable).gameObject.name="Pickable_Branch_fixture";
+        var missing=Object(typeof(Pickable),3,1,99);var missingView=ZNetScene.instance.FindInstance(missing);missingView.gameObject.name="Pickable_Log_missing_fixture";
+        controller.Unregister(missingView);ZNetScene.instance.Views.Remove(missing);
+        var unmanaged=Object(typeof(ItemDrop),4,1,99);ZNetScene.instance.FindInstance(unmanaged).gameObject.name="Pickable_Log_unmanaged_fixture";
+        ZNetScene.instance.Ready=delegate{return false;};Tick(0);Tick(2);
+        int writes=torch.Writes+pickable.Writes+missing.Writes+unmanaged.Writes,area=ZNetScene.instance.AreaQueries,updates=controller.FieldUpdates,forced=ZDOMan.instance.Forced;
+        string general=controller.OwnerStatus(1);
+        Check("server-owned pending player fields are sampled ahead of unrelated gates",general.Contains("piece_groundtorch_fixture")&&general.Contains("Pickable_Branch_fixture")&&general.Contains("Pickable_Log_missing_fixture"));
+        Check("status distinguishes waiting handoffs from absent server instances",general.Contains("stationary=True; serverStation=True; loadPending=False")&&general.Contains("no server node; serverInstance=False"));
+        string torches=controller.OwnerStatus(1,"tOrCh");
+        Check("case-insensitive prefab filter includes only matching detail rows",torches.Contains("piece_groundtorch_fixture")&&!torches.Contains("darkwood_gate_fixture")&&!torches.Contains("Pickable_Branch_fixture")&&torches.Contains("filteredSamples=True; samples=1"));
+        string pickables=controller.OwnerStatus(1,"Pickable_");
+        Check("filtered diagnostics include missing and unmanaged objects",pickables.Contains("Pickable_Branch_fixture")&&pickables.Contains("Pickable_Log_missing_fixture")&&pickables.Contains("Pickable_Log_unmanaged_fixture")&&pickables.Contains("no server node; serverInstance=True"));
+        Check("oversized diagnostic filter stops before scanning native area",controller.OwnerStatus(1,new string('x',101)).Contains("at most 100 characters")&&ZNetScene.instance.AreaQueries==area+3);
+        Check("unmatched filter returns a bounded empty sample",controller.OwnerStatus(1,"no-such-prefab").Contains("filteredSamples=True; samples=0"));
+        Check("targeted snapshots perform only their explicit area query",ZNetScene.instance.AreaQueries==area+4&&torches.Length<6000&&pickables.Length<6000);
+        Check("targeted snapshots do not write owners, submit requests, send replicas or update fields",writes==torch.Writes+pickable.Writes+missing.Writes+unmanaged.Writes&&player.m_rpc.Calls==0&&forced==ZDOMan.instance.Forced&&updates==controller.FieldUpdates);
+        foreach(var gate in clutter)Check("snapshot ranking does not change native active-owner gates",gate.GetOwner()==7&&gate.Writes==0);
+    }
     public static void Main()
     {
         try {
         InactiveNativeTemplates();Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
-        SeparateMobDefaults();DelayedReadinessInteractions();OwnerStatusSnapshot();
+        SeparateMobDefaults();DelayedReadinessInteractions();OwnerStatusSnapshot();TargetedOwnerStatusSnapshot();
 #if GRID_PROTOCOL
         DestinationLoadProtocol();
 #endif

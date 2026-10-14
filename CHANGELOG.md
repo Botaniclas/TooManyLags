@@ -2,6 +2,7 @@
 
 **Unreleased**
 ```
+- Adds prefab-name filters to admin ownership diagnostics and prioritizes pending local transfers, showing missing server instances and loading waits without background checks.
 - Fixes inactive prefabs missing initial server ownership with ServerOwnedInteractivesByDefault=true. Eligible interactions can receive the server owner before scene loading completes; inactive inventory controls retain the same privacy and handoff safeguards.
 - Removes the PUP FPS version lock for AI server takeovers and supports its newer dedicated-collider readiness proof. Unfinished replacements and incompatible interfaces still block takeover; existing attack, loading and handoff safeguards remain active.
 ```

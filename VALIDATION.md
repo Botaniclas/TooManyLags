@@ -1,3 +1,27 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.30 local test build
+
+Two reported problems were investigated independently: one cell of unused server-owned chests that recovered after unloading, and a 10–15-second pause of visible ownership changes after another player teleported away, despite continued movement. The departing player owned no remaining local objects. The managed teleport tests remove the old footprint without that pause; there is no demonstrated extra teleport timer in the grid.
+
+## Inventory receipt recovery
+
+The unchanged 1.0.29 controller reproduced a permanent chest wait after the native source-to-server owner/revision receipt arrived but its positive OpenResponse did not. The old record survived the five-second reply deadline and each later automatic transfer returned Pending; unloading removed that record and made the current server-owned chest transferable again. The fix retains the response window, then retires only an exact completed server receipt for an idle local Container. It does not change an owner on timeout or resend to the former owner. Source-owned, incomplete, foreign and changed revision tuples keep their original rules. Local IsInUse, replicated inUse, pending inventory openings, privacy and active-use checks remain enforced. Late old responses cannot restore a retired record or overwrite subsequent ownership.
+
+## Narrow destination loading proof
+
+The broad native server IsAreaReady check can hold all local object writes while fine-grid policies continue updating. One missing instance in surrounding native sectors is enough. This is a verified blocking path, not proof that it caused the reported live teleport pause.
+
+When this check fails, only an already server-owned stationary interactive with no child Rigidbody may use an authenticated destination-client loading proof instead. The client must have the exact active instance, server owner/revision, captured minimum data state, matching position and its own complete native local area. Final identity, owner/revision, position, active-use and desired-grid policy checks still run before the write. Source-client commits, animals, vehicles and a server destination retain the full server-area check. Post-ownership recipient readiness remains separate and requires a new token/revision.
+
+The existing experimental handoff channel carries the proof; no new dependency, forced timeout transfer or version lock is added. An optional Hello capability and an appended message ID keep older clients on the original loading guard. The normal ready-server path sends no preflight RPCs. Blocked objects reuse one bounded per-object readiness entry and one stable retry token; retries are at most every 0.5 seconds while needed. Replies wake the existing pending work rather than writing owners from the RPC. Unload, disconnect and world reset remove proof state; an approved preflight is consumed inside the exceptional path, without a new cleanup delegate or tracking-table lookup on ordinary writes. No additional idle, physics or whole-world scan is introduced. Stationary eligibility is checked once when the loaded node is registered.
+
+## Validation status
+
+All 21 final verification groups pass: 109 native inventory assertions, 11,678 ordinary controller/grid/router assertions, 1,067 additional actual protocol/controller checks (12,745 total in that fixture), 22,753 native release assertions and 50 unchanged Harmony targets against each audited native provider, plus existing camera, cache, startup, fallback, combat and optional PUP groups. The first native audit caught an unnecessary cleanup delegate on ordinary transfer marking; moving consumption into the exceptional proof path restored that zero-tracking-table contract. The complete suite was rerun on the final build. Verified DLL SHA256: `F718261E4615BA3F1E95AAB3EC8414323B2D8531A44FAEF38E8D495C441F14B0`.
+
+No live Unity multiplayer test has been performed; the reported pause needs an in-game retest with the updated server and clients. Inventory recovery is server-side; the alternative loading proof requires updated participating clients and EnableExperimentalInteractionProtection=true. Prepared locally; not published or pushed.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.29 local test build
 
 ## Interaction-readiness retry identity

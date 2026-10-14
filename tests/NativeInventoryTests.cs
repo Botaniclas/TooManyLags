@@ -44,6 +44,8 @@ public class Container : UnityEngine.Object
     public enum PrivacySetting { Private, Group, Public }
     public PrivacySetting m_privacy = PrivacySetting.Public;
     public ZNetView m_rootObjectOverride, View;
+    public bool InUse;
+    public bool IsInUse() { return InUse; }
     public T GetComponent<T>() where T : class { return View as T; }
 }
 internal static class NativeInventoryTests
@@ -169,22 +171,27 @@ internal static class NativeInventoryTests
             Require(c.Acquire() == 1 && c.Sends == 2 && c.Data.Owner == 2, "lost request retry remains a native request");
 
             c = new Case(); c.Acquire(); c.Commit(); UnityEngine.Time.unscaledTime = 5;
-            Require(!c.Bridge.Pending(c.Data) && c.Bridge.Received(c.Data) && c.Acquire() == 0, "lost response cannot complete solely from owner data");
+            Require(!c.Bridge.Pending(c.Data) && c.Bridge.Received(c.Data) && c.Acquire() == 2, "expired exact server receipt resumes current idle server contract");
             UnityEngine.Time.unscaledTime = 10;
-            Require(c.Acquire() == 0 && c.Sends == 1, "no request resent to former source after unconfirmed native commit");
+            Require(c.Acquire() == 2 && c.Sends == 1 && !c.Bridge.Received(c.Data), "retired reply wait sends no request to former owner");
             c.Bridge.Response(c.Container, 99, true);
-            Require(c.Acquire() == 0 && !c.Bridge.Pending(c.Data), "late grant from wrong sender cannot confirm server receipt");
+            Require(c.Acquire() == 2 && !c.Bridge.Pending(c.Data) && c.Data.Owner == 1, "late foreign reply cannot alter recovered server ownership");
             c.Bridge.Response(c.Container, 2, false);
-            Require(c.Acquire() == 0 && !c.Bridge.Pending(c.Data), "late denial never confirms or re-pins server receipt");
+            Require(c.Acquire() == 2 && !c.Bridge.Pending(c.Data), "late denial cannot re-pin a retired server receipt");
             c.Bridge.Response(c.Container, 2, true);
             Require(c.Acquire() == 2 && !c.Bridge.Pending(c.Data) && c.Sends == 1, "late matching positive confirms exact server receipt without re-pin or resend");
 
             c = new Case(); c.Acquire(); c.Commit(); UnityEngine.Time.unscaledTime = 7;
-            Require(!c.Bridge.Pending(c.Data) && c.Acquire() == 0, "missing reply expires reservation for a normal native player opening");
+            Require(!c.Bridge.Pending(c.Data) && c.Acquire() == 2, "missing reply releases idle server receipt for ordinary opening and grid changes");
             // Ordinary native RequestOpen can now commit a real player's ownership.
             c.Data.Owner = 3; c.Data.OwnerRevision = 9;
             c.Bridge.Response(c.Container, 2, true);
             Require(c.Data.Owner == 3 && c.Data.OwnerRevision == 9 && !c.Bridge.Received(c.Data) && !c.Bridge.Pending(c.Data), "late old grant cannot override a subsequent native player opening");
+
+            c = new Case(); c.Acquire(); c.Commit(); c.Container.InUse = true; UnityEngine.Time.unscaledTime = 7;
+            Require(c.Acquire() == 0 && c.Bridge.Received(c.Data) && c.Sends == 1, "expired receipt retains local native open-inventory veto");
+            c.Container.InUse = false;
+            Require(c.Acquire() == 2 && !c.Bridge.Received(c.Data) && c.Sends == 1, "closing server inventory releases only completed reply wait");
 
             c = new Case(); c.Acquire(); c.Commit(); UnityEngine.Time.unscaledTime = 7;
             Require(!c.Bridge.Pending(c.Data), "receipt-only reservation expires at deadline");

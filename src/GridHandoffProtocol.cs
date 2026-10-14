@@ -13,13 +13,14 @@ namespace TooManyLags.GridHandoffs
     internal static class Protocol
     {
         private const string RpcName = "TooManyLags_GridHandoff_1";
-        private enum Message { Hello, Welcome, Commit, Status, Result, Ready, ReadyResult, Relay, ReadyLost }
-        private sealed class Connection { internal ZNetPeer Peer; internal bool Capable; internal readonly CommitFence Fence = new CommitFence(); internal readonly CapabilityGreeting Greeting = new CapabilityGreeting(); }
+        private enum Message { Hello, Welcome, Commit, Status, Result, Ready, ReadyResult, Relay, ReadyLost, Loaded }
+        private sealed class Connection { internal ZNetPeer Peer; internal bool Capable, LoadedProof; internal readonly CommitFence Fence = new CommitFence(); internal readonly CapabilityGreeting Greeting = new CapabilityGreeting(); }
         private sealed class Advertisement { internal ZNetPeer Peer; internal ZDOID Id; internal long Token; }
         private sealed class Readiness
         {
             internal ZDO Data; internal ZRpc Rpc; internal long Owner;
             internal uint Revision, MinimumState;
+            internal bool BeforeOwner; internal Vector3 Position;
             internal ReadinessProbe Probe;
         }
         private sealed class KindCache { internal Kinds Kind; }
@@ -47,6 +48,7 @@ namespace TooManyLags.GridHandoffs
             RequestRouter.RecipientReady = Ready;
             AuthorityController.ReadinessRemoved = Forget;
             AuthorityController.ReadinessReset = ClearReadiness;
+            AuthorityController.DestinationLoaded = Loaded;
             patches = new Harmony(Plugin.Id + ".gridhandoff");
             foreach (Type hook in new[] { typeof(ConnectPatch), typeof(PeerReadyPatch), typeof(ReceivePatch), typeof(UnloadPatch), typeof(ShutdownPatch), typeof(DisconnectPatch) })
                 patches.CreateClassProcessor(hook).Patch();
@@ -57,7 +59,7 @@ namespace TooManyLags.GridHandoffs
         {
             if (patches != null) patches.UnpatchSelf(); patches = null;
             FgnOwnerHandoff.CooperativeClient = null; FgnOwnerHandoff.IdentifiedSend = null; FgnOwnerHandoff.IdentifiedStatus = null;
-            RequestRouter.RecipientReady = null; AuthorityController.ReadinessRemoved = null; AuthorityController.ReadinessReset = null; nativeCommit = null; started = false; Reset();
+            RequestRouter.RecipientReady = null; AuthorityController.ReadinessRemoved = null; AuthorityController.ReadinessReset = null; AuthorityController.DestinationLoaded = null; nativeCommit = null; started = false; Reset();
         }
         private static void Reset()
         { connections.Clear(); ready.Clear(); retiring.Clear(); kinds = new ConditionalWeakTable<ZNetView, KindCache>(); refills = new ConditionalWeakTable<ZDO, Lease>(); advertised = new ConditionalWeakTable<ZNetView, Advertisement>(); areas.Clear(); frame = -1; clientGreetingPending = false; }
@@ -83,7 +85,7 @@ namespace TooManyLags.GridHandoffs
             double now = Time.realtimeSinceStartupAsDouble;
             if (c.Capable || !c.Greeting.Waiting(now)) { clientGreetingPending = false; return; }
             if (c.Greeting.Due(now))
-                try { Send(peer, Message.Hello, null); } catch (Exception) { }
+                try { Send(peer, Message.Hello, delegate(ZPackage p) { p.Write(1); }); } catch (Exception) { }
         }
         internal static void Offer(ZNetPeer peer)
         {
@@ -121,7 +123,10 @@ namespace TooManyLags.GridHandoffs
                 if (server)
                 {
                     if (message == Message.Hello)
-                    { bool changed = !c.Capable; c.Capable = true; if (changed && Plugin.Controller != null) Plugin.Controller.CapabilityChanged(c.Peer.m_uid); Send(c.Peer, Message.Welcome, delegate(ZPackage p) { p.Write(true); }); return; }
+                    { bool proof = packet.Size() >= 2 * sizeof(int) && (packet.ReadInt() & 1) != 0;
+                      bool changed = !c.Capable || (!c.LoadedProof && proof); c.Capable = true; c.LoadedProof = proof;
+                      if (changed && Plugin.Controller != null) Plugin.Controller.CapabilityChanged(c.Peer.m_uid);
+                      Send(c.Peer, Message.Welcome, delegate(ZPackage p) { p.Write(true); }); return; }
                     if (!c.Capable || Plugin.Controller == null || ZDOMan.instance == null) return;
                     if (message == Message.Result)
                     {
@@ -142,7 +147,8 @@ namespace TooManyLags.GridHandoffs
                     if (message == Message.ReadyResult)
                     {
                         ZDOID id = packet.ReadZDOID(); long token = packet.ReadLong(); bool available = packet.ReadBool(); Readiness r;
-                        if (ready.TryGetValue(id, out r) && ReferenceEquals(r.Rpc, rpc)) r.Probe.Response(token, available, Time.unscaledTime);
+                        if (ready.TryGetValue(id, out r) && ReferenceEquals(r.Rpc, rpc) && r.Probe.Response(token, available, Time.unscaledTime) && r.BeforeOwner && available)
+                            Plugin.Controller.Wake();
                         Plugin.Controller.Router.Flush(id); return;
                     }
                     if (message == Message.ReadyLost)
@@ -170,14 +176,17 @@ namespace TooManyLags.GridHandoffs
                     else { clientGreetingPending = true; ClientHello(); }
                     return;
                 }
-                if (ZDOMan.instance == null || (message != Message.Commit && message != Message.Status && message != Message.Ready)) return;
+                if (ZDOMan.instance == null || (message != Message.Commit && message != Message.Status && message != Message.Ready && message != Message.Loaded)) return;
                 c.Capable = true; // Authenticated server endpoint; no exact-version gate.
-                if (message == Message.Ready)
+                if (message == Message.Ready || message == Message.Loaded)
                 {
                     ZDOID id = packet.ReadZDOID(); long token = packet.ReadLong(), owner = packet.ReadLong(); uint revision = packet.ReadUInt(), minimum = packet.ReadUInt();
+                    bool before = message == Message.Loaded; Vector3 position = before ? packet.ReadVector3() : default(Vector3);
                     ZDO data = ZDOMan.instance.GetZDO(id); ZNetView view = data != null && ZNetScene.instance ? ZNetScene.instance.FindInstance(data) : null;
-                    bool available = data != null && data.IsValid() && data.GetOwner() == owner && owner == ZDOMan.GetSessionID() &&
-                        data.OwnerRevision == revision && data.DataRevision >= minimum && view && view.IsValid() && view.gameObject.activeInHierarchy && AreaReady(data.GetPosition());
+                    bool available = token > 0 && data != null && data.IsValid() && data.GetOwner() == owner &&
+                        owner == (before ? c.Peer.m_uid : ZDOMan.GetSessionID()) && (!before || data.GetPosition() == position) &&
+                        data.OwnerRevision == revision && data.DataRevision >= minimum && view && view.IsValid() && ReferenceEquals(view.GetZDO(), data) &&
+                        view.gameObject.activeInHierarchy && ZoneSystem.instance && AreaReady(data.GetPosition());
                     if (!available && data != null) ZDOMan.instance.ForceSendZDO(id);
                     if (available)
                     { advertised.Remove(view); advertised.Add(view, new Advertisement { Peer = c.Peer, Id = id, Token = token }); }
@@ -249,7 +258,7 @@ namespace TooManyLags.GridHandoffs
             if (!Capable(peer)) return true;
             Readiness r;
             if (!ready.TryGetValue(data.m_uid, out r) || !ReferenceEquals(r.Data, data) || r.Owner != owner ||
-                r.Revision != data.OwnerRevision || !ReferenceEquals(r.Rpc, peer.m_rpc))
+                r.BeforeOwner || r.Revision != data.OwnerRevision || !ReferenceEquals(r.Rpc, peer.m_rpc))
             { r = new Readiness { Data = data, Rpc = peer.m_rpc, Owner = owner, Revision = data.OwnerRevision, MinimumState = data.DataRevision }; ready[data.m_uid] = r; }
             if (minimum > r.MinimumState)
             { r.MinimumState = minimum; r.Probe.Invalidate(); }
@@ -259,6 +268,27 @@ namespace TooManyLags.GridHandoffs
                 world.ForceSendZDO(owner, data.m_uid);
                 try { Send(peer, Message.Ready, delegate(ZPackage p) { p.Write(data.m_uid); p.Write(r.Probe.Token); p.Write(owner); p.Write(r.Revision); p.Write(r.MinimumState); }); }
                 catch (Exception error) { Plugin.Warn("Recipient readiness query failed: " + error.GetBaseException().Message); }
+            }
+            return false;
+        }
+        private static bool Loaded(ZDO data, long target)
+        {
+            ZNetPeer peer = ZNet.instance ? ZNet.instance.GetPeer(target) : null; Connection c;
+            if (!Capable(peer) || !connections.TryGetValue(peer.m_rpc, out c) || !c.LoadedProof ||
+                data == null || !data.IsValid() || data.GetOwner() != ZDOMan.GetSessionID()) return false;
+            Readiness r; Vector3 position = data.GetPosition();
+            if (!ready.TryGetValue(data.m_uid, out r) || !r.BeforeOwner || !ReferenceEquals(r.Data, data) ||
+                r.Owner != data.GetOwner() || r.Revision != data.OwnerRevision || r.Position != position || !ReferenceEquals(r.Rpc, peer.m_rpc))
+            { r = new Readiness { BeforeOwner = true, Data = data, Rpc = peer.m_rpc, Owner = data.GetOwner(), Revision = data.OwnerRevision,
+                MinimumState = data.DataRevision, Position = position }; ready[data.m_uid] = r; }
+            // Consume this exceptional preflight once. Normal owner writes
+            // need no extra tracking-table lookup or cleanup delegate.
+            if (r.Probe.Ready) { ready.Remove(data.m_uid); return true; }
+            if (r.Probe.Query(Time.unscaledTime, ref readinessToken))
+            {
+                ZDOMan.instance.ForceSendZDO(target, data.m_uid);
+                try { Send(peer, Message.Loaded, delegate(ZPackage p) { p.Write(data.m_uid); p.Write(r.Probe.Token); p.Write(r.Owner); p.Write(r.Revision); p.Write(r.MinimumState); p.Write(r.Position); }); }
+                catch (Exception error) { Plugin.Warn("Destination load query failed: " + error.GetBaseException().Message); }
             }
             return false;
         }

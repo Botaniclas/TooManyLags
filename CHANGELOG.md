@@ -1,5 +1,11 @@
 # Changelog
 
+**Unreleased**
+```
+- Fixes unused chests remaining server-owned after a completed native inventory handoff loses its response. Open inventories and pending openings remain protected.
+- Allows already server-owned stationary interactions to hand over during incomplete server-area loading when the destination client confirms the exact object and its loaded local area. Server and clients need this update for the fallback; older clients keep the original loading guard. Requires experimental interaction protection.
+```
+
 **1.0.29**
 ```
 - Enables experimental interaction protection by default for new configs. Existing saved values remain unchanged.

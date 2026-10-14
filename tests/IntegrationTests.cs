@@ -10,6 +10,9 @@ public sealed class ZRpc
     public int Calls;
     public Action<string,object[]> OnInvoke;
     public void Invoke(string name,params object[] values){Calls++;if(OnInvoke!=null)OnInvoke(name,values);}
+    private readonly Dictionary<string,Delegate> handlers=new Dictionary<string,Delegate>();
+    public void Register<T>(string name,Action<ZRpc,T> handler){handlers[name]=handler;}
+    public void Receive<T>(string name,T value){((Action<ZRpc,T>)handlers[name])(this,value);}
 }
 internal static class StringHash { public static int GetStableHashCode(this string value){return value.GetHashCode();} }
 namespace TooManyLags
@@ -22,6 +25,8 @@ namespace TooManyLags
         internal static AuthorityController Controller;
         internal static void SampleCamera() { }
         internal static void InvalidateCamera() { }
+        internal static readonly List<string> Warnings = new List<string>();
+        internal static void Warn(string value) { Warnings.Add(value); }
     }
 }
 namespace FiresGhettoNetworkMod
@@ -35,7 +40,7 @@ namespace FiresGhettoNetworkMod
         private static string Veto(ZDO data,long target){return null;}
     }
 }
-internal static class IntegrationTests
+internal static partial class IntegrationTests
 {
     private static int checks, next, failures;
     private static AuthorityController controller;
@@ -133,9 +138,9 @@ internal static class IntegrationTests
         Check("already desired client chest never queried or moved",requests==0&&data.GetOwner()==1&&data.Writes==0);
         Fresh(Kinds.Containers);Peer(1);Peer(7,64,0);data=Object(typeof(Container));view=ZNetScene.instance.FindInstance(data);chest=view.GetComponent<Container>();
         Tick(0);Tick(2);data.SetOwner(99);controller.OwnerChanged(data);Tick(8);
-        Check("lost grant keeps automatic onward transfer unconfirmed",data.GetOwner()==99&&!controller.Inventory.Pending(data));
+        Check("expired reply for complete idle server receipt resumes onward transfer",data.GetOwner()==1&&!controller.Inventory.Pending(data));
         controller.InventoryResponse(chest,7,true);Tick(9);
-        Check("late grant with exact source revision resumes onward transfer",data.GetOwner()==1);
+        Check("late old grant does not alter recovered player ownership",data.GetOwner()==1);
         foreach(bool reverse in new[]{false,true})
         {
             Fresh(Kinds.Containers);Peer(1);Peer(7,64,0);data=Object(typeof(Container));view=ZNetScene.instance.FindInstance(data);chest=view.GetComponent<Container>();Tick(0);Tick(2);
@@ -1434,6 +1439,9 @@ internal static class IntegrationTests
         Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
         SeparateMobDefaults();DelayedReadinessInteractions();
+#if GRID_PROTOCOL
+        DestinationLoadProtocol();
+#endif
         Console.WriteLine("PASS: "+checks+" full-controller/grid/router fixture assertions; no PUP/PupPatch plugin in fixture.");
         Console.WriteLine("LIMIT: simulated transport and Unity registry; no live multiplayer test.");
         } catch(Exception error){Console.Error.WriteLine(error);Environment.ExitCode=1;}

@@ -80,7 +80,7 @@ namespace UnityEngine
         public Vector3 eulerAngles { get { return angles; } }
         public static Quaternion Euler(float x, float y, float z) { return new Quaternion { angles = new Vector3(x, y, z) }; }
     }
-    public static class Time { public static float time = 100, unscaledTime = 100; public static double realtimeSinceStartupAsDouble {get{return unscaledTime;}} }
+    public static class Time { public static int frameCount; public static float time = 100, unscaledTime = 100; public static double realtimeSinceStartupAsDouble {get{return unscaledTime;}} }
 }
 public struct Vector2s { public short x,y; public Vector2s(short x,short y) {this.x=x;this.y=y;} }
 public struct ZDOID
@@ -109,6 +109,7 @@ public sealed class ZDO
     public bool IsValid() { return Valid; }
     public int GetPrefab() { return Hash; }
     public long GetOwner() { return owner; }
+    public bool IsOwner() { return owner == ZDOMan.GetSessionID(); }
     private readonly Dictionary<int,int> ints=new Dictionary<int,int>(); public int IntWrites;
     public bool HasOwner() { return owner != 0; } public int Use;
     public int GetInt(int key,int fallback=0){int value;return key==ZDOVars.s_inUse?Use:ints.TryGetValue(key,out value)?value:fallback;}
@@ -129,6 +130,8 @@ public sealed class WearNTear : UnityEngine.MonoBehaviour
 }
 public sealed class ZNetView : UnityEngine.MonoBehaviour
 {
+    [MethodImpl(MethodImplOptions.NoInlining)] public void OnDestroy() { }
+    [MethodImpl(MethodImplOptions.NoInlining)] public void ResetZDO() { }
     public bool m_persistent = true, m_distant; public bool IsOwner(){return Data != null && Data.GetOwner()==ZDOMan.GetSessionID();}
     public Action<long,string,object[]> OnInvoke;
     [MethodImpl(MethodImplOptions.NoInlining)] public void InvokeRPC(long target,string name,params object[] args) { if(OnInvoke!=null)OnInvoke(target,name,args); }
@@ -197,7 +200,7 @@ public class ZNetPeer
     public ZRpc m_rpc=new ZRpc();
     public long Uid;
     public long m_uid { get {return Uid;} }
-    public ZDOID m_characterID; public bool Ready = true;
+    public ZDOID m_characterID; public bool Ready = true, m_server;
     public UnityEngine.Vector3 Position;
     public bool IsReady() { return Ready; }
     public UnityEngine.Vector3 GetRefPos() { return Position; }
@@ -210,6 +213,7 @@ public sealed class ZNet : UnityEngine.Object
     public ZNetPeer ServerPeer;
     public ZNetPeer GetServerPeer(){return ServerPeer;}
     [MethodImpl(MethodImplOptions.NoInlining)] public void OnNewConnection(ZNetPeer peer) { }
+    [MethodImpl(MethodImplOptions.NoInlining)] public void RPC_PeerInfo(ZRpc rpc) { }
     [MethodImpl(MethodImplOptions.NoInlining)] public void Disconnect(ZNetPeer peer){Peers.Remove(peer);}
     [MethodImpl(MethodImplOptions.NoInlining)] public void Shutdown() { }
     public readonly List<ZNetPeer> Peers = new List<ZNetPeer>();

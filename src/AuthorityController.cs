@@ -376,6 +376,8 @@ namespace TooManyLags
         internal bool IsActive { get { return active && !failed; } }
         internal static Action<ZDO> ReadinessRemoved { get; set; }
         internal static Action ReadinessReset { get; set; }
+        internal static Func<ZDO, long, bool> DestinationLoaded { get; set; }
+        internal void Wake() { cadence.Request(); }
         internal void RequireRecipient(NativeNode node)
         {
             if (RequestRouter.RecipientReady == null) return;
@@ -446,7 +448,7 @@ namespace TooManyLags
             private readonly WearNTear wear;
             private readonly Character actor;
             private readonly Tameable tameable;
-            private readonly bool ship, serverStation, multipleInventories;
+            private readonly bool ship, serverStation, multipleInventories, stationary;
             private readonly Vagon cart;
             private readonly Container container;
             internal long ObservedOwner;
@@ -467,6 +469,7 @@ namespace TooManyLags
                 CacheCellGeometry(cell);
                 coveredBefore = owner.indexed.Grid.Candidate(cell) != 0;
                 wear = view.GetComponent<WearNTear>(); ship = kind == Kinds.Vehicles && view.GetComponent<Ship>();
+                stationary = kind != Kinds.Vehicles && kind != Kinds.TamedAnimals && !view.GetComponentInChildren<Rigidbody>(true);
                 if (kind == Kinds.Vehicles) cart = view.GetComponent<Vagon>();
                 if (kind == Kinds.TamedAnimals) { actor = character; tameable = animal; }
                 foreach (Container inventory in view.GetComponentsInChildren<Container>(true))
@@ -506,7 +509,7 @@ namespace TooManyLags
             {
                 float now = Time.unscaledTime;
                 return (refillOwner != 0 && now >= refillAt && now < refillUntil && Data.GetOwner() == refillOwner && Data.OwnerRevision == refillRevision) ||
-                    (container && ((now >= inventoryAt && now < inventoryUntil && inventoryOwner != 0) || Data.GetInt(ZDOVars.s_inUse) != 0));
+                    (container && (container.IsInUse() || (now >= inventoryAt && now < inventoryUntil && inventoryOwner != 0) || Data.GetInt(ZDOVars.s_inUse) != 0));
             }
             internal void ObserveUse()
             {
@@ -593,7 +596,12 @@ namespace TooManyLags
                 if (old == target && !transfer && (!container || !owner.Inventory.Received(Data) || owner.Inventory.Acquire(Data, View, container) == 2))
                 { Managed = true; ManagedOwner = target; owner.Inventory.Forget(Data); owner.Cooperative.Forget(Data); return ApplyResult.Done; }
                 if (UseProtected() && owner.AvailableOwner(old, position)) return ApplyResult.Pending;
-                if (!owner.AreaReady(position)) return ApplyResult.Pending;
+                // An unrelated missing instance in the server's broad native
+                // area must not stall a loaded static object's handoff. Only
+                // an already server-owned object can use the destination's
+                // authenticated, revision-matched local-area proof instead.
+                if (!owner.AreaReady(position) && !(stationary && old == owner.server && target != owner.server &&
+                    DestinationLoaded != null && DestinationLoaded(Data, target))) return ApplyResult.Pending;
                 if (Kind != Kinds.TamedAnimals && (ObjectCatalog.Classify(View.gameObject) != Kind || (wear && wear.m_staticPosition && (View.transform.position - position).sqrMagnitude > .0025f))) return ApplyResult.Dropped;
                 if (!Identity() || !Controllable() || Data.GetOwner() != old || Data.OwnerRevision != revision || Data.GetPosition() != position || !owner.AvailableOwner(target, position)) return ApplyResult.Pending;
                 if (revision == UInt16.MaxValue) { Managed = false; return ApplyResult.Dropped; }
@@ -624,6 +632,7 @@ namespace TooManyLags
                     // vanilla assignment. A timeout never returns this fallback.
                 }
                 if (!Identity() || !Controllable() || Data.GetOwner() != old || Data.OwnerRevision != revision ||
+                    Data.GetPosition() != position || (UseProtected() && owner.AvailableOwner(old, position)) ||
                     DesiredOwner(owner.indexed.Grid.Owner(Cell)) != target || !owner.AvailableOwner(target, Data.GetPosition())) return ApplyResult.Pending;
                 if (Data.GetOwner() != target)
                 {

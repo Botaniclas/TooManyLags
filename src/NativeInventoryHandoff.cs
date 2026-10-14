@@ -52,7 +52,18 @@ namespace TooManyLags
                     // either order. Hooks can observe the exact expected half
                     // tuple; preserve it without sending or completing a request.
                     if (Transitioning(request)) return request.Awaiting ? 1 : 0;
-                    if (Committed(request)) return request.Granted ? 2 : (request.Awaiting ? 1 : 0);
+                    if (Committed(request))
+                    {
+                        if (request.Granted) return 2;
+                        if (request.Awaiting) return 1;
+                        if (container.IsInUse()) return 0;
+                        // The exact source->server owner receipt is complete.
+                        // After the reply window, use the current server-owned
+                        // container contract, as a fresh/reloaded node does.
+                        // Never resend to its former owner or assign ownership
+                        // from a timeout. Caller keeps opening/use safeguards.
+                        requests.Remove(data.m_uid); return 2;
+                    }
                     if (request.Awaiting) return 1;
                     // A positive source response means it already committed.
                     // Preserve that reply while its owner data is still delayed;
@@ -93,7 +104,8 @@ namespace TooManyLags
         }
 
         // A receipt identifies this exact source->server native revision, even
-        // when its OpenResponse has not arrived. Acquire still requires both.
+        // when its OpenResponse has not arrived. Preserve the live response
+        // window; only a settled, idle server receipt can retire after expiry.
         internal bool Received(ZDO data)
         {
             Request request;

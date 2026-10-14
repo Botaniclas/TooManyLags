@@ -5,7 +5,7 @@ $authorityConfigRelease=Join-Path $PSScriptRoot 'release-config\BepInEx\config'
 $authorityDll=Join-Path $PSScriptRoot 'bin\TooManyLags.dll'
 $authorityVerification=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Raw | ConvertFrom-Json
 $authorityManifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'manifest.json') -Raw | ConvertFrom-Json
-$authorityVersion='1.0.29'
+$authorityVersion='1.0.30'
 $authorityStem='TooManyLags-FGNAddon-'+$authorityVersion
 $authorityHash=(Get-FileHash -LiteralPath $authorityDll -Algorithm SHA256).Hash
 if($authorityVerification.version -ne $authorityVersion -or $authorityVerification.dllSha256 -ne $authorityHash){throw 'DLL differs from verified build.'}
@@ -32,6 +32,7 @@ $authoritySources+=Join-Path $PSScriptRoot 'thunderstore.toml'
 $authoritySources+=Join-Path $PSScriptRoot 'publish.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-fgn-settings.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-player-simulation.ps1'
+$authoritySources+=Join-Path $PSScriptRoot 'test-grid-load.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-grid-size.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-mob-precedence.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'organize-outputs.ps1'

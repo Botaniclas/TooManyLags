@@ -39,6 +39,13 @@ public sealed class ZPackage
     public void Write(ZDOID value){new System.IO.BinaryWriter(bytes).Write(value.ID);}
     public void Write(long value){new System.IO.BinaryWriter(bytes).Write(value);}
     public void Write(bool value){new System.IO.BinaryWriter(bytes).Write(value);}
+    public void Write(int value){new System.IO.BinaryWriter(bytes).Write(value);}
+    public void Write(uint value){new System.IO.BinaryWriter(bytes).Write(value);}
+    public void Write(UnityEngine.Vector3 value){var w=new System.IO.BinaryWriter(bytes);w.Write(value.x);w.Write(value.y);w.Write(value.z);}
+    public int Size(){return (int)bytes.Length;}
+    public int ReadInt(){return new System.IO.BinaryReader(bytes).ReadInt32();}
+    public uint ReadUInt(){return new System.IO.BinaryReader(bytes).ReadUInt32();}
+    public UnityEngine.Vector3 ReadVector3(){var r=new System.IO.BinaryReader(bytes);return new UnityEngine.Vector3(r.ReadSingle(),r.ReadSingle(),r.ReadSingle());}
     public ZDOID ReadZDOID(){return new ZDOID{ID=new System.IO.BinaryReader(bytes).ReadInt32()};}
     public long ReadLong(){return new System.IO.BinaryReader(bytes).ReadInt64();}
     public bool ReadBool(){return new System.IO.BinaryReader(bytes).ReadBoolean();}
@@ -50,6 +57,8 @@ public sealed class ZRoutedRpc
     {
         public long m_msgID,m_senderPeerID,m_targetPeerID;
         public ZDOID m_targetZDO; public int m_methodHash; public ZPackage m_parameters=new ZPackage();
+        public void Serialize(ZPackage p){p.Write(m_msgID);p.Write(m_senderPeerID);p.Write(m_targetPeerID);p.Write(m_targetZDO);p.Write(m_methodHash);}
+        public void Deserialize(ZPackage p){m_msgID=p.ReadLong();m_senderPeerID=p.ReadLong();m_targetPeerID=p.ReadLong();m_targetZDO=p.ReadZDOID();m_methodHash=p.ReadInt();}
     }
     public readonly List<RoutedRPCData> Local=new List<RoutedRPCData>(),Remote=new List<RoutedRPCData>();
     public Action<RoutedRPCData> OnHandle;

@@ -48,6 +48,7 @@ Thanks for helping improve the mod. Have fun, and enjoy smoother adventures toge
 - In Server-Side Simulation mode, `BossAlwaysServerOwned` (on): at a boss player-target change, two living players within `BossPlayerRadius` (30 metres) select server ownership. Otherwise bosses use normal Hostile Mob rules. Turning it off always uses those normal rules. Requires AI ownership; server ownership requires Server-Side Simulation. Radius decisions wait for the next target change; movement alone does not rescan. Attacks finish before transfers. With `NoServerSideSimulation=true`, bosses retain the existing vanilla exclusion.
 - Optional `ServerOwnedMobsByDefault` (off) gives idle tamed animals a server default outside player fields and puts Hostile Mobs without a player target on the server, even with one player online. Loading and usage safeguards still apply; field-exit retention stays unchanged. Hostile Mobs require `EnableAIOwnership`. Friendly summons and bosses remain excluded. This can increase server CPU usage.
 - Open inventories, active users and refilling remain protected. Local PUP collision/stability guards remain a separate feature.
+- With experimental interaction protection enabled, updated clients can confirm local loading for server-owned stationary objects when server-area loading is incomplete. Older clients retain the original loading check.
 
 ## Ownership grid in action
 

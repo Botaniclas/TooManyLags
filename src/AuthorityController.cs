@@ -559,7 +559,7 @@ namespace TooManyLags
                 if (kind == Kinds.TamedAnimals) { actor = character; tameable = animal; }
                 foreach (Container inventory in view.GetComponentsInChildren<Container>(true))
                 {
-                    ZNetView root = inventory.m_rootObjectOverride ? inventory.m_rootObjectOverride : inventory.GetComponentInParent<ZNetView>();
+                    ZNetView root = inventory.m_rootObjectOverride ? inventory.m_rootObjectOverride : inventory.GetComponentInParent<ZNetView>(true);
                     if (root != view) continue;
                     if (container) multipleInventories = true; else container = inventory;
                 }

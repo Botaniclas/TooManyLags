@@ -5,7 +5,7 @@ $authorityConfigRelease=Join-Path $PSScriptRoot 'release-config\BepInEx\config'
 $authorityDll=Join-Path $PSScriptRoot 'bin\TooManyLags.dll'
 $authorityVerification=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Raw | ConvertFrom-Json
 $authorityManifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'manifest.json') -Raw | ConvertFrom-Json
-$authorityVersion='1.0.35'
+$authorityVersion='1.0.36'
 $authorityStem='TooManyLags-FGNAddon-'+$authorityVersion
 $authorityHash=(Get-FileHash -LiteralPath $authorityDll -Algorithm SHA256).Hash
 if($authorityVerification.version -ne $authorityVersion -or $authorityVerification.dllSha256 -ne $authorityHash){throw 'DLL differs from verified build.'}

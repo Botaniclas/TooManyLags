@@ -69,7 +69,7 @@ namespace TooManyLags
             {
                 int inventories = 0; ZNetView root = prefab.GetComponent<ZNetView>();
                 foreach (Container inventory in prefab.GetComponentsInChildren<Container>(true))
-                    if ((inventory.m_rootObjectOverride ? inventory.m_rootObjectOverride : inventory.GetComponentInParent<ZNetView>()) == root &&
+                    if ((inventory.m_rootObjectOverride ? inventory.m_rootObjectOverride : inventory.GetComponentInParent<ZNetView>(true)) == root &&
                         (++inventories > 1 || inventory.m_privacy != Container.PrivacySetting.Public)) { eligible = false; break; }
             }
             flags = eligible ? (byte)1 : (byte)0;
@@ -115,7 +115,9 @@ namespace TooManyLags
             {
                 if (!component) continue;
                 Container container = component as Container;
-                ZNetView ownerView = container && container.m_rootObjectOverride ? container.m_rootObjectOverride : component.GetComponentInParent<ZNetView>();
+                // Prefab assets are inactive; the root lookup must match the
+                // includeInactive component enumeration above.
+                ZNetView ownerView = container && container.m_rootObjectOverride ? container.m_rootObjectOverride : component.GetComponentInParent<ZNetView>(true);
                 if (ownerView != view) continue;
                 Type type = component.GetType(); Kinds kind;
                 interactive |= component is Interactable;

@@ -667,6 +667,63 @@ internal static partial class IntegrationTests
         }
         finally{patcher.UnpatchSelf();}
     }
+    private static GameObject InactiveTemplate(Type type, string name)
+    {
+        var root=new GameObject{name=name,activeInHierarchy=false};
+        root.Add(new ZNetView()); if(type!=null)root.Add((Component)Activator.CreateInstance(type));return root;
+    }
+    private static void InactiveNativeTemplates()
+    {
+        var patcher=new Harmony("botanic.authority.test.inactive-template");
+        patcher.Patch(AccessTools.Method(typeof(ZDOMan),"ReleaseNearbyZDOS"),transpiler:new HarmonyMethod(AccessTools.Method(typeof(OwnershipPatch),"Transpiler")));
+        try
+        {
+            Fresh(Kinds.Doors|Kinds.Containers|Kinds.Workstations|Kinds.Fireplaces|Kinds.Pickables,defaultInteractives:true);
+            var player=Peer(1);Peer(7,64);Tick(0);
+            var dataItems=new List<ZDO>();
+            foreach(Type type in new[]{typeof(Container),typeof(CraftingStation),typeof(Fireplace),typeof(Pickable),typeof(Door)})
+            {
+                var data=Object(type,40+dataItems.Count,1,0);var view=ZNetScene.instance.FindInstance(data);
+                var template=InactiveTemplate(type,"inactive-"+type.Name);
+                Check("fixture default parent lookup excludes inactive prefab root",template.GetComponent<ZNetView>().GetComponentInParent<ZNetView>()==null);
+                ZNetScene.instance.Prefabs[data.Hash]=template;
+                controller.Unregister(view);ZNetScene.instance.Views.Remove(data);dataItems.Add(data);
+            }
+            var activeOwned=Object(typeof(Door),48,1,7);ZNetScene.instance.Prefabs[activeOwned.Hash]=InactiveTemplate(typeof(Door),"active-owner-template");
+            ZNetScene.instance.Ready=delegate{return false;};int area=ZNetScene.instance.AreaQueries;
+            ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+            foreach(var data in dataItems)Check("inactive native templates receive server default before loading",data.GetOwner()==99&&data.Writes==1);
+            Check("inactive prefab fix retains active native owners",activeOwned.GetOwner()==7&&activeOwned.Writes==0);
+            Check("inactive prefab fix adds no loading scan or source request",ZNetScene.instance.AreaQueries==area&&player.m_rpc.Calls==0);
+            int scans=GameObject.Scans,lookups=GameObject.Lookups;
+            for(int i=0;i<50;i++)foreach(var data in dataItems)Check("cached inactive default retains server ownership",controller.NativeOwnerTarget(data,1)==99);
+            Check("cached inactive classification performs no repeated hierarchy lookups",GameObject.Scans==scans&&GameObject.Lookups==lookups);
+            ZNetScene.instance.Ready=delegate{return true;};Tick(2);
+            foreach(var data in dataItems)Check("area readiness does not reassign prefab-only server defaults",data.GetOwner()==99&&data.Writes==1);
+
+            var catalog=new ObjectCatalog(Kinds.Doors|Kinds.Containers|Kinds.Workstations);
+            var nested=InactiveTemplate(typeof(Door),"nested-private");var child=new GameObject{activeInHierarchy=false};child.transform.parent=nested.transform;nested.Children.Add(child);
+            var inventory=child.Add(new Container{m_privacy=Container.PrivacySetting.Private});ZNetScene.instance.Prefabs.Add(9001,nested);
+            Check("inactive same-root private inventory remains excluded",!catalog.NativeDefault(9001,ZNetScene.instance));
+            inventory.m_privacy=Container.PrivacySetting.Public;var second=child.Add(new Container());ZNetScene.instance.Prefabs.Add(9002,nested);
+            Check("inactive same-root multiple inventories remain excluded",!catalog.NativeDefault(9002,ZNetScene.instance));
+            child.Components.Remove(second);inventory.m_privacy=Container.PrivacySetting.Private;child.Add(new ZNetView());ZNetScene.instance.Prefabs.Add(9003,nested);
+            Check("inactive foreign network child remains isolated",catalog.NativeDefault(9003,ZNetScene.instance)&&ObjectCatalog.Classify(nested)==Kinds.Doors);
+            inventory.m_rootObjectOverride=nested.GetComponent<ZNetView>();ZNetScene.instance.Prefabs.Add(9004,nested);
+            Check("explicit root override still protects private inventory",!catalog.NativeDefault(9004,ZNetScene.instance));
+            var noView=InactiveTemplate(typeof(Door),"invalid-template");noView.GetComponent<ZNetView>().m_persistent=false;ZNetScene.instance.Prefabs.Add(9005,noView);
+            Check("inactive lookup does not waive persistent network requirement",!catalog.NativeDefault(9005,ZNetScene.instance));
+            var disabled=InactiveTemplate(typeof(Beehive),"disabled-category");ZNetScene.instance.Prefabs.Add(9006,disabled);
+            Check("inactive lookup retains disabled categories",!catalog.NativeDefault(9006,ZNetScene.instance));
+
+            Fresh(Kinds.Containers,defaultInteractives:true);Peer(1);var protectedData=Object(typeof(Container),40,1,0);var protectedView=ZNetScene.instance.FindInstance(protectedData);controller.Unregister(protectedView);
+            var privateChild=new GameObject{activeInHierarchy=false};privateChild.transform.parent=protectedView.transform;protectedView.gameObject.Children.Add(privateChild);privateChild.Add(new Container{m_privacy=Container.PrivacySetting.Private});
+            controller.Register(protectedData,protectedView);Tick(0);var node=controller.RequestNode(protectedData.m_uid,"RPC_RequestOpen".GetStableHashCode());
+            Check("inactive live inventory cannot evade public inventory safety",node!=null&&!node.Controllable());
+            Tick(2);Check("inactive live private inventory is not handed off",protectedData.GetOwner()==0&&protectedData.Writes==0);
+        }
+        finally{patcher.UnpatchSelf();}
+    }
     private static void NativeDefaultAssignments()
     {
         var patcher = new Harmony("botanic.authority.test.native-default");
@@ -1499,7 +1556,7 @@ internal static partial class IntegrationTests
     public static void Main()
     {
         try {
-        Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
+        InactiveNativeTemplates();Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
         SeparateMobDefaults();DelayedReadinessInteractions();OwnerStatusSnapshot();
 #if GRID_PROTOCOL

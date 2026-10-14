@@ -30,7 +30,8 @@ namespace UnityEngine
         public static int TransformReads;
         public Transform transform { get { TransformReads++; return gameObject.transform; } }
         public T GetComponent<T>() where T : Component { return gameObject.GetComponent<T>(); }
-        public T GetComponentInParent<T>() where T : Component { for (Transform node=transform; node!=null; node=node.parent) { T found=node.gameObject.GetComponent<T>(); if (found!=null) return found; } return null; }
+        public T GetComponentInParent<T>() where T : Component { return GetComponentInParent<T>(false); }
+        public T GetComponentInParent<T>(bool inactive) where T : Component { for (Transform node=transform; node!=null; node=node.parent) { if (!inactive && !node.gameObject.activeInHierarchy) continue; T found=node.gameObject.GetComponent<T>(); if (found!=null) return found; } return null; }
         public T[] GetComponentsInChildren<T>(bool inactive) where T : Component { return gameObject.GetComponentsInChildren<T>(inactive); } public T GetComponentInChildren<T>(bool inactive) where T : Component { T[] values=GetComponentsInChildren<T>(inactive); return values.Length==0?null:values[0]; }
     }
     public class MonoBehaviour : Component { public bool enabled = true, isActiveAndEnabled = true; public readonly HashSet<string> Invoking=new HashSet<string>(); public bool IsInvoking(string name){return Invoking.Contains(name);} }

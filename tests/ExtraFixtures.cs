@@ -43,6 +43,7 @@ public sealed class ZPackage
     public void Write(uint value){new System.IO.BinaryWriter(bytes).Write(value);}
     public void Write(UnityEngine.Vector3 value){var w=new System.IO.BinaryWriter(bytes);w.Write(value.x);w.Write(value.y);w.Write(value.z);}
     public int Size(){return (int)bytes.Length;}
+    public int GetPos(){return (int)bytes.Position;}
     public int ReadInt(){return new System.IO.BinaryReader(bytes).ReadInt32();}
     public uint ReadUInt(){return new System.IO.BinaryReader(bytes).ReadUInt32();}
     public UnityEngine.Vector3 ReadVector3(){var r=new System.IO.BinaryReader(bytes);return new UnityEngine.Vector3(r.ReadSingle(),r.ReadSingle(),r.ReadSingle());}

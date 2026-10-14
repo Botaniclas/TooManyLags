@@ -217,7 +217,8 @@ public sealed class ZNet : UnityEngine.Object
     [MethodImpl(MethodImplOptions.NoInlining)] public void Disconnect(ZNetPeer peer){Peers.Remove(peer);}
     [MethodImpl(MethodImplOptions.NoInlining)] public void Shutdown() { }
     public readonly List<ZNetPeer> Peers = new List<ZNetPeer>();
-    public bool IsDedicated() { return Dedicated; } public bool IsServer(){return Dedicated;} public ZNetPeer GetPeer(long uid){foreach(var peer in Peers)if(peer.m_uid==uid)return peer;return null;}
+    public int PeerQueries;
+    public bool IsDedicated() { return Dedicated; } public bool IsServer(){return Dedicated;} public ZNetPeer GetPeer(long uid){PeerQueries++;foreach(var peer in Peers)if(peer.m_uid==uid)return peer;return null;}
     public List<ZNetPeer> GetPeers() { return Peers; }
 }
 public sealed class ZoneSystem : UnityEngine.Object

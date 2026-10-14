@@ -4,6 +4,7 @@
 ```
 - Fixes unused chests remaining server-owned after a completed native inventory handoff loses its response. Open inventories and pending openings remain protected.
 - Allows already server-owned stationary interactions to hand over during incomplete server-area loading when the destination client confirms the exact object and its loaded local area. Server and clients need this update for the fallback; older clients keep the original loading guard. Requires experimental interaction protection.
+- Reduces repeated work and object-data send requests while loading blocks a handoff. Valid replies wake the waiting object immediately; superseded or usage-blocked loading permissions are discarded. Initial missing data/instances are rechecked at the end of the client frame, avoiding a fixed retry delay when they arrive in that frame. Update clients and server for the full optimization.
 ```
 
 **1.0.29**

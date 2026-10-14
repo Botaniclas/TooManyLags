@@ -49,6 +49,7 @@ Thanks for helping improve the mod. Have fun, and enjoy smoother adventures toge
 - Optional `ServerOwnedMobsByDefault` (off) gives idle tamed animals a server default outside player fields and puts Hostile Mobs without a player target on the server, even with one player online. Loading and usage safeguards still apply; field-exit retention stays unchanged. Hostile Mobs require `EnableAIOwnership`. Friendly summons and bosses remain excluded. This can increase server CPU usage.
 - Open inventories, active users and refilling remain protected. Local PUP collision/stability guards remain a separate feature.
 - With experimental interaction protection enabled, updated clients can confirm local loading for server-owned stationary objects when server-area loading is incomplete. Older clients retain the original loading check.
+- Loading retries stop requesting object data once the client confirms its replica. Missing startup data/instances receive an end-of-frame recheck; successful replies wake the handoff immediately. Configured field delays and all use safeguards remain active.
 
 ## Ownership grid in action
 

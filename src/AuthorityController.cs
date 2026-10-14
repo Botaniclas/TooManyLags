@@ -378,6 +378,18 @@ namespace TooManyLags
         internal static Action ReadinessReset { get; set; }
         internal static Func<ZDO, long, bool> DestinationLoaded { get; set; }
         internal void Wake() { cadence.Request(); }
+        internal void WaitForDestination(ZDO data, long target, float next)
+        {
+            NativeNode node;
+            if (nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data)) node.WaitForLoad(target, next);
+        }
+        internal void DestinationReply(ZDOID id, long target, bool available, float next)
+        {
+            NativeNode node;
+            if (nodes.TryGetValue(id, out node))
+            { if (available) node.LoadReady(target); else node.WaitForLoad(target, next); }
+            if (available) cadence.Request();
+        }
         internal void RequireRecipient(NativeNode node)
         {
             if (RequestRouter.RecipientReady == null) return;
@@ -406,7 +418,8 @@ namespace TooManyLags
         {
             if (indexed == null || !active) return;
             foreach (NativeNode node in nodes.Values)
-                if (node.Data.GetOwner() == uid || indexed.Grid.Owner(node.Cell) == uid) indexed.Changed(node, Time.unscaledTime, NeedsPolicy(node));
+                if (node.Data.GetOwner() == uid || indexed.Grid.Owner(node.Cell) == uid)
+                { node.WaitForLoad(uid, 0); indexed.Changed(node, Time.unscaledTime, NeedsPolicy(node)); }
             cadence.Request();
         }
         private bool NeedsGrid(NativeNode node) { return (defaultMobs && node.Kind == Kinds.TamedAnimals) || !coarseEnabled || regions.ContainsZone(node.NativeZone); }
@@ -461,6 +474,11 @@ namespace TooManyLags
             private long refillOwner, inventoryOwner;
             private uint refillRevision;
             private bool coveredBefore;
+            private bool loadPending;
+            private long loadTarget;
+            private float loadNext;
+            private ushort loadRevision;
+            private Vector3 loadPosition;
             internal bool ServerStation { get { return serverStation; } }
             internal bool Summoned { get { return Kind == Kinds.TamedAnimals && (ObjectCatalog.IsSummoned(tameable) || FriendlyCreatures.IsFriendly(actor)); } }
             internal NativeNode(AuthorityController owner, ZDO data, ZNetView view, Kinds kind, Cell cell, Tameable animal, Character character)
@@ -551,11 +569,35 @@ namespace TooManyLags
                 return fieldOwner;
             }
             private bool HasServerDefault { get { return owner.defaultInteractives || (owner.defaultMobs && Kind == Kinds.TamedAnimals); } }
+            private void CancelDestinationLoad()
+            {
+                loadPending = false; loadTarget = 0; loadNext = 0;
+                if (ReadinessRemoved != null) ReadinessRemoved(Data);
+            }
+            internal void WaitForLoad(long target, float next)
+            {
+                if (!loadPending || loadTarget != target) return;
+                loadNext = next;
+            }
+            internal void LoadReady(long target)
+            {
+                if (!loadPending || loadTarget != target) return;
+                loadNext = 0;
+                if (Data.GetOwner() == owner.server && Data.OwnerRevision == loadRevision && Data.GetPosition() == loadPosition &&
+                    DesiredOwner(owner.indexed.Grid.Owner(Cell)) == target) NotBefore = Math.Min(NotBefore, Time.unscaledTime);
+            }
             internal override ApplyResult Apply(long target)
             {
                 if (!Identity() || Summoned) { owner.Remove(this); return ApplyResult.Dropped; }
+                // Retain the fast server-area completion check. While the
+                // same request is awaiting a reply, skip the repeated object
+                // and protocol work; changed fields/data or a reply wake it.
+                if (loadPending && Time.unscaledTime < loadNext && Data.GetOwner() == owner.server &&
+                    Data.OwnerRevision == loadRevision && Data.GetPosition() == loadPosition &&
+                    DesiredOwner(target) == loadTarget && !owner.AreaReady(loadPosition)) return ApplyResult.Pending;
                 if (!(owner.refillStations && serverStation) && !owner.NeedsGrid(this))
                 {
+                    if (loadPending) CancelDestinationLoad();
                     // Stop policy work, not native in-flight transactions. Never
                     // resubmit a vetoed handoff or force an onward owner write
                     // merely to finish leaving shared coverage. RPC responses
@@ -567,6 +609,7 @@ namespace TooManyLags
                 if (!coveredBefore && owner.indexed.Grid.Candidate(Cell) != 0) coveredBefore = true;
                 if (!Controllable())
                 {
+                    if (loadPending) CancelDestinationLoad();
                     Managed = false;
                     if (Kind == Kinds.TamedAnimals && actor && !actor.IsDead() && Data.GetBool(ZDOVars.s_tamed)) return ApplyResult.Pending;
                     if (Kind == Kinds.Vehicles && !multipleInventories && (!ship || !owner.compatibility.ShipsOwnedExternally) && (!container || container.m_privacy == Container.PrivacySetting.Public)) return ApplyResult.Pending;
@@ -579,29 +622,39 @@ namespace TooManyLags
                     HasServerDefault && owner.indexed.Grid.Candidate(Cell) != 0)
                     return ApplyResult.Pending;
                 target = DesiredOwner(target);
+                if (loadPending && target != loadTarget) CancelDestinationLoad();
                 if (target == 0) return ApplyResult.Done;
                 Vector3 position = Data.GetPosition(); Cell current;
                 if (!Finite(position) || !Cell.At(position.x, position.z, owner.cellSize, out current)) return ApplyResult.Dropped;
                 if (!current.Equals(Cell)) { CacheCellGeometry(current); owner.indexed.Move(this, current, Time.unscaledTime); return ApplyResult.Pending; }
-                if (!owner.AvailableOwner(target, position)) return ApplyResult.Pending;
+                if (!owner.AvailableOwner(target, position))
+                { if (loadPending) CancelDestinationLoad(); return ApplyResult.Pending; }
                 // A capability check replaces an exact-version lock. Connected
                 // clients lacking identified commits/readiness retain native ownership.
                 if (Kind != Kinds.TamedAnimals && FgnOwnerHandoff.CooperativeClient != null &&
                     ((target != owner.server && !FgnOwnerHandoff.CooperativeClient(owner.network.GetPeer(target))) ||
                     (Data.GetOwner() != 0 && Data.GetOwner() != owner.server && owner.AvailableOwner(Data.GetOwner(), position) &&
                      !FgnOwnerHandoff.CooperativeClient(owner.network.GetPeer(Data.GetOwner())))))
-                { Managed = false; return ApplyResult.Done; }
+                { if (loadPending) CancelDestinationLoad(); Managed = false; return ApplyResult.Done; }
                 long old = Data.GetOwner(); uint revision = Data.OwnerRevision;
                 bool transfer = owner.TransferPending(Data);
                 if (old == target && !transfer && (!container || !owner.Inventory.Received(Data) || owner.Inventory.Acquire(Data, View, container) == 2))
-                { Managed = true; ManagedOwner = target; owner.Inventory.Forget(Data); owner.Cooperative.Forget(Data); return ApplyResult.Done; }
-                if (UseProtected() && owner.AvailableOwner(old, position)) return ApplyResult.Pending;
+                { if (loadPending) CancelDestinationLoad(); Managed = true; ManagedOwner = target; owner.Inventory.Forget(Data); owner.Cooperative.Forget(Data); return ApplyResult.Done; }
+                if (UseProtected() && owner.AvailableOwner(old, position))
+                { if (loadPending) CancelDestinationLoad(); return ApplyResult.Pending; }
                 // An unrelated missing instance in the server's broad native
                 // area must not stall a loaded static object's handoff. Only
                 // an already server-owned object can use the destination's
                 // authenticated, revision-matched local-area proof instead.
-                if (!owner.AreaReady(position) && !(stationary && old == owner.server && target != owner.server &&
-                    DestinationLoaded != null && DestinationLoaded(Data, target))) return ApplyResult.Pending;
+                if (!owner.AreaReady(position))
+                {
+                    if (!(stationary && old == owner.server && target != owner.server && DestinationLoaded != null))
+                    { if (loadPending) CancelDestinationLoad(); return ApplyResult.Pending; }
+                    loadPending = true; loadTarget = target; loadRevision = Data.OwnerRevision; loadPosition = position;
+                    if (!DestinationLoaded(Data, target)) return ApplyResult.Pending;
+                    loadPending = false; loadTarget = 0; loadNext = 0;
+                }
+                else if (loadPending) CancelDestinationLoad();
                 if (Kind != Kinds.TamedAnimals && (ObjectCatalog.Classify(View.gameObject) != Kind || (wear && wear.m_staticPosition && (View.transform.position - position).sqrMagnitude > .0025f))) return ApplyResult.Dropped;
                 if (!Identity() || !Controllable() || Data.GetOwner() != old || Data.OwnerRevision != revision || Data.GetPosition() != position || !owner.AvailableOwner(target, position)) return ApplyResult.Pending;
                 if (revision == UInt16.MaxValue) { Managed = false; return ApplyResult.Dropped; }

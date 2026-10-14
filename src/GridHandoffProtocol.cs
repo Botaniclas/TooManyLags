@@ -20,11 +20,17 @@ namespace TooManyLags.GridHandoffs
         {
             internal ZDO Data; internal ZRpc Rpc; internal long Owner;
             internal uint Revision, MinimumState;
-            internal bool BeforeOwner; internal Vector3 Position;
+            internal bool BeforeOwner, ReplicaPresent; internal Vector3 Position;
             internal ReadinessProbe Probe;
         }
         private sealed class KindCache { internal Kinds Kind; }
         private sealed class Lease { internal float Until; }
+        private struct LocalProbe
+        {
+            internal Connection Link; internal ZRpc Rpc; internal ZDOID Id;
+            internal long Token, Owner; internal uint Revision, Minimum; internal Vector3 Position;
+        }
+        private static List<LocalProbe> localPending = new List<LocalProbe>(), localWork = new List<LocalProbe>();
         private static readonly Dictionary<ZRpc, Connection> connections = new Dictionary<ZRpc, Connection>();
         private static readonly Dictionary<ZDOID, Readiness> ready = new Dictionary<ZDOID, Readiness>();
         private static readonly List<ZDOID> retiring = new List<ZDOID>();
@@ -62,7 +68,7 @@ namespace TooManyLags.GridHandoffs
             RequestRouter.RecipientReady = null; AuthorityController.ReadinessRemoved = null; AuthorityController.ReadinessReset = null; AuthorityController.DestinationLoaded = null; nativeCommit = null; started = false; Reset();
         }
         private static void Reset()
-        { connections.Clear(); ready.Clear(); retiring.Clear(); kinds = new ConditionalWeakTable<ZNetView, KindCache>(); refills = new ConditionalWeakTable<ZDO, Lease>(); advertised = new ConditionalWeakTable<ZNetView, Advertisement>(); areas.Clear(); frame = -1; clientGreetingPending = false; }
+        { connections.Clear(); ready.Clear(); retiring.Clear(); localPending.Clear(); localWork.Clear(); kinds = new ConditionalWeakTable<ZNetView, KindCache>(); refills = new ConditionalWeakTable<ZDO, Lease>(); advertised = new ConditionalWeakTable<ZNetView, Advertisement>(); areas.Clear(); frame = -1; clientGreetingPending = false; }
         internal static bool Capable(ZNetPeer peer)
         {
             Connection c;
@@ -146,15 +152,22 @@ namespace TooManyLags.GridHandoffs
                     }
                     if (message == Message.ReadyResult)
                     {
-                        ZDOID id = packet.ReadZDOID(); long token = packet.ReadLong(); bool available = packet.ReadBool(); Readiness r;
-                        if (ready.TryGetValue(id, out r) && ReferenceEquals(r.Rpc, rpc) && r.Probe.Response(token, available, Time.unscaledTime) && r.BeforeOwner && available)
-                            Plugin.Controller.Wake();
+                        ZDOID id = packet.ReadZDOID(); long token = packet.ReadLong(); bool available = packet.ReadBool();
+                        bool replica = packet.GetPos() < packet.Size() && packet.ReadBool(); Readiness r;
+                        if (ready.TryGetValue(id, out r) && ReferenceEquals(r.Rpc, rpc) && r.Probe.Response(token, available, Time.unscaledTime) && r.BeforeOwner)
+                        {
+                            // Knowing the exact data is not loading permission.
+                            // Stop resending full state only after its receipt.
+                            bool lost = r.ReplicaPresent && !replica; r.ReplicaPresent = replica;
+                            if (lost) ZDOMan.instance.ForceSendZDO(c.Peer.m_uid, id);
+                            Plugin.Controller.DestinationReply(id, c.Peer.m_uid, available, r.Probe.Next);
+                        }
                         Plugin.Controller.Router.Flush(id); return;
                     }
                     if (message == Message.ReadyLost)
                     {
                         ZDOID id = packet.ReadZDOID(); long token = packet.ReadLong(); Readiness r;
-                        if (ready.TryGetValue(id, out r) && ReferenceEquals(r.Rpc, rpc)) r.Probe.Lost(token);
+                        if (ready.TryGetValue(id, out r) && ReferenceEquals(r.Rpc, rpc) && r.Probe.Lost(token)) r.ReplicaPresent = false;
                         return;
                     }
                     if (message == Message.Relay)
@@ -183,14 +196,25 @@ namespace TooManyLags.GridHandoffs
                     ZDOID id = packet.ReadZDOID(); long token = packet.ReadLong(), owner = packet.ReadLong(); uint revision = packet.ReadUInt(), minimum = packet.ReadUInt();
                     bool before = message == Message.Loaded; Vector3 position = before ? packet.ReadVector3() : default(Vector3);
                     ZDO data = ZDOMan.instance.GetZDO(id); ZNetView view = data != null && ZNetScene.instance ? ZNetScene.instance.FindInstance(data) : null;
-                    bool available = token > 0 && data != null && data.IsValid() && data.GetOwner() == owner &&
+                    bool replica = token > 0 && data != null && data.IsValid() && data.GetOwner() == owner &&
                         owner == (before ? c.Peer.m_uid : ZDOMan.GetSessionID()) && (!before || data.GetPosition() == position) &&
-                        data.OwnerRevision == revision && data.DataRevision >= minimum && view && view.IsValid() && ReferenceEquals(view.GetZDO(), data) &&
-                        view.gameObject.activeInHierarchy && ZoneSystem.instance && AreaReady(data.GetPosition());
-                    if (!available && data != null) ZDOMan.instance.ForceSendZDO(id);
+                        data.OwnerRevision == revision && data.DataRevision >= minimum;
+                    bool objectReady = replica && view && view.IsValid() && ReferenceEquals(view.GetZDO(), data) && view.gameObject.activeInHierarchy;
+                    // Control RPCs can beat their queued native object packet.
+                    // Recheck only this incomplete snapshot after this frame's
+                    // network/scene updates, instead of a fixed 0.5-second wait.
+                    if (before && !objectReady && localPending.Count < 4096)
+                    {
+                        localPending.Add(new LocalProbe { Link = c, Rpc = rpc, Id = id, Token = token, Owner = owner,
+                            Revision = revision, Minimum = minimum, Position = position }); return;
+                    }
+                    bool available = objectReady && ZoneSystem.instance && AreaReady(data.GetPosition());
+                    // Before ownership the data belongs to the server. Its
+                    // authenticated reply requests any needed resync there.
+                    if (!available && !before && data != null) ZDOMan.instance.ForceSendZDO(id);
                     if (available)
                     { advertised.Remove(view); advertised.Add(view, new Advertisement { Peer = c.Peer, Id = id, Token = token }); }
-                    Send(c.Peer, Message.ReadyResult, delegate(ZPackage p) { p.Write(id); p.Write(token); p.Write(available); }); return;
+                    Send(c.Peer, Message.ReadyResult, delegate(ZPackage p) { p.Write(id); p.Write(token); p.Write(available); if (before) p.Write(replica); }); return;
                 }
                 long commitToken = packet.ReadLong(); ZDOID objectId = packet.ReadZDOID();
                 if (commitToken <= 0) return;
@@ -231,6 +255,31 @@ namespace TooManyLags.GridHandoffs
             Vector2s zone = ZoneSystem.GetZone(point); bool result;
             if (!areas.TryGetValue(zone, out result)) { result = ZNetScene.instance.IsAreaReady(point); areas.Add(zone, result); }
             return result;
+        }
+        internal static void FlushDeferred()
+        {
+            if (localPending.Count == 0) return;
+            List<LocalProbe> wave = localWork; localWork = localPending; localPending = wave;
+            try
+            {
+                if (!started || !ZNet.instance || ZNet.instance.IsDedicated() || ZDOMan.instance == null || !ZNetScene.instance) return;
+                areas.Clear();
+                for (int i = 0; i < localWork.Count; i++)
+                {
+                    LocalProbe q = localWork[i]; Connection c = q.Link;
+                    if (!Current(c, q.Rpc) || !c.Peer.IsReady() || !c.Peer.m_server || !ReferenceEquals(ZNet.instance.GetServerPeer(), c.Peer)) continue;
+                    ZDO data = ZDOMan.instance.GetZDO(q.Id); ZNetView view = data != null ? ZNetScene.instance.FindInstance(data) : null;
+                    bool replica = q.Token > 0 && data != null && data.IsValid() && data.GetOwner() == q.Owner && q.Owner == c.Peer.m_uid &&
+                        data.OwnerRevision == q.Revision && data.DataRevision >= q.Minimum && data.GetPosition() == q.Position;
+                    bool available = replica && view && view.IsValid() && ReferenceEquals(view.GetZDO(), data) &&
+                        view.gameObject.activeInHierarchy && ZoneSystem.instance && AreaReady(q.Position);
+                    if (available)
+                    { advertised.Remove(view); advertised.Add(view, new Advertisement { Peer = c.Peer, Id = q.Id, Token = q.Token }); }
+                    try { Send(c.Peer, Message.ReadyResult, delegate(ZPackage p) { p.Write(q.Id); p.Write(q.Token); p.Write(available); p.Write(replica); }); }
+                    catch (Exception error) { Plugin.Warn("Deferred destination proof failed: " + error.GetBaseException().Message); }
+                }
+            }
+            finally { localWork.Clear(); }
         }
         private static bool StandAction(ZNetView view)
         {
@@ -273,9 +322,10 @@ namespace TooManyLags.GridHandoffs
         }
         private static bool Loaded(ZDO data, long target)
         {
+            if (data == null || !data.IsValid() || data.GetOwner() != ZDOMan.GetSessionID()) return false;
             ZNetPeer peer = ZNet.instance ? ZNet.instance.GetPeer(target) : null; Connection c;
-            if (!Capable(peer) || !connections.TryGetValue(peer.m_rpc, out c) || !c.LoadedProof ||
-                data == null || !data.IsValid() || data.GetOwner() != ZDOMan.GetSessionID()) return false;
+            if (!Capable(peer) || !connections.TryGetValue(peer.m_rpc, out c) || !c.LoadedProof)
+            { if (Plugin.Controller != null) Plugin.Controller.WaitForDestination(data, target, Single.PositiveInfinity); return false; }
             Readiness r; Vector3 position = data.GetPosition();
             if (!ready.TryGetValue(data.m_uid, out r) || !r.BeforeOwner || !ReferenceEquals(r.Data, data) ||
                 r.Owner != data.GetOwner() || r.Revision != data.OwnerRevision || r.Position != position || !ReferenceEquals(r.Rpc, peer.m_rpc))
@@ -286,10 +336,11 @@ namespace TooManyLags.GridHandoffs
             if (r.Probe.Ready) { ready.Remove(data.m_uid); return true; }
             if (r.Probe.Query(Time.unscaledTime, ref readinessToken))
             {
-                ZDOMan.instance.ForceSendZDO(target, data.m_uid);
+                if (!r.ReplicaPresent) ZDOMan.instance.ForceSendZDO(target, data.m_uid);
                 try { Send(peer, Message.Loaded, delegate(ZPackage p) { p.Write(data.m_uid); p.Write(r.Probe.Token); p.Write(r.Owner); p.Write(r.Revision); p.Write(r.MinimumState); p.Write(r.Position); }); }
                 catch (Exception error) { Plugin.Warn("Destination load query failed: " + error.GetBaseException().Message); }
             }
+            if (Plugin.Controller != null) Plugin.Controller.WaitForDestination(data, target, r.Probe.Next);
             return false;
         }
         internal static void Forget(ZDO data) { if (data != null) ready.Remove(data.m_uid); }
@@ -309,6 +360,8 @@ namespace TooManyLags.GridHandoffs
         {
             if (peer == null || peer.m_rpc == null) return;
             connections.Remove(peer.m_rpc);
+            if (localPending.Count != 0) localPending.RemoveAll(delegate(LocalProbe q) { return ReferenceEquals(q.Rpc, peer.m_rpc); });
+            if (localWork.Count != 0) localWork.RemoveAll(delegate(LocalProbe q) { return ReferenceEquals(q.Rpc, peer.m_rpc); });
             // Rare disconnect event, not an idle scan. Release old transports
             // immediately even when their objects remain loaded for other peers.
             retiring.Clear();

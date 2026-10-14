@@ -1,3 +1,28 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.31 local review build
+
+Scope: only the new inventory/loading corrections and their startup/performance behavior. Field shapes, configured delays, mob policies and PUP guards are unchanged. Native IsAreaReady checks native zone/object loading; it does not prove PUP collider readiness.
+
+## Findings and narrow corrections
+
+An actual 100-object fixture reproduced 1,000 unnecessary ForceSendZDO requests across ten loading retry cycles after the recipient already had the exact replica. An optional reply bit now distinguishes known replica data from complete local loading. Only authenticated, current-token receipt stops those resend requests; it does not authorize ownership. If the known replica disappears, a native resynchronization request is queued immediately. Legacy replies preserve their original retry behavior. Post-ownership recipient checks retain their original wire payload and behavior.
+
+The review also found that a positive preflight could remain cached if overlap, inventory use or another native path superseded the transfer. Loaded nodes now remember whether they have an outstanding preflight and discard only that object's proof when the policy/use path changes. Subsequent eligible takeover requires a fresh token. This adds no unconditional cleanup dictionary lookup on normal transfer marking and no new field/global scan.
+
+Unchanged waiting objects skip repeated handoff work until the existing retry deadline. Field target, native owner/revision or position changes bypass the wait. The server's shared native-area check remains active, so completed server loading resumes work at the next existing poll; a positive client reply wakes the object and controller immediately. No new movement is required. Other guards are checked before ownership writes. This wait is limited to the new destination-proof path.
+
+An initial control query may arrive before its queued native object data or scene instance. Only this incomplete data/instance case is rechecked once at client LateUpdate. If it becomes valid during that frame, the reply can succeed without the 0.5-second retry wait. Already-valid objects reply immediately; objects waiting solely for their wider environment retain bounded retries. Two reused lists, capped at 4,096 entries per frame, are drained at frame end and cleared on shutdown/disconnect. No persistent client readiness watcher, physics timer or new native Harmony target is added.
+
+## Targeted work-count results
+
+- 100 objects, ten negative loading-response cycles: 100 initial native data-send requests; additional requests reduced from 1,000 to zero after exact replica acknowledgement. The 1,100 small proof queries remain, retaining progress while standing. These are managed request counts, not measured network bytes or Unity CPU timings.
+- 10,000 ordinary loaded-object transfers: zero extra proof queries, zero readiness cache entries, the same 10,000 catalog scans and 20,000 native send requests as the existing path.
+- 100 waiting objects across 24 unchanged polls: zero extra peer checks or proof queries before retry is due. Server-area completion resumes at the next poll; positive startup replies also bypass a configured five-second polling interval.
+- Pending overlap, local open use, opening leases, native opening and server-area recovery retire obsolete proofs. Wrong/stale replies, unavailable instances, data floors, owner/revision/position changes, unloading and disconnect remain covered. The native inventory bridge is unchanged from the reviewed 1.0.30 correction.
+
+All 21 verification groups pass on the final build, including 109 native inventory checks, 24,950 controller/grid/router checks with 13,272 actual-protocol additions, 23,101 native-release assertions with the same 50 Harmony targets per audited provider, and existing startup, camera, combat, fallback and optional PUP checks. Verified DLL SHA256: `25A12F936862127AA41C90D98905ADB8F95150611759D6D984FD34BA162C589A`. No live multiplayer test or measured in-game FPS improvement is claimed. Prepared locally; not published or pushed.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.30 local test build
 
 Two reported problems were investigated independently: one cell of unused server-owned chests that recovered after unloading, and a 10–15-second pause of visible ownership changes after another player teleported away, despite continued movement. The departing player owned no remaining local objects. The managed teleport tests remove the old footprint without that pause; there is no demonstrated extra teleport timer in the grid.

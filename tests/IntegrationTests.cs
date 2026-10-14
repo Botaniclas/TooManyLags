@@ -1588,7 +1588,7 @@ internal static partial class IntegrationTests
         try {
         InactiveNativeTemplates();Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
-        SeparateMobDefaults();DelayedReadinessInteractions();OwnerStatusSnapshot();TargetedOwnerStatusSnapshot();WorldDefaultAssignments();
+        SeparateMobDefaults();DelayedReadinessInteractions();OwnerStatusSnapshot();TargetedOwnerStatusSnapshot();WorldDefaultAssignments();KinematicDoorDefaults();
 #if GRID_PROTOCOL
         DestinationLoadProtocol();IncineratorStateProtection();
 #endif

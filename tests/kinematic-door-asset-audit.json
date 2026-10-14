@@ -1,0 +1,220 @@
+[
+  {
+    "prefab": "Hen",
+    "asset": "Assets/Characters/Chicken/Hen.prefab",
+    "components": [
+      {
+        "path": "/Hen",
+        "kind": "Rigidbody",
+        "active": true,
+        "fields": {
+          "m_UseGravity": true,
+          "m_IsKinematic": false,
+          "m_Constraints": 112
+        }
+      },
+      {
+        "path": "/Hen",
+        "kind": "ZNetView",
+        "active": true,
+        "fields": {
+          "m_persistent": 1,
+          "m_distant": 0,
+          "m_type": 0
+        }
+      }
+    ]
+  },
+  {
+    "prefab": "Lox",
+    "asset": "Assets/Characters/Lox/Lox.prefab",
+    "components": [
+      {
+        "path": "/Lox",
+        "kind": "Rigidbody",
+        "active": true,
+        "fields": {
+          "m_UseGravity": true,
+          "m_IsKinematic": false,
+          "m_Constraints": 112
+        }
+      },
+      {
+        "path": "/Lox",
+        "kind": "ZNetView",
+        "active": true,
+        "fields": {
+          "m_persistent": 1,
+          "m_distant": 0,
+          "m_type": 0
+        }
+      }
+    ]
+  },
+  {
+    "prefab": "Pickable_Branch",
+    "asset": "Assets/GameElements/Items/pickables/Pickable_Branch.prefab",
+    "components": [
+      {
+        "path": "/Pickable_Branch",
+        "kind": "ZNetView",
+        "active": true,
+        "fields": {
+          "m_persistent": 1,
+          "m_distant": 0,
+          "m_type": 0
+        }
+      }
+    ]
+  },
+  {
+    "prefab": "darkwood_gate",
+    "asset": "Assets/GameElements/Pieces/darkwood_gate.prefab",
+    "components": [
+      {
+        "path": "/darkwood_gate/door",
+        "kind": "Rigidbody",
+        "active": true,
+        "fields": {
+          "m_UseGravity": false,
+          "m_IsKinematic": true,
+          "m_Constraints": 94
+        }
+      },
+      {
+        "path": "/darkwood_gate",
+        "kind": "ZNetView",
+        "active": true,
+        "fields": {
+          "m_persistent": 1,
+          "m_distant": 0,
+          "m_type": 2
+        }
+      },
+      {
+        "path": "/darkwood_gate",
+        "kind": "WearNTear",
+        "active": true,
+        "fields": {
+          "m_staticPosition": 1
+        }
+      }
+    ]
+  },
+  {
+    "prefab": "piece_groundtorch_green",
+    "asset": "Assets/GameElements/Pieces/piece_groundtorch_green.prefab",
+    "components": [
+      {
+        "path": "/piece_groundtorch_green",
+        "kind": "ZNetView",
+        "active": true,
+        "fields": {
+          "m_persistent": 1,
+          "m_distant": 0,
+          "m_type": 0
+        }
+      },
+      {
+        "path": "/piece_groundtorch_green",
+        "kind": "WearNTear",
+        "active": true,
+        "fields": {
+          "m_staticPosition": 1
+        }
+      }
+    ]
+  },
+  {
+    "prefab": "piece_walltorch",
+    "asset": "Assets/GameElements/Pieces/piece_walltorch.prefab",
+    "components": [
+      {
+        "path": "/piece_walltorch",
+        "kind": "ZNetView",
+        "active": true,
+        "fields": {
+          "m_persistent": 1,
+          "m_distant": 0,
+          "m_type": 0
+        }
+      },
+      {
+        "path": "/piece_walltorch",
+        "kind": "WearNTear",
+        "active": true,
+        "fields": {
+          "m_staticPosition": 1
+        }
+      }
+    ]
+  },
+  {
+    "prefab": "wood_door",
+    "asset": "Assets/GameElements/Pieces/wood_door.prefab",
+    "components": [
+      {
+        "path": "/wood_door/door",
+        "kind": "Rigidbody",
+        "active": true,
+        "fields": {
+          "m_UseGravity": false,
+          "m_IsKinematic": true,
+          "m_Constraints": 94
+        }
+      },
+      {
+        "path": "/wood_door",
+        "kind": "ZNetView",
+        "active": true,
+        "fields": {
+          "m_persistent": 1,
+          "m_distant": 0,
+          "m_type": 2
+        }
+      },
+      {
+        "path": "/wood_door",
+        "kind": "WearNTear",
+        "active": true,
+        "fields": {
+          "m_staticPosition": 1
+        }
+      }
+    ]
+  },
+  {
+    "prefab": "wood_gate",
+    "asset": "Assets/GameElements/Pieces/wood_gate.prefab",
+    "components": [
+      {
+        "path": "/wood_gate/door",
+        "kind": "Rigidbody",
+        "active": true,
+        "fields": {
+          "m_UseGravity": false,
+          "m_IsKinematic": true,
+          "m_Constraints": 94
+        }
+      },
+      {
+        "path": "/wood_gate",
+        "kind": "ZNetView",
+        "active": true,
+        "fields": {
+          "m_persistent": 1,
+          "m_distant": 0,
+          "m_type": 2
+        }
+      },
+      {
+        "path": "/wood_gate",
+        "kind": "WearNTear",
+        "active": true,
+        "fields": {
+          "m_staticPosition": 1
+        }
+      }
+    ]
+  }
+]

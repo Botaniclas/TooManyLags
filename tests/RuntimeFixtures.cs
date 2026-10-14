@@ -94,6 +94,9 @@ public struct ZDOID
 }
 public sealed class ZDO
 {
+    public enum ObjectType { Default, Prioritized, Solid, Terrain }
+    public ObjectType Type; public bool Created;
+    public Vector2s GetSector(){return ZoneSystem.GetZone(Position);}
     private long owner;
     public int Writes;
     public ushort OwnerRevision {get;set;}
@@ -232,6 +235,9 @@ public sealed class ZoneSystem : UnityEngine.Object
 {
     public static ZoneSystem instance;
     public float m_zoneSize = 64f;
+    public bool Loaded=true, TypeReady=true;
+    public bool IsZoneLoaded(Vector2s zone){return Loaded;}
+    public bool IsZoneReadyForType(Vector2s zone,ZDO.ObjectType type){return TypeReady;}
     public static Vector2s GetZone(UnityEngine.Vector3 point)
     { return new Vector2s((short)Math.Floor((point.x+32)/64),(short)Math.Floor((point.z+32)/64)); }
 }

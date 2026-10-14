@@ -47,6 +47,8 @@ internal static partial class IntegrationTests
         Fresh(Kinds.Doors|Kinds.Containers,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true,checkIntervalSeconds:.05f);
         var first=Peer(1);var second=Peer(2);var serverPeer=new ZNetPeer{Uid=99,m_server=true};ZNet.instance.Peers.Add(serverPeer);
         var door=Object(typeof(Door),1,1,99);door.DataRevision=3;var view=ZNetScene.instance.FindInstance(door);
+        var animated=new GameObject();animated.transform.parent=view.transform;view.gameObject.Children.Add(animated);animated.Add(new Rigidbody{isKinematic=true,useGravity=false});
+        controller.Unregister(view);controller.Register(door,view);
         GridStart();
         try
         {

@@ -446,7 +446,7 @@ namespace TooManyLags
         internal string OwnerStatus(long requester, string prefabFilter = null)
         {
             var output = new StringBuilder("SERVER owner status: active=" + IsActive + "; defaultInteractives=" + defaultInteractives +
-                "; keepOnExit=" + keepOnExit + "; permanentRefills=" + refillStations + "; destinationProtocol=" + (DestinationLoaded != null) + "; " + compatibility.State());
+                "; defaultMobs=" + defaultMobs + "; keepOnExit=" + keepOnExit + "; permanentRefills=" + refillStations + "; destinationProtocol=" + (DestinationLoaded != null) + "; " + compatibility.State());
             bool filtered = !String.IsNullOrWhiteSpace(prefabFilter);
             if (filtered && prefabFilter.Length > 100) return output.Append("\nPrefab filter must be at most 100 characters.").ToString();
             if (!ReferenceEquals(world, ZDOMan.instance) || !network || !scene || indexed == null || catalog == null)
@@ -510,6 +510,10 @@ namespace TooManyLags
                     ZNetView view = scene.FindInstance(item);
                     output.Append("; no server node; serverInstance=").Append(view && view.IsValid() && ReferenceEquals(view.GetZDO(), item) && view.gameObject.activeInHierarchy);
                 }
+                Vector2s itemZone = item.GetSector();
+                output.Append("; type=").Append(item.Type).Append("; created=").Append(item.Created)
+                    .Append("; zoneLoaded=").Append(ZoneSystem.instance.IsZoneLoaded(itemZone))
+                    .Append("; typeReady=").Append(ZoneSystem.instance.IsZoneReadyForType(itemZone, item.Type));
                 output.Append("; baked=").Append(BakedObjects.IsBaked(item));
             }
             if (output.Length > 5600) { output.Length = 5600; output.Append("\n[truncated]"); }
@@ -642,7 +646,7 @@ namespace TooManyLags
                 CacheCellGeometry(cell);
                 coveredBefore = owner.indexed.Grid.Candidate(cell) != 0;
                 wear = view.GetComponent<WearNTear>(); ship = kind == Kinds.Vehicles && view.GetComponent<Ship>();
-                stationary = kind != Kinds.Vehicles && kind != Kinds.TamedAnimals && !view.GetComponentInChildren<Rigidbody>(true);
+                stationary = ObjectCatalog.Stationary(view.gameObject, kind);
                 if (kind == Kinds.Vehicles) cart = view.GetComponent<Vagon>();
                 if (kind == Kinds.Incinerators) incinerator = view.GetComponent<Incinerator>();
                 if (kind == Kinds.TamedAnimals) { actor = character; tameable = animal; }

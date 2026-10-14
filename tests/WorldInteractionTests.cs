@@ -5,6 +5,38 @@ using UnityEngine;
 
 internal static partial class IntegrationTests
 {
+    private static void KinematicDoorDefaults()
+    {
+        var patcher=new Harmony("botanic.authority.test.kinematic-door");
+        patcher.Patch(AccessTools.Method(typeof(ZDOMan),"ReleaseNearbyZDOS"),transpiler:new HarmonyMethod(AccessTools.Method(typeof(OwnershipPatch),"Transpiler")));
+        try
+        {
+            Fresh(Kinds.Doors,defaultInteractives:true);var player=Peer(1);Tick(0);
+            var data=Object(typeof(Door),40,1,0);var view=ZNetScene.instance.FindInstance(data);var root=view.gameObject;
+            var animated=new GameObject();animated.transform.parent=view.transform;root.Children.Add(animated);var body=animated.Add(new Rigidbody{isKinematic=true,useGravity=false});
+            controller.Unregister(view);controller.Register(data,view);
+            ZNetScene.instance.Ready=delegate{return false;};int queries=ZNetScene.instance.AreaQueries;
+            ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+            Check("native fixed door with animated kinematic child starts at server",data.GetOwner()==99&&data.Writes==1);
+            Check("kinematic door initial default adds no loading scan or RPC",ZNetScene.instance.AreaQueries==queries&&player.m_rpc.Calls==0);
+            root.activeInHierarchy=false;Check("inactive door template keeps fixed-body classification",ObjectCatalog.Stationary(root,Kinds.Doors));root.activeInHierarchy=true;
+            body.isKinematic=false;Check("dynamic child body remains excluded",!ObjectCatalog.Stationary(root,Kinds.Doors));body.isKinematic=true;
+            body.useGravity=true;Check("gravity child remains excluded",!ObjectCatalog.Stationary(root,Kinds.Doors));body.useGravity=false;
+            var sync=animated.Add(new ZSyncTransform());Check("synchronized child physics remains excluded",!ObjectCatalog.Stationary(root,Kinds.Doors));animated.Components.Remove(sync);
+            var rootBody=root.Add(new Rigidbody());Check("root body remains excluded even if initially kinematic",!ObjectCatalog.Stationary(root,Kinds.Doors));root.Components.Remove(rootBody);
+            root.GetComponent<WearNTear>().m_staticPosition=false;Check("movable building root remains excluded",!ObjectCatalog.Stationary(root,Kinds.Doors));root.GetComponent<WearNTear>().m_staticPosition=true;
+            Check("kinematic exception does not extend to other categories or mobs",!ObjectCatalog.Stationary(root,Kinds.Fireplaces)&&!ObjectCatalog.Stationary(root,Kinds.TamedAnimals)&&!ObjectCatalog.Stationary(root,Kinds.Vehicles));
+            int scans=GameObject.Scans,lookups=GameObject.Lookups;
+            for(int i=0;i<100;i++)Check("door initial eligibility remains cached",controller.NativeOwnerTarget(data,1)==99);
+            Check("cached fixed-door assignments add no hierarchy work",scans==GameObject.Scans&&lookups==GameObject.Lookups);
+            data.Created=false;data.Type=ZDO.ObjectType.Solid;ZoneSystem.instance.Loaded=false;ZoneSystem.instance.TypeReady=false;
+            MovePeer(player,32);
+            string status=controller.OwnerStatus(1,"piece");
+            Check("manual snapshot identifies the actual native creation gate",status.Contains("type=Solid; created=False; zoneLoaded=False; typeReady=False")&&status.Contains("defaultMobs=False"));
+            Check("creation diagnostics do not change owner or creation flags",data.GetOwner()==99&&data.Writes==1&&!data.Created);
+        }
+        finally{patcher.UnpatchSelf();}
+    }
     private static void WorldDefaultAssignments()
     {
         var patcher=new Harmony("botanic.authority.test.world-default");

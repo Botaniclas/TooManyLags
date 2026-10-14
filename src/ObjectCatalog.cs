@@ -70,7 +70,7 @@ namespace TooManyLags
             GameObject prefab = scene.GetPrefab(hash); if (!prefab) return 0;
             Kinds kind = Classify(prefab);
             bool eligible = kind != Kinds.None && (kind & enabled) != 0 && kind != Kinds.TamedAnimals && kind != Kinds.Vehicles &&
-                prefab.GetComponentsInChildren<Rigidbody>(true).Length == 0;
+                Stationary(prefab, kind);
             if (eligible && kind == Kinds.Incinerators)
             {
                 Incinerator station = prefab.GetComponent<Incinerator>();
@@ -90,6 +90,20 @@ namespace TooManyLags
             if (eligible && (kind == Kinds.Smelters || kind == Kinds.CookingStations || kind == Kinds.Fireplaces ||
                 kind == Kinds.Fermenters || kind == Kinds.ShieldGenerators || (kind == Kinds.Defenses && prefab.GetComponentInChildren<Turret>(true)))) flags |= 2;
             nativeDefaults.Add(hash, flags); return flags;
+        }
+        internal static bool Stationary(GameObject root, Kinds kind)
+        {
+            if (kind == Kinds.Vehicles || kind == Kinds.TamedAnimals) return false;
+            if (!root.GetComponentInChildren<Rigidbody>(true)) return true;
+            // Native doors animate a kinematic child; their networked building
+            // root stays fixed. Do not extend this exception to movable roots,
+            // synchronized physics, gravity, dynamic bodies or other categories.
+            if (kind != Kinds.Doors || !root.GetComponent<Door>() || root.GetComponent<Rigidbody>() || root.GetComponentInChildren<ZSyncTransform>(true)) return false;
+            WearNTear wear = root.GetComponent<WearNTear>();
+            if (!wear || !wear.m_staticPosition) return false;
+            foreach (Rigidbody body in root.GetComponentsInChildren<Rigidbody>(true))
+                if (!body.isKinematic || body.useGravity) return false;
+            return true;
         }
         // Native staff companions use these unsummoning rules. Starts-tamed
         // also describes ordinary hens; following can be cleared by commands.

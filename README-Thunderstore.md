@@ -49,6 +49,7 @@ Thanks for helping improve the mod. Have fun, and enjoy smoother adventures toge
 - Optional `ServerOwnedMobsByDefault` (off) gives idle tamed animals a server default outside player fields and puts Hostile Mobs without a player target on the server, even with one player online. Loading and usage safeguards still apply; field-exit retention stays unchanged. Hostile Mobs require `EnableAIOwnership`. Friendly summons and bosses remain excluded. This can increase server CPU usage.
 - Incinerators follow the grid with updated, guarded clients. Burning/effects and open inventories reject automatic transfers; completion alone never replays them. A fresh covering player movement/heading update can request ownership again. Requires experimental interaction protection. Older clients keep native incinerator ownership. The permanent-refill option does not pin incinerators. Local PUP collision/stability guards remain a separate feature.
 - With `ServerOwnedInteractivesByDefault=true`, existing persistent network objects for dungeon entrances and Vegvisir receive a server default, independently of the grid (`WorldMarkers`). Local entrances/stones without a ZDO have no assignable owner; their interactions remain unchanged.
+- Fixed doors/gates with animated kinematic child bodies support early server defaults and guarded player handoffs. Moving roots and dynamic/synchronized physics remain excluded from this exception.
 - Open inventories, active users and refilling remain protected.
 - With experimental interaction protection enabled, updated clients can confirm local loading for server-owned stationary objects when server-area loading is incomplete. Older clients retain the original loading check.
 - Loading retries stop requesting object data once the client confirms its replica. Missing startup data/instances receive an end-of-frame recheck; successful replies wake the handoff immediately. Configured field delays and all use safeguards remain active.
@@ -71,7 +72,7 @@ Configure **all gameplay settings on the server** in `BepInEx/config/botanic.too
 
 **Console:** `tml_config list` lists settings; `tml_config <Key>` reads one; `tml_config <Key> <Value>` saves a change. Only admins can change server settings.
 
-**Diagnostics:** With Server-Side Simulation, admins can use `tml_config owner_status` for a one-time ownership/loading snapshot in the console and server's `BepInEx/LogOutput.log`, even with `EnableLogs=false`. Add part of a prefab name, e.g. `tml_config owner_status torch`, to inspect that object type. No background checks; existing clients support the command.
+**Diagnostics:** With Server-Side Simulation, admins can use `tml_config owner_status` for a one-time ownership/loading snapshot in the console and server's `BepInEx/LogOutput.log`, even with `EnableLogs=false`. Add part of a prefab name, e.g. `tml_config owner_status torch`, to inspect that object type. Shows missing instances and native creation/zone readiness. No background checks; existing clients support the command.
 
 Intervals, delays and mob fallback limits apply immediately. Other settings, including `Enabled` and `EnableAIOwnership`, take effect after a server restart; clients receive the new mode when reconnecting.
 

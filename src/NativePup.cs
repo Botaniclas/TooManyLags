@@ -1,8 +1,7 @@
 using System;
-using System.IO;
 using System.Reflection;
 using System.Reflection.Emit;
-using System.Security.Cryptography;
+using HarmonyLib;
 using UnityEngine;
 
 namespace TooManyLags
@@ -12,7 +11,6 @@ namespace TooManyLags
     // plugin's adapter null and therefore denies optional server fallback.
     internal sealed class NativePup
     {
-        internal const string Hash = "47DEADE1F80117821462E69D95752F666AFF6AA8752988852D0315B0E4ABA04B";
         private readonly MonoBehaviour pup;
         private readonly Func<object, bool> manifest, rejected;
         private readonly Func<object, ZNet> loaded;
@@ -26,12 +24,7 @@ namespace TooManyLags
             pup = instance;
             if (ReferenceEquals(instance, null)) return;
             Type type = instance.GetType();
-#if !TESTING
-            using (SHA256 sha = SHA256.Create())
-            using (Stream input = File.OpenRead(type.Assembly.Location))
-                if (BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "") != Hash)
-                    throw new NotSupportedException("PUP readiness requires the verified PUP FPS 1.0.34 DLL.");
-#endif
+            ValidateDedicatedReadiness(type);
             manifest = FieldReader.Create<object, bool>(Field(type, "multiplayerManifestReceived"));
             rejected = FieldReader.Create<object, bool>(Field(type, "multiplayerRejected"));
             loaded = FieldReader.Create<object, ZNet>(Field(type, "loadedZNet"));
@@ -76,12 +69,50 @@ namespace TooManyLags
                 !Finite(radius) || radius < 0f || radius > 56f || Mathf.Abs(point.x) > 100000000f || Mathf.Abs(point.z) > 100000000f) return false;
             if ((transitionCount() != 0 || restoreCount() != 0) && transition(point, radius)) return false;
             if (!Relevant(point, radius)) return true;
-            // Native dedicated readiness skips local record cells. Exact also
-            // prepares/verifies their physics proxies and renews native retention.
+            // Exact prepares native proxies and renews retention. CellReadiness
+            // also requires the newer dedicated proxy proof when available.
             return exact(point, radius) && readiness.Ready(point, radius);
         }
 
         private static bool Finite(float value) { return !Single.IsNaN(value) && !Single.IsInfinity(value); }
+        private static void ValidateDedicatedReadiness(Type type)
+        {
+            // One startup inspection, independent of package version/hash. A
+            // changed dedicated contract must not silently become legacy mode.
+            MethodInfo ready = type.GetMethod("IsZoneReplacementReady", BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new[] { typeof(Vector3), typeof(float) }, null);
+            if (ready == null || ready.ReturnType != typeof(bool))
+                throw new NotSupportedException("PUP replacement readiness contract changed.");
+            MethodInfo prepared = type.GetMethod("HasPreparedDedicatedCollision", BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new[] { typeof(Vector2Int), typeof(Vector3), typeof(float) }, null);
+            var body = PatchProcessor.GetOriginalInstructions(ready);
+            if (prepared != null)
+            {
+                if (prepared.ReturnType == typeof(bool))
+                    foreach (CodeInstruction instruction in body)
+                        if ((instruction.opcode == OpCodes.Call || instruction.opcode == OpCodes.Callvirt) && prepared.Equals(instruction.operand)) return;
+                throw new NotSupportedException("PUP dedicated proxy readiness contract changed.");
+            }
+            // The legacy native method skips dedicated local cells by jumping
+            // directly to the inner loop increment; Exact supplies their proof.
+            MethodInfo dedicated = typeof(ZNet).GetMethod("IsDedicated", Type.EmptyTypes);
+            for (int i = 0; i + 1 < body.Count; i++)
+            {
+                if (!dedicated.Equals(body[i].operand)) continue;
+                CodeInstruction branch = body[i + 1];
+                if ((branch.opcode != OpCodes.Brtrue && branch.opcode != OpCodes.Brtrue_S) || !(branch.operand is Label)) break;
+                Label label = (Label)branch.operand;
+                for (int j = i + 2; j + 2 < body.Count; j++)
+                    if (body[j].labels.Contains(label))
+                    {
+                        if (body[j].opcode.Name.StartsWith("ldloc", StringComparison.Ordinal) &&
+                            body[j + 1].opcode == OpCodes.Ldc_I4_1 && body[j + 2].opcode == OpCodes.Add) return;
+                        break;
+                    }
+                break;
+            }
+            throw new NotSupportedException("PUP dedicated readiness contract changed.");
+        }
         private static FieldInfo Field(Type type, string name)
         {
             FieldInfo field = type.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);

@@ -37,6 +37,7 @@ namespace TooManyLags
         private readonly Func<F, GameObject> fastRoot;
         private readonly Func<F, HashSet<string>> required;
         private readonly Func<Vector2Int, bool> pending;
+        private readonly Func<Vector2Int, Vector3, float, bool> dedicatedPrepared;
         public TypedCellReadiness(MonoBehaviour value)
         {
             pup = value; Type type = pup.GetType();
@@ -60,6 +61,11 @@ namespace TooManyLags
             required = FieldReader.Create<F, HashSet<string>>(Field(typeof(F), "required"));
             pending = (Func<Vector2Int, bool>)Delegate.CreateDelegate(typeof(Func<Vector2Int, bool>), pup,
                 type.GetMethod("HasPendingCollidersForCell", BindingFlags.Instance | BindingFlags.NonPublic));
+            MethodInfo prepared = type.GetMethod("HasPreparedDedicatedCollision", BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new[] { typeof(Vector2Int), typeof(Vector3), typeof(float) }, null);
+            if (prepared != null)
+                dedicatedPrepared = (Func<Vector2Int, Vector3, float, bool>)Delegate.CreateDelegate(
+                    typeof(Func<Vector2Int, Vector3, float, bool>), pup, prepared);
         }
         private static FieldInfo Field(Type type, string name)
         { return type.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); }
@@ -87,8 +93,8 @@ namespace TooManyLags
                 if (worldRestores(pup).Contains(cell) || vanillaRestores(pup).Contains(cell) ||
                     !local || rows == null || rows.Count == 0 || !ids(pup).TryGetValue(cell, out recipeId) ||
                     String.IsNullOrEmpty(recipeId) || recipeId == "RESTORE_PENDING" || (remote && recipeId != remoteId(manifest))) return false;
-                // ReadyPoint already checks exact recipe/proxy preparation and
-                // transitions. A dedicated local cell is covered by that proof.
+                // Exact covers legacy dedicated cells. Newer PUP also requires
+                // current active proxies; metadata alone cannot prove that.
                 GameObject root; bool enabled;
                 if (remote)
                 {
@@ -97,7 +103,11 @@ namespace TooManyLags
                         !clusters.TryGetValue(cell, out root) || !root || !root.activeInHierarchy ||
                         !validated(pup).TryGetValue(root, out id) || id != remoteId(manifest)) return false;
                 }
-                else if (ZNet.instance.IsDedicated()) continue;
+                else if (ZNet.instance.IsDedicated())
+                {
+                    if (dedicatedPrepared != null && !dedicatedPrepared(cell, point, radius)) return false;
+                    continue;
+                }
                 else
                 {
                     // Cells without local records/clusters are irrelevant.

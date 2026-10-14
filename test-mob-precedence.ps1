@@ -1,7 +1,10 @@
 param(
     [string]$BepInExDirectory = 'C:\Users\Niclas\AppData\Roaming\Thunderstore Mod Manager\DataFolder\Valheim\profiles\Client\BepInEx',
     [string]$ValheimDirectory = 'D:\Steam-Bibliotheksordner\steamapps\common\Valheim',
-    [string]$PupPatchAssembly = (Join-Path $PSScriptRoot '../BotanicPupPatch-2.1.0/bin/BotanicPupPatch.dll')
+    [string[]]$PupPatchAssembly = @(
+        (Join-Path $PSScriptRoot '../BotanicPupPatch-2.1.0/bin/BotanicPupPatch.dll'),
+        (Join-Path $PSScriptRoot '../BotanicPupPatch-2.1.1/bin/BotanicPupPatch.dll')
+    )
 )
 $ErrorActionPreference = 'Stop'
 $taskCompiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework/v4.0.30319/csc.exe'
@@ -18,7 +21,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Combat precedence fixture compilation failed.'
 & $taskExe (Join-Path $taskOutput 'fixture.cfg') $taskCore
 if ($LASTEXITCODE -ne 0) { throw 'Combat precedence regression failed.' }
 Add-Type -Path (Join-Path $taskCore 'Mono.Cecil.dll')
-$taskPatch = [Mono.Cecil.AssemblyDefinition]::ReadAssembly((Resolve-Path -LiteralPath $PupPatchAssembly).Path)
+foreach ($taskPatchPath in $PupPatchAssembly) {
+$taskPatch = [Mono.Cecil.AssemblyDefinition]::ReadAssembly((Resolve-Path -LiteralPath $taskPatchPath).Path)
 try {
     $taskPolicy = @($taskPatch.MainModule.Types | Where-Object FullName -eq 'BotanicPupPatch.FgnCombatOwnership')
     if ($taskPolicy.Count -ne 1) { throw 'Actual PupPatch combat module not found.' }
@@ -34,6 +38,7 @@ try {
     }
     Write-Output ('PASS: Actual PupPatch ' + $taskPatch.Name.Version + ' optional combat lifecycle contract; no core guard lifecycle call in Stop.')
 } finally { $taskPatch.Dispose() }
+}
 $taskMonoHost = Join-Path $taskOutput 'MonoFixtureHost.exe'
 & $taskCompiler /nologo /target:exe /platform:x64 /optimize+ /langversion:5 /warnaserror+ ('/out:'+$taskMonoHost) (Join-Path $PSScriptRoot 'tests/CombatMonoFixtureHost.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Precedence Mono host compilation failed.' }

@@ -2,6 +2,11 @@
 
 **Unreleased**
 ```
+- Removes the PUP FPS version lock for AI server takeovers and supports its newer dedicated-collider readiness proof. Unfinished replacements and incompatible interfaces still block takeover; existing attack, loading and handoff safeguards remain active.
+```
+
+**1.0.34**
+```
 - Fixes temporary player ownership during login when ServerOwnedInteractivesByDefault=true and a grid timer is pending. Eligible native assignments start at the server; grid timers and active-owner handoff safeguards remain in place.
 - Applies permanent refill ownership to initial assignments before the server instance exists. Incinerators retain their existing native-only ownership policy.
 - Adds admin-only `tml_config owner_status` snapshots in the console and server BepInEx log, including with EnableLogs=false, without background checks.

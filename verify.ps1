@@ -10,8 +10,8 @@ $authorityVerifiedHash=(Get-FileHash -LiteralPath $authorityDll -Algorithm SHA25
 $authorityResults=@()
 foreach($authorityTest in @('test-grid-size.ps1','test-config-console.ps1','test-camera-recovery.ps1','test-mob-precedence.ps1','test-fgn-settings.ps1','test-player-simulation.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-recipient-scope.ps1','test-integration.ps1','test-grid-load.ps1','test-directional.ps1','test-field-cache.ps1','test-regions.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1')){
     $authorityArguments=@{}
-    if($authorityTest -in @('test-mob-precedence.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1')){$authorityArguments.ValheimDirectory=$ValheimDirectory}
-    if($authorityTest -in @('test-config-console.ps1','test-camera-recovery.ps1','test-mob-precedence.ps1','test-fgn-settings.ps1','test-player-simulation.ps1','test-fgn-handoff.ps1','test-integration.ps1','test-grid-load.ps1','test-native.ps1','test-combat.ps1','test-combat-bridge.ps1')){$authorityArguments.BepInExDirectory=$BepInExDirectory}
+    if($authorityTest -in @('test-mob-precedence.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-readiness.ps1')){$authorityArguments.ValheimDirectory=$ValheimDirectory}
+    if($authorityTest -in @('test-config-console.ps1','test-camera-recovery.ps1','test-mob-precedence.ps1','test-fgn-settings.ps1','test-player-simulation.ps1','test-fgn-handoff.ps1','test-integration.ps1','test-grid-load.ps1','test-native.ps1','test-combat.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1')){$authorityArguments.BepInExDirectory=$BepInExDirectory}
     $authorityLines=@(& (Join-Path $PSScriptRoot $authorityTest) @authorityArguments)
     $authorityLines | ForEach-Object {Write-Output $_}
     $authorityResults += [ordered]@{test=$authorityTest;passed=$true;output=($authorityLines -join [Environment]::NewLine)}
@@ -29,6 +29,11 @@ $authorityCombatLines=@(& $authorityCombatAudit $authorityFgnCurrent (Join-Path 
 if($LASTEXITCODE -ne 0){throw 'Managed mob handoff contracts failed with FGN 1.5.53.'}
 $authorityCombatLines | ForEach-Object {Write-Output $_}
 $authorityResults += [ordered]@{test='combat-native-fgn-1.5.53';passed=$true;output=($authorityCombatLines -join [Environment]::NewLine)}
+$authorityPupCurrent=Join-Path $authorityModCache 'PUP82-PUP_FPS\1.0.36\PUP_FPS.dll'
+$authorityCombatLines=@(& $authorityCombatAudit $authorityFgnCurrent (Join-Path $ValheimDirectory 'valheim_Data\Managed') $authorityDll $authorityPupCurrent)
+if($LASTEXITCODE -ne 0){throw 'Managed mob readiness contracts failed with PUP FPS 1.0.36.'}
+$authorityCombatLines | ForEach-Object {Write-Output $_}
+$authorityResults += [ordered]@{test='combat-native-pup-1.0.36';passed=$true;output=($authorityCombatLines -join [Environment]::NewLine)}
 if((Get-FileHash -LiteralPath $authorityDll -Algorithm SHA256).Hash -ne $authorityVerifiedHash){throw 'DLL changed during validation.'}
 $authorityNative=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'bin\native-audit\verification.json') -Raw | ConvertFrom-Json
 if($authorityNative.authority_sha256 -ne $authorityVerifiedHash -or $authorityNative.production_changed_during_audit){throw 'Native audit does not match final build.'}
@@ -58,7 +63,7 @@ if(Test-Path -LiteralPath $authorityRegionBenchmarkPath){
     }
 }
 [ordered]@{
-    version='1.0.34';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
+    version='1.0.35';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
     benchmark=$authorityBenchmark;regionBenchmark=$authorityRegionBenchmark;import=$authorityImport;artifactHashes=$authorityHashes;liveMultiplayerTested=$false
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Encoding UTF8
 Write-Output ('Verified release SHA256: '+$authorityVerifiedHash)

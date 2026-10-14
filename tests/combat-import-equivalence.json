@@ -1,6 +1,6 @@
 {
   "source": "BotanicPupPatch-2.1.0",
-  "target": "TooManyLags-FGNAddon-1.0.28",
+  "target": "TooManyLags-FGNAddon-1.0.35",
   "original_source_preserved": true,
   "files": [
     {
@@ -63,21 +63,23 @@
     {
       "file": "CellReadiness.cs",
       "source_sha256": "D07C31F0528E7DFD129177BB4D12096AC14FCB16EE02549DE7FC91A3A1AD1D97",
-      "import_sha256": "F5A5C0A044CCE193A78980641425F1A74938A832766A50950AA11C4B20B92959",
+      "import_sha256": "972C59B8F429CEED9D7203E02CF37477A21F6CC5B0ADFAA453C63BE3F02665E7",
       "namespace_branding_protocol_only": false,
       "additional_changes": [
-        "Usage comment adapted; executable code unchanged."
+        "Initial import: usage comment adapted; executable code unchanged.",
+        "1.0.35 binds the optional HasPreparedDedicatedCollision(Vector2Int,Vector3,float) delegate once and requires it for local dedicated cells after Exact and existing metadata proof. Remote/client/legacy cells retain their existing gates."
       ]
     },
     {
       "file": "NativePup.cs",
       "source_sha256": "14558BAEF190889E7C99C8443418065CE2C3D1AF8A603E76D6B16BBE647D8389",
-      "import_sha256": "6099650C9E4D870B75350A761E0B953AB162FD9831C56CF7FA872EAB977E2D10",
+      "import_sha256": "D037AA7625AB1BC73F913B9C1A84041DF840289AB82F9B82A1005DF914C43108",
       "namespace_branding_protocol_only": false,
       "additional_changes": [
         "Trimmed to readiness fields/delegates/helpers and full CellReadiness proof.",
         "Removed body/support/retention APIs, physics hooks, bounds helper and unrelated counters.",
-        "Explicit null constructor means PUP absent; present adapter validates original verified hash; present inactive PUP denies readiness."
+        "Initial import: explicit null constructor means PUP absent; present adapter validated the original verified hash; present inactive PUP denied readiness.",
+        "1.0.35 removes the binary version/hash lock and validates legacy versus newer dedicated readiness through startup-only native IL inspection. Optional and absent-PUP behavior, Exact preparation, recipe/restore/transition proof and fail-closed server fallback remain; no body/support/retention hooks are imported."
       ]
     },
     {

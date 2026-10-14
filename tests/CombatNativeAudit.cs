@@ -16,17 +16,48 @@ internal static class NativeCombatAudit
     }
     private static void AuditPup(string path,TypeDefinition adapter)
     {
-        const string hash="47DEADE1F80117821462E69D95752F666AFF6AA8752988852D0315B0E4ABA04B";
+        string hash;
         using(SHA256 sha=SHA256.Create())using(Stream input=File.OpenRead(path))
-            Check(BitConverter.ToString(sha.ComputeHash(input)).Replace("-","")==hash,"exact verified optional PUP1.0.34 binary");
-        Check(Method(adapter,".ctor").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="ComputeHash")&&
-            Method(adapter,".ctor").Body.Instructions.Any(i=>i.OpCode.Name=="ldstr"&&(string)i.Operand==hash),"release adapter retains PUP hash validation");
+            hash=BitConverter.ToString(sha.ComputeHash(input)).Replace("-","");
+        bool modern=hash=="C685B43D90C99BA21A8C9477D095BE76CFAF703C9F3430FD8D678302CE8308F9";
+        Check(modern||hash=="47DEADE1F80117821462E69D95752F666AFF6AA8752988852D0315B0E4ABA04B","PUP1.0.34/1.0.36 audit provenance; no runtime version lock");
+        Check(!adapter.Methods.Where(m=>m.HasBody).Any(m=>m.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="ComputeHash"))&&
+            !adapter.Fields.Any(f=>f.Name=="Hash"),"release readiness adapter has no DLL hash lock");
+        Check(Method(adapter,".ctor").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="ValidateDedicatedReadiness")&&
+            Method(adapter,"ValidateDedicatedReadiness").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="GetOriginalInstructions"),"release constructor validates dedicated capability once at startup");
+        Check(!Method(adapter,"ReadyPointCore").Body.Instructions.Any(i=>i.Operand is MethodReference&&new[]{"GetMethod","GetOriginalInstructions","ValidateDedicatedReadiness"}.Contains(((MethodReference)i.Operand).Name)),"runtime readiness performs no reflection or startup IL validation");
         using(AssemblyDefinition assembly=AssemblyDefinition.ReadAssembly(path))
         {
             TypeDefinition pup=assembly.MainModule.Types.Single(t=>t.FullName=="ValheimInstanceCombiner.InstanceCombinerMod");
             CustomAttribute metadata=pup.CustomAttributes.Single(a=>a.AttributeType.FullName=="BepInEx.BepInPlugin");
             Check((string)metadata.ConstructorArguments[0].Value=="com.pup.instancecombiner.safe"&&
-                (string)metadata.ConstructorArguments[2].Value=="1.0.34","verified optional PUP plugin identity");
+                (string)metadata.ConstructorArguments[2].Value==(modern?"1.0.36":"1.0.34"),"verified optional PUP audit identity");
+            MethodDefinition ready=Method(pup,"IsZoneReplacementReady");
+            Check(ready.ReturnType.FullName=="System.Boolean"&&String.Join(",",ready.Parameters.Select(p=>p.ParameterType.FullName).ToArray())=="UnityEngine.Vector3,System.Single","actual native replacement readiness signature");
+            if(modern)
+            {
+                MethodDefinition prepared=Method(pup,"HasPreparedDedicatedCollision");
+                Check(!prepared.IsStatic&&prepared.ReturnType.FullName=="System.Boolean"&&String.Join(",",prepared.Parameters.Select(p=>p.ParameterType.FullName).ToArray())=="UnityEngine.Vector2Int,UnityEngine.Vector3,System.Single","actual dedicated proxy query signature");
+                Check(ready.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).FullName==prepared.FullName),"native replacement readiness calls dedicated proxy query");
+                Check(prepared.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="PlantSupportCellCurrent")&&
+                    prepared.Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="incomplete")&&
+                    prepared.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="get_enabled")&&
+                    prepared.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="get_activeInHierarchy"),"native proxy proof retains revision/completion/active collider gates");
+            }
+            else
+            {
+                Check(!pup.Methods.Any(m=>m.Name=="HasPreparedDedicatedCollision"),"legacy PUP has no dedicated proxy query");
+                var body=ready.Body.Instructions.ToList();
+                int dedicated=body.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="ZNet"&&((MethodReference)i.Operand).Name=="IsDedicated");
+                Check(dedicated>=0&&(body[dedicated+1].OpCode.Name=="brtrue"||body[dedicated+1].OpCode.Name=="brtrue.s"),"legacy native dedicated branch jumps when dedicated");
+                var target=body[dedicated+1].Operand as Mono.Cecil.Cil.Instruction;
+                int at=body.IndexOf(target);
+                Check(at>=0&&body[at].OpCode.Name.StartsWith("ldloc",StringComparison.Ordinal)&&body[at+1].OpCode.Name=="ldc.i4.1"&&body[at+2].OpCode.Name=="add","legacy dedicated skip lands directly at the loop increment");
+            }
+            TypeDefinition cells=adapter.Module.Types.Single(t=>t.Name.StartsWith("TypedCellReadiness`",StringComparison.Ordinal));
+            Check(cells.Fields.Any(f=>f.Name=="dedicatedPrepared"&&f.FieldType.FullName=="System.Func`4<UnityEngine.Vector2Int,UnityEngine.Vector3,System.Single,System.Boolean>"),"adapter stores typed dedicated proxy query");
+            Check(Method(cells,".ctor").Body.Instructions.Any(i=>i.OpCode.Name=="ldstr"&&(string)i.Operand=="HasPreparedDedicatedCollision")&&
+                Method(cells,"Ready").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="Invoke"&&((MethodReference)i.Operand).DeclaringType.FullName.StartsWith("System.Func`4<",StringComparison.Ordinal)),"release cell readiness binds and invokes optional native dedicated proof");
             string dict="System.Collections.Generic.Dictionary`2<UnityEngine.Vector2Int,",nested=pup.FullName+"/";
             string set="System.Collections.Generic.HashSet`1<UnityEngine.Vector2Int>";
             foreach(string[] pair in new[]{
@@ -285,7 +316,7 @@ internal static class NativeCombatAudit
             Check(Method(combat,"ReceiveAttackReady").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="Pending")&&
                 Method(combat,"HandoffAttackRejected").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="AttackReady")&&
                 Method(combat,"ResultPostfix").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="HandoffAttackRejected"),"early ready events wait for pending result and are consumed after its cleanup");
-            Check(Method(combat,"ServerReady").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.FullName=="TooManyLags.NativePup"&&((MethodReference)i.Operand).Name=="ReadyPoint"),"server takeover reuses verified PUP1.0.34 readiness");
+            Check(Method(combat,"ServerReady").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.FullName=="TooManyLags.NativePup"&&((MethodReference)i.Operand).Name=="ReadyPoint"),"server takeover reuses optional PUP collision readiness");
             Check(!addon.MainModule.Types.Any(t=>t.Name=="CollisionGuard"||t.Name=="FgnTakeover"||t.Name=="Statics"),"imported combat policy adds no PupPatch body/support hook modules");
             TypeDefinition nativeAdapter=addon.MainModule.Types.Single(t=>t.Name=="NativePup");
             Check(!nativeAdapter.Methods.Any(m=>new[]{"Attach","Existing","ForceStep","ReadyBounds","NeededByNativeBody"}.Contains(m.Name))&&

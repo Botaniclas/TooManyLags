@@ -1,3 +1,17 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.35 local PUP compatibility build
+
+Built from the completed 1.0.34 source (Git baseline `276876f`). Runtime changes are limited to the optional NativePup/CellReadiness adapter; Plugin.cs changes only version metadata. The grid, camera, initial-owner defaults, manual diagnostics, interaction protection, target handoffs, attack-end retry and boss policy retain their 1.0.34 implementation. All 50 generated config settings are unchanged apart from the version header.
+
+The binary PUP hash lock is removed. Startup validates the native readiness signature, its supported legacy dedicated branch or newer dedicated proxy query, and the existing typed fields/delegates. An unsupported present PUP keeps AI server fallback blocked; absent PUP retains native area/instance readiness. No PUP or PupPatch assembly dependency is introduced.
+
+After native Exact preparation, newer PUP local dedicated cells must also pass HasPreparedDedicatedCollision for the actual query cell, point and radius. Exact=true alone cannot release an unprepared proxy. Recipe identifiers, world-save/vanilla restore gaps, remote replacement validation, transition and session checks remain. This query runs only in existing server-takeover readiness attempts. Startup inspection runs once; no new Update/FixedUpdate, body/support/retention hooks, RPCs or physics writes are added. PUP continues to own its body guard and deferred collision queue.
+
+All 22 verification groups pass. The production optional adapter passes 37 assertions on both CLR and embedded Valheim Mono, including startup rejection of an unknown dedicated contract, legacy/new readiness, unprepared proxies, recovery, irrelevant-area short-circuiting and unchanged restore/remote protections. Actual native metadata/IL audits pass for PUP FPS 1.0.34 with FiresGhettoNetworking 1.5.36, 1.5.41 and 1.5.53, and for PUP FPS 1.0.36 with FiresGhettoNetworking 1.5.53. Both actual PupPatch 2.1.0 and 2.1.1 combat lifecycle contracts are checked: suspending that module does not call the core collision guard lifecycle. The unchanged precedence fixtures pass 40 assertions on CLR and Mono; combat fixtures pass 1,831 on each runtime. Inventory, field/cache/unload, loading, native patch composition and fallback checks also pass.
+
+Verified DLL SHA256: `6790E02110A77CF97F08FFC648EC2CF6013301BA31D7F528D66AA72A7470FB63`. Native audits and managed fixtures do not constitute a live Unity/PhysX/network test. Prepared locally; not published or pushed.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.34 local diagnostic build
 
 The existing manual `tml_config owner_status` snapshot is now written once to the server's BepInEx info log before the same text is returned to the requesting client. This explicit diagnostic does not depend on EnableLogs. Unavailable/error replies use the same searchable SERVER owner status prefix. Admin authorization, current-peer checks and the existing two-second snapshot throttle still run before this method; denied or throttled requests do not write a snapshot.

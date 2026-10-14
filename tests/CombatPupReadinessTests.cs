@@ -22,30 +22,30 @@ public class ZNet:UnityEngine.Object
 }
 namespace TooManyLags { internal static class Plugin { internal static int Warnings; internal static void Warn(string value){Warnings++;} } }
 
-internal sealed class PupReadinessFixture:MonoBehaviour
+internal class PupReadinessFixture:MonoBehaviour
 {
     internal bool Exact=true; internal int ExactCalls;
-    private bool multiplayerManifestReceived=true,multiplayerRejected;
-    private ZNet loadedZNet;
-    private readonly Dictionary<Vector2Int,List<int>> records=new Dictionary<Vector2Int,List<int>>();
-    private readonly Dictionary<Vector2Int,Remote> multiplayerRemoteCells=new Dictionary<Vector2Int,Remote>();
-    private readonly Dictionary<Vector2Int,object> restoreSupportCells=new Dictionary<Vector2Int,object>();
-    private readonly Dictionary<Vector2Int,int> zoneTransitions=new Dictionary<Vector2Int,int>();
-    private readonly Dictionary<Vector2Int,Fast> fastColliderCells=new Dictionary<Vector2Int,Fast>();
-    private readonly Dictionary<Vector2Int,GameObject> clusters=new Dictionary<Vector2Int,GameObject>();
-    private readonly Dictionary<Vector2Int,string> cacheIds=new Dictionary<Vector2Int,string>();
-    private readonly Dictionary<GameObject,string> validatedReplacementCacheIds=new Dictionary<GameObject,string>();
-    private readonly Dictionary<Vector2Int,bool> colliderCellActive=new Dictionary<Vector2Int,bool>();
-    private readonly Dictionary<Vector2Int,HashSet<string>> fastLoadedSubclusters=new Dictionary<Vector2Int,HashSet<string>>();
-    private readonly HashSet<Vector2Int> multiplayerRemotePhysicsReady=new HashSet<Vector2Int>();
-    private readonly HashSet<Vector2Int> verifiedRemoteReplacements=new HashSet<Vector2Int>();
-    private readonly HashSet<Vector2Int> pendingWorldSaveRestores=new HashSet<Vector2Int>();
-    private readonly HashSet<Vector2Int> multiplayerPendingVanillaRestore=new HashSet<Vector2Int>();
-    private readonly HashSet<Vector2Int> loadingCells=new HashSet<Vector2Int>();
-    private int queuedColliderCount;
-    private sealed class Remote { public string cacheId="a"; }
-    private sealed class Fast { public string cacheId="a"; public GameObject root; public HashSet<string> required=new HashSet<string>(); }
-    private static readonly Vector2Int cell=new Vector2Int(0,0);
+    protected bool multiplayerManifestReceived=true,multiplayerRejected;
+    protected ZNet loadedZNet;
+    protected readonly Dictionary<Vector2Int,List<int>> records=new Dictionary<Vector2Int,List<int>>();
+    protected readonly Dictionary<Vector2Int,Remote> multiplayerRemoteCells=new Dictionary<Vector2Int,Remote>();
+    protected readonly Dictionary<Vector2Int,object> restoreSupportCells=new Dictionary<Vector2Int,object>();
+    protected readonly Dictionary<Vector2Int,int> zoneTransitions=new Dictionary<Vector2Int,int>();
+    protected readonly Dictionary<Vector2Int,Fast> fastColliderCells=new Dictionary<Vector2Int,Fast>();
+    protected readonly Dictionary<Vector2Int,GameObject> clusters=new Dictionary<Vector2Int,GameObject>();
+    protected readonly Dictionary<Vector2Int,string> cacheIds=new Dictionary<Vector2Int,string>();
+    protected readonly Dictionary<GameObject,string> validatedReplacementCacheIds=new Dictionary<GameObject,string>();
+    protected readonly Dictionary<Vector2Int,bool> colliderCellActive=new Dictionary<Vector2Int,bool>();
+    protected readonly Dictionary<Vector2Int,HashSet<string>> fastLoadedSubclusters=new Dictionary<Vector2Int,HashSet<string>>();
+    protected readonly HashSet<Vector2Int> multiplayerRemotePhysicsReady=new HashSet<Vector2Int>();
+    protected readonly HashSet<Vector2Int> verifiedRemoteReplacements=new HashSet<Vector2Int>();
+    protected readonly HashSet<Vector2Int> pendingWorldSaveRestores=new HashSet<Vector2Int>();
+    protected readonly HashSet<Vector2Int> multiplayerPendingVanillaRestore=new HashSet<Vector2Int>();
+    protected readonly HashSet<Vector2Int> loadingCells=new HashSet<Vector2Int>();
+    protected int queuedColliderCount;
+    protected sealed class Remote { public string cacheId="a"; }
+    protected sealed class Fast { public string cacheId="a"; public GameObject root; public HashSet<string> required=new HashSet<string>(); }
+    protected static readonly Vector2Int cell=new Vector2Int(0,0);
     internal PupReadinessFixture(){loadedZNet=ZNet.instance;}
     internal void Manifest(bool value){multiplayerManifestReceived=value;}
     internal void Rejected(bool value){multiplayerRejected=value;}
@@ -66,9 +66,37 @@ internal sealed class PupReadinessFixture:MonoBehaviour
         Local();Fast fast=new Fast{root=new GameObject()};fast.required.Add("part");fastColliderCells[cell]=fast;
         fastLoadedSubclusters[cell]=new HashSet<string>();if(complete)fastLoadedSubclusters[cell].Add("part");
     }
-    private bool PrepareExactCollision(Vector3 point,float radius){ExactCalls++;return Exact;}
-    private bool IsZoneTransitionNear(Vector3 point,float radius){return zoneTransitions.ContainsKey(cell)||restoreSupportCells.Count>0;}
-    private bool HasPendingCollidersForCell(Vector2Int key){return false;}
+    protected bool PrepareExactCollision(Vector3 point,float radius){ExactCalls++;return Exact;}
+    protected bool IsZoneTransitionNear(Vector3 point,float radius){return zoneTransitions.ContainsKey(cell)||restoreSupportCells.Count>0;}
+    protected bool HasPendingCollidersForCell(Vector2Int key){return false;}
+    protected bool IsZoneReplacementReady(Vector3 point,float radius)
+    {
+        for(int z=0;z<2;z++)
+        {
+            if(ZNet.instance.IsDedicated())continue;
+            if(!Exact)return false;
+        }
+        return true;
+    }
+}
+
+internal sealed class ModernPupReadinessFixture:PupReadinessFixture
+{
+    internal bool Prepared=true,ThrowPrepared; internal int PreparedCalls;
+    internal Vector2Int LastCell; internal Vector3 LastPoint; internal float LastRadius;
+    private bool HasPreparedDedicatedCollision(Vector2Int key,Vector3 position,float radius)
+    {
+        PreparedCalls++;LastCell=key;LastPoint=position;LastRadius=radius;
+        if(ThrowPrepared)throw new InvalidOperationException("fixture proxy query failure");
+        return Prepared;
+    }
+    private new bool IsZoneReplacementReady(Vector3 point,float radius)
+    {return HasPreparedDedicatedCollision(new Vector2Int(0,0),point,radius);}
+}
+
+internal sealed class ChangedPupReadinessFixture:PupReadinessFixture
+{
+    private new bool IsZoneReplacementReady(Vector3 point,float radius){return true;}
 }
 
 internal static class CombatPupReadinessTests
@@ -105,6 +133,34 @@ internal static class CombatPupReadinessTests
         Check(!bridge.ReadyPoint(point,57),"out-of-contract radius denies proof");
         pup.isActiveAndEnabled=false;Check(!bridge.ReadyPoint(point,16),"present inactive PUP denies proof");
         bridge=new NativePup(null);Check(!bridge.Present&&!bridge.Active,"explicit absent adapter is distinct from present inactive PUP");
+        Check(bridge.ReadyPoint(point,16),"absent PUP leaves native server readiness available");
+        ZNet.instance=new ZNet{Server=true,Dedicated=true};
+        ModernPupReadinessFixture modern=new ModernPupReadinessFixture();bridge=new NativePup(modern);
+        Check(bridge.ReadyPoint(point,16)&&modern.ExactCalls==0&&modern.PreparedCalls==0,"modern ordinary area does no preparation or proxy query");
+        modern.Local();modern.Prepared=false;
+        Check(!bridge.ReadyPoint(point,16)&&modern.ExactCalls==1&&modern.PreparedCalls==1,"Exact true cannot release unprepared dedicated proxies");
+        modern.Prepared=true;Check(bridge.ReadyPoint(point,16),"current dedicated proxies permit server handoff");
+        Check(modern.LastCell.x==0&&modern.LastCell.y==0&&modern.LastPoint.x==point.x&&modern.LastPoint.z==point.z&&modern.LastRadius==16,"native proxy query receives exact local cell and handoff bounds");
+        int before=modern.PreparedCalls;modern.Exact=false;
+        Check(!bridge.ReadyPoint(point,16)&&modern.PreparedCalls==before,"pending exact preparation short-circuits proxy work");
+        modern.Exact=true;modern.Recipe(null);
+        Check(!bridge.ReadyPoint(point,16)&&modern.PreparedCalls==before,"modern missing recipe retains metadata protection");
+        modern.Recipe("a");modern.Restore(true);
+        Check(!bridge.ReadyPoint(point,16)&&modern.PreparedCalls==before,"modern restore gaps still block server handoff");
+        modern.Restore(false);modern.ThrowPrepared=true;int warnings=Plugin.Warnings;
+        Check(!bridge.ReadyPoint(point,16)&&Plugin.Warnings==warnings+1,"proxy-query failure denies handoff safely");
+        modern.ThrowPrepared=false;Check(bridge.ReadyPoint(point,16),"proxy query recovers without a permanent lock");
+        modern.isActiveAndEnabled=false;before=modern.PreparedCalls;
+        Check(!bridge.ReadyPoint(point,16)&&modern.PreparedCalls==before,"inactive modern PUP performs no proxy query");
+        ZNet.instance=new ZNet();modern=new ModernPupReadinessFixture();bridge=new NativePup(modern);
+        modern.RemoteCell(true);modern.Prepared=false;
+        Check(bridge.ReadyPoint(point,16)&&modern.PreparedCalls==0,"verified client remote replacement does not use dedicated-only proof");
+        ZNet.instance=new ZNet{Server=true,Dedicated=true};modern=new ModernPupReadinessFixture();bridge=new NativePup(modern);
+        modern.RemoteCell(true);modern.Prepared=false;
+        Check(bridge.ReadyPoint(point,16)&&modern.PreparedCalls==0,"dedicated remote replacement retains its existing remote proof");
+        bool rejected=false;
+        try{new NativePup(new ChangedPupReadinessFixture());}catch(NotSupportedException){rejected=true;}
+        Check(rejected,"unknown dedicated readiness fails closed during startup binding");
         Console.WriteLine("PASS: "+checks+" production optional PUP readiness assertions; managed doubles, no guards or physics state writes.");
         return 0;
     }

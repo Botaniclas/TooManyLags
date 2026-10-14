@@ -1,3 +1,13 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.34 local diagnostic build
+
+The existing manual `tml_config owner_status` snapshot is now written once to the server's BepInEx info log before the same text is returned to the requesting client. This explicit diagnostic does not depend on EnableLogs. Unavailable/error replies use the same searchable SERVER owner status prefix. Admin authorization, current-peer checks and the existing two-second snapshot throttle still run before this method; denied or throttled requests do not write a snapshot.
+
+Only the diagnostic wrapper and build/documentation metadata changed. Ownership, loading, interaction protection, snapshot collection and the client RPC protocol are unchanged. There is no automatic log output, added polling or ordinary-runtime work. Existing clients remain compatible; install the diagnostic DLL only on the server. No live multiplayer test is claimed. Prepared locally, not published or pushed.
+
+All 21 verification groups pass on the final 1.0.34 DLL, including the unchanged 95 console/authentication assertions, snapshot/controller checks, native patch audits and inventory/loading/AI safeguards. The new wrapper was reviewed for an unconditional LogInfo call outside the EnableLogs guard and for its sole authenticated, rate-limited command caller; the fixtures do not execute a live BepInEx server log listener. Verified DLL SHA256: `DC4039A676A14597BF9634B15FDC094DF08F725DEBE4184E2CD0E4BAAF6DFA3C`.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.33 local diagnostic build
 
 The supplied server log now confirms 1.0.32, and the user confirms ServerOwnedInteractivesByDefault=true / NoServerSideSimulation=false while the delay persists. It contains no object-level TooManyLags decisions, so it cannot distinguish late authoritative takeover from late client replication or identify initial eligibility failures. The actual ValheimTune 0.7.9 DLL was inspected: ReleaseZDOS patches only measure elapsed time, while its dirty-set/sorting paths modify synchronization and mark owner-revision changes. It does not replace ReleaseNearbyZDOS ownership. The logged ServerZoneStreamBlock failure belongs to PUP FPS 1.0.36; its catch unpatches that packet-growth helper. These findings do not establish a new causal ownership bug. The PUP readiness mismatch still blocks the optional AI fallback and is not an object-grid deactivation message.

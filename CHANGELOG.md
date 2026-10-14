@@ -4,7 +4,7 @@
 ```
 - Fixes temporary player ownership during login when ServerOwnedInteractivesByDefault=true and a grid timer is pending. Eligible native assignments start at the server; grid timers and active-owner handoff safeguards remain in place.
 - Applies permanent refill ownership to initial assignments before the server instance exists. Incinerators retain their existing native-only ownership policy.
-- Adds admin-only `tml_config owner_status` snapshots to inspect actual server ownership, grid targets and loading waits without background checks.
+- Adds admin-only `tml_config owner_status` snapshots in the console and server BepInEx log, including with EnableLogs=false, without background checks.
 ```
 
 **1.0.31**

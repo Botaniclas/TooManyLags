@@ -146,6 +146,10 @@ public sealed class Container : UnityEngine.MonoBehaviour, Interactable
 {
     public enum PrivacySetting { Private, Group, Public } public PrivacySetting m_privacy=PrivacySetting.Public; public ZNetView m_rootObjectOverride; private bool m_loading; public bool InUse, OpenGranted, StackGranted, TakeGranted;
     public void Loading(bool value){m_loading=value;} public bool IsInUse(){return InUse;}
+    public int NativeRequests;
+    [MethodImpl(MethodImplOptions.NoInlining)] public void RPC_RequestOpen(long sender,long playerID) { NativeRequests++; }
+    [MethodImpl(MethodImplOptions.NoInlining)] public void RPC_RequestStack(long sender,long playerID) { NativeRequests++; }
+    [MethodImpl(MethodImplOptions.NoInlining)] public void RPC_RequestTakeAll(long sender,long playerID) { NativeRequests++; }
     [MethodImpl(MethodImplOptions.NoInlining)] public void RPC_OpenResponse(long sender,bool granted) { OpenGranted=granted; }
     [MethodImpl(MethodImplOptions.NoInlining)] public void RPC_StackResponse(long sender,bool granted) { StackGranted=granted; }
     [MethodImpl(MethodImplOptions.NoInlining)] public void RPC_TakeAllResponse(long sender,bool granted) { TakeGranted=granted; }

@@ -14,7 +14,7 @@ namespace TooManyLags.GridHandoffs
     {
         private const string RpcName = "TooManyLags_GridHandoff_1";
         private enum Message { Hello, Welcome, Commit, Status, Result, Ready, ReadyResult, Relay, ReadyLost, Loaded }
-        private sealed class Connection { internal ZNetPeer Peer; internal bool Capable, LoadedProof; internal readonly CommitFence Fence = new CommitFence(); internal readonly CapabilityGreeting Greeting = new CapabilityGreeting(); }
+        private sealed class Connection { internal ZNetPeer Peer; internal bool Capable, LoadedProof, IncineratorGuard; internal readonly CommitFence Fence = new CommitFence(); internal readonly CapabilityGreeting Greeting = new CapabilityGreeting(); }
         private sealed class Advertisement { internal ZNetPeer Peer; internal ZDOID Id; internal long Token; }
         private sealed class Readiness
         {
@@ -56,14 +56,17 @@ namespace TooManyLags.GridHandoffs
             AuthorityController.ReadinessReset = ClearReadiness;
             AuthorityController.DestinationLoaded = Loaded;
             patches = new Harmony(Plugin.Id + ".gridhandoff");
-            foreach (Type hook in new[] { typeof(ConnectPatch), typeof(PeerReadyPatch), typeof(ReceivePatch), typeof(UnloadPatch), typeof(ShutdownPatch), typeof(DisconnectPatch) })
+            foreach (Type hook in new[] { typeof(ConnectPatch), typeof(PeerReadyPatch), typeof(ReceivePatch), typeof(UnloadPatch), typeof(ShutdownPatch), typeof(DisconnectPatch), typeof(IncineratorOpenPatch), typeof(IncineratorStackPatch), typeof(IncineratorTakeAllPatch) })
                 patches.CreateClassProcessor(hook).Patch();
+            IncineratorProtection.Active = IncineratorProtection.Supported;
+            IncineratorProtection.Client = IncineratorCapable;
             started = true;
             if (ZNet.instance) foreach (ZNetPeer peer in ZNet.instance.GetPeers()) Connect(peer);
         }
         internal static void Stop()
         {
             if (patches != null) patches.UnpatchSelf(); patches = null;
+            IncineratorProtection.Active = false; IncineratorProtection.Client = null;
             FgnOwnerHandoff.CooperativeClient = null; FgnOwnerHandoff.IdentifiedSend = null; FgnOwnerHandoff.IdentifiedStatus = null;
             RequestRouter.RecipientReady = null; AuthorityController.ReadinessRemoved = null; AuthorityController.ReadinessReset = null; AuthorityController.DestinationLoaded = null; nativeCommit = null; started = false; Reset();
         }
@@ -75,6 +78,8 @@ namespace TooManyLags.GridHandoffs
             return peer != null && peer.IsReady() && peer.m_rpc != null && connections.TryGetValue(peer.m_rpc, out c) &&
                 ReferenceEquals(c.Peer, peer) && c.Capable && Current(c, peer.m_rpc);
         }
+        private static bool IncineratorCapable(ZNetPeer peer)
+        { Connection c; return Capable(peer) && connections.TryGetValue(peer.m_rpc, out c) && c.IncineratorGuard; }
         private static bool Current(Connection c, ZRpc rpc)
         { return ZNet.instance && ReferenceEquals(ZNet.instance.GetPeer(c.Peer.m_uid), c.Peer) && ReferenceEquals(c.Peer.m_rpc, rpc); }
         private static void Connect(ZNetPeer peer)
@@ -91,7 +96,7 @@ namespace TooManyLags.GridHandoffs
             double now = Time.realtimeSinceStartupAsDouble;
             if (c.Capable || !c.Greeting.Waiting(now)) { clientGreetingPending = false; return; }
             if (c.Greeting.Due(now))
-                try { Send(peer, Message.Hello, delegate(ZPackage p) { p.Write(1); }); } catch (Exception) { }
+                try { Send(peer, Message.Hello, delegate(ZPackage p) { p.Write(IncineratorProtection.Active ? 3 : 1); }); } catch (Exception) { }
         }
         internal static void Offer(ZNetPeer peer)
         {
@@ -129,8 +134,10 @@ namespace TooManyLags.GridHandoffs
                 if (server)
                 {
                     if (message == Message.Hello)
-                    { bool proof = packet.Size() >= 2 * sizeof(int) && (packet.ReadInt() & 1) != 0;
-                      bool changed = !c.Capable || (!c.LoadedProof && proof); c.Capable = true; c.LoadedProof = proof;
+                    { int flags = packet.Size() >= 2 * sizeof(int) ? packet.ReadInt() : 0;
+                      bool proof = (flags & 1) != 0, incinerator = (flags & 2) != 0;
+                      bool changed = !c.Capable || (!c.LoadedProof && proof) || c.IncineratorGuard != incinerator;
+                      c.Capable = true; c.LoadedProof = proof; c.IncineratorGuard = incinerator;
                       if (changed && Plugin.Controller != null) Plugin.Controller.CapabilityChanged(c.Peer.m_uid);
                       Send(c.Peer, Message.Welcome, delegate(ZPackage p) { p.Write(true); }); return; }
                     if (!c.Capable || Plugin.Controller == null || ZDOMan.instance == null) return;
@@ -397,6 +404,15 @@ namespace TooManyLags.GridHandoffs
         }
         [HarmonyPatch(typeof(ZNet), "OnNewConnection")]
         private static class ConnectPatch { [HarmonyPostfix] private static void Postfix(ZNetPeer peer) { Connect(peer); } }
+        [HarmonyPatch(typeof(Container), "RPC_RequestOpen")]
+        private static class IncineratorOpenPatch
+        { [HarmonyPrefix] private static bool Prefix(Container __instance, long __0, bool __runOriginal) { return __runOriginal && IncineratorProtection.Allow(__instance, __0, "RPC_OpenResponse"); } }
+        [HarmonyPatch(typeof(Container), "RPC_RequestStack")]
+        private static class IncineratorStackPatch
+        { [HarmonyPrefix] private static bool Prefix(Container __instance, long __0, bool __runOriginal) { return __runOriginal && IncineratorProtection.Allow(__instance, __0, "RPC_StackResponse"); } }
+        [HarmonyPatch(typeof(Container), "RPC_RequestTakeAll")]
+        private static class IncineratorTakeAllPatch
+        { [HarmonyPrefix] private static bool Prefix(Container __instance, long __0, bool __runOriginal) { return __runOriginal && IncineratorProtection.Allow(__instance, __0, "RPC_TakeAllResponse"); } }
         [HarmonyPatch(typeof(ZNet), "RPC_PeerInfo")]
         private static class PeerReadyPatch { [HarmonyPostfix] private static void Postfix(ZRpc rpc) { PeerReady(rpc); } }
         [HarmonyPatch(typeof(ZRoutedRpc), "HandleRoutedRPC")]

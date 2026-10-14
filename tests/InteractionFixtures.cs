@@ -3,8 +3,9 @@ public sealed class ItemStand : UnityEngine.MonoBehaviour, Interactable { }
 public sealed class ArmorStand : UnityEngine.MonoBehaviour, Interactable { }
 public sealed class TeleportWorld : UnityEngine.MonoBehaviour, Interactable { }
 public sealed class Teleport : UnityEngine.MonoBehaviour, Interactable { }
+public sealed class Vegvisir : UnityEngine.MonoBehaviour, Interactable { }
 public sealed class Incinerator : UnityEngine.MonoBehaviour
-{ private bool isInUse; public void Burning(bool value){isInUse=value;} public bool Using(){return isInUse;} }
+{ public Container m_container; private bool isInUse; public void Burning(bool value){isInUse=value;} public bool Using(){return isInUse;} }
 public sealed class Trap : UnityEngine.MonoBehaviour, Interactable { public bool Active; public bool IsActive(){return Active;} }
 public sealed class Turret : UnityEngine.MonoBehaviour, Interactable
 {

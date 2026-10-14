@@ -13,13 +13,14 @@ namespace TooManyLags
         Containers = 8192, ItemStands = 16384, Signs = 32768, Portals = 65536,
         Fermenters = 131072, Incinerators = 262144, Defenses = 524288,
         ShieldGenerators = 1048576, Pickables = 2097152, Offerings = 4194304,
-        Vehicles = 8388608, OtherInteractables = 16777216
+        Vehicles = 8388608, OtherInteractables = 16777216, WorldMarkers = 33554432
     }
 
     internal sealed class ObjectCatalog
     {
         private readonly Dictionary<int, Kinds> prefabs = new Dictionary<int, Kinds>();
-        // Two cached bits: eligible stationary default and permanent refill rule.
+        // Prefab-only eligibility: stationary, permanent refill, incinerator,
+        // and default-only world markers. No scene-loading scan here.
         private readonly Dictionary<int, byte> nativeDefaults = new Dictionary<int, byte>();
         private readonly Kinds enabled;
         private readonly HashSet<int> looseDrops = new HashSet<int>();
@@ -34,7 +35,8 @@ namespace TooManyLags
             { typeof(PrivateArea), Kinds.Wards }, { typeof(MapTable), Kinds.MapTables },
             { typeof(WispSpawner), Kinds.Wisplights }, { typeof(Container), Kinds.Containers },
             { typeof(ItemStand), Kinds.ItemStands }, { typeof(ArmorStand), Kinds.ItemStands },
-            { typeof(Sign), Kinds.Signs }, { typeof(TeleportWorld), Kinds.Portals }, { typeof(Teleport), Kinds.Portals },
+            { typeof(Sign), Kinds.Signs }, { typeof(TeleportWorld), Kinds.Portals },
+            { typeof(Teleport), Kinds.WorldMarkers }, { typeof(Vegvisir), Kinds.WorldMarkers },
             { typeof(Fermenter), Kinds.Fermenters }, { typeof(Incinerator), Kinds.Incinerators },
             { typeof(Trap), Kinds.Defenses }, { typeof(Turret), Kinds.Defenses },
             { typeof(ShieldGenerator), Kinds.ShieldGenerators }, { typeof(Pickable), Kinds.Pickables },
@@ -49,7 +51,7 @@ namespace TooManyLags
             Kinds.Incinerators, Kinds.Vehicles, Kinds.Fermenters, Kinds.ItemStands, Kinds.Containers,
             Kinds.Defenses, Kinds.ShieldGenerators, Kinds.Smelters, Kinds.CookingStations, Kinds.Fireplaces,
             Kinds.Doors, Kinds.Seats, Kinds.Beds, Kinds.Workstations, Kinds.Beehives, Kinds.SapCollectors,
-            Kinds.Wards, Kinds.MapTables, Kinds.Wisplights, Kinds.Signs, Kinds.Portals, Kinds.Pickables, Kinds.Offerings
+            Kinds.Wards, Kinds.MapTables, Kinds.Wisplights, Kinds.Signs, Kinds.Portals, Kinds.Pickables, Kinds.Offerings, Kinds.WorldMarkers
         };
         internal ObjectCatalog(Kinds enabled) { this.enabled = enabled; }
         // Separate from the live-instance cache: a template with runtime-added
@@ -58,13 +60,23 @@ namespace TooManyLags
         { return (NativeDefaultFlags(hash, scene) & 1) != 0; }
         internal bool NativeRefillDefault(int hash, ZNetScene scene)
         { return (NativeDefaultFlags(hash, scene) & 2) != 0; }
+        internal bool NativeIncineratorDefault(int hash, ZNetScene scene)
+        { return (NativeDefaultFlags(hash, scene) & 4) != 0; }
+        internal bool NativeWorldDefault(int hash, ZNetScene scene)
+        { return (NativeDefaultFlags(hash, scene) & 8) != 0; }
         private byte NativeDefaultFlags(int hash, ZNetScene scene)
         {
             byte flags; if (nativeDefaults.TryGetValue(hash, out flags)) return flags;
             GameObject prefab = scene.GetPrefab(hash); if (!prefab) return 0;
             Kinds kind = Classify(prefab);
-            bool eligible = kind != Kinds.None && (kind & enabled) != 0 && kind != Kinds.TamedAnimals && kind != Kinds.Vehicles && kind != Kinds.Incinerators &&
+            bool eligible = kind != Kinds.None && (kind & enabled) != 0 && kind != Kinds.TamedAnimals && kind != Kinds.Vehicles &&
                 prefab.GetComponentsInChildren<Rigidbody>(true).Length == 0;
+            if (eligible && kind == Kinds.Incinerators)
+            {
+                Incinerator station = prefab.GetComponent<Incinerator>();
+                eligible = IncineratorProtection.Active && IncineratorProtection.Supported && station && station.m_container &&
+                    (station.m_container.m_rootObjectOverride ? station.m_container.m_rootObjectOverride : station.m_container.GetComponentInParent<ZNetView>(true)) == prefab.GetComponent<ZNetView>();
+            }
             if (eligible)
             {
                 int inventories = 0; ZNetView root = prefab.GetComponent<ZNetView>();
@@ -73,6 +85,8 @@ namespace TooManyLags
                         (++inventories > 1 || inventory.m_privacy != Container.PrivacySetting.Public)) { eligible = false; break; }
             }
             flags = eligible ? (byte)1 : (byte)0;
+            if (eligible && kind == Kinds.Incinerators) flags |= 4;
+            if (eligible && kind == Kinds.WorldMarkers) flags |= 8;
             if (eligible && (kind == Kinds.Smelters || kind == Kinds.CookingStations || kind == Kinds.Fireplaces ||
                 kind == Kinds.Fermenters || kind == Kinds.ShieldGenerators || (kind == Kinds.Defenses && prefab.GetComponentInChildren<Turret>(true)))) flags |= 2;
             nativeDefaults.Add(hash, flags); return flags;
@@ -93,13 +107,13 @@ namespace TooManyLags
             Kinds kind;
             if (prefabs.TryGetValue(hash, out kind)) return kind;
             if (view.GetComponent<ItemDrop>()) looseDrops.Add(hash);
-            kind = Classify(view.gameObject); if ((kind & enabled) == 0) kind = Kinds.None;
+            kind = Classify(view.gameObject); if ((kind & enabled) == 0 || kind == Kinds.WorldMarkers) kind = Kinds.None;
             prefabs.Add(hash, kind); return kind;
         }
         internal static Kinds Classify(GameObject root)
         {
             ZNetView view = root.GetComponent<ZNetView>();
-            if (!view || !view.m_persistent || view.m_distant) return Kinds.None;
+            if (!view || !view.m_persistent) return Kinds.None;
             // Loose drops must obtain requester ownership to finish native
             // PickupUpdate/EatUpdate. They are not stationary field resources.
             // Leave that ownership and its retries entirely to vanilla/FGN.
@@ -108,7 +122,7 @@ namespace TooManyLags
             if (actor)
                 // Candidate only. The actual instance's s_tamed flag is checked
                 // by Register/DataChanged/Controllable; no species/component list.
-                return actor is Player ? Kinds.None : Kinds.TamedAnimals;
+                return actor is Player || view.m_distant ? Kinds.None : Kinds.TamedAnimals;
             Kinds result = Kinds.None;
             bool interactive = false;
             foreach (MonoBehaviour component in root.GetComponentsInChildren<MonoBehaviour>(true))
@@ -126,6 +140,10 @@ namespace TooManyLags
                 result |= kind;
             }
             if (!interactive) return Kinds.None;
+            // Local world interactions do not send requests to their ZDO owner.
+            // Only their existing, persistent network root gets a server default;
+            // do not manage an entire location or another child ZNetView.
+            if (view.m_distant) return result == Kinds.WorldMarkers ? Kinds.WorldMarkers : Kinds.None;
             foreach (Kinds kind in priority) if ((result & kind) != 0) return kind;
             return Kinds.OtherInteractables;
         }

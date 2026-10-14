@@ -125,27 +125,30 @@ namespace TooManyLags
                 (owner == server && request.Data.OwnerRevision == request.Revision);
         }
 
-        internal void Response(Container container, long sender, bool granted)
+        // True only for a matching, still-outstanding native refusal. Callers
+        // may discard that automatic request without changing ordinary retries.
+        internal bool Response(Container container, long sender, bool granted)
         {
-            if (!container) return;
+            if (!container) return false;
             ZNetView view = ContainerView(container);
-            if (!view || !view.IsValid()) return;
+            if (!view || !view.IsValid()) return false;
             ZDO data = view.GetZDO(); Request request;
             if (!Find(data, out request) || !ReferenceEquals(request.Container, container) ||
-                !ReferenceEquals(request.View, view) || sender != request.Source) return;
+                !ReferenceEquals(request.View, view) || sender != request.Source) return false;
             Expire(request, Time.unscaledTime);
             // Native replies carry no request token. A denial cannot revoke a
             // previously accepted matching grant. A late positive reply is only
             // useful when its exact native owner receipt is still current; this
             // does not re-pin the chest or authorize an unobserved ownership write.
-            if (request.Granted) return;
+            if (request.Granted) return false;
             if (!request.Awaiting)
             {
                 if (granted && Committed(request)) request.Granted = true;
-                return;
+                return false;
             }
             if (granted) request.Granted = true;
             else { request.Awaiting = false; request.RetryAt = Time.unscaledTime + RetryDelaySeconds; }
+            return !granted;
         }
 
         private bool Find(ZDO data, out Request request)

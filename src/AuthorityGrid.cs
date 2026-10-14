@@ -91,6 +91,9 @@ namespace TooManyLags
         private readonly HashSet<Cell> dirty = new HashSet<Cell>(), pending = new HashSet<Cell>();
         private readonly List<Cell> due = new List<Cell>();
         internal readonly List<Cell> Changes = new List<Cell>();
+        // Optional sparse object retry listener. Null during normal operation;
+        // only real player updates invoke it, never timer expiry or standing.
+        internal Action<Cell> Renewed = null;
         private readonly long server;
         internal const int CoverageCount = 56;
         private readonly Offset[][] footprints = new Offset[CoverageCount][];
@@ -263,6 +266,7 @@ namespace TooManyLags
             }
             else if (policy.Others != null) for (int i = 0; i < policy.Others.Count; i++) if (policy.Others[i].Uid == uid) { policy.Others.RemoveAt(i); break; }
             dirty.Add(cell);
+            if (add && Renewed != null) Renewed(cell);
         }
         private void Reclassify(long uid, Cell cell, FieldTier before, FieldTier after)
         {
@@ -286,6 +290,7 @@ namespace TooManyLags
                 FieldTier tier;
                 if (maskTypes[heading].TryGetValue(new Cell(cell.X - next.X, cell.Z - next.Z), out tier))
                 {
+                    if (Renewed != null) Renewed(cell);
                     if (tier != offset.Tier) Reclassify(uid, cell, offset.Tier, tier);
                     // A real update revisits deferred fields and expired server
                     // cooldowns, including unchanged parts of its footprint.
@@ -525,6 +530,12 @@ namespace TooManyLags
             // other scheduled stability barrier. Ownership is already pinned
             // by the receipt; this is only its remaining maintenance job.
             if (!node.Removed) { Invalidate(node); Queue(node, Math.Max(now, node.NotBefore)); }
+        }
+        internal void RenewRequest(AuthorityNode node, float now)
+        {
+            // The field policy retains its own deadline. A fresh request may
+            // retry a previously refused object without replaying the old job.
+            if (!node.Removed) { Invalidate(node); Queue(node, now); }
         }
         internal void Tick(List<GridPeer> peers, float now)
         {

@@ -86,6 +86,7 @@ internal static partial class IntegrationTests
         if(type!=null)root.Add((Component)Activator.CreateInstance(type));
         if(type==typeof(Character))root.Add(new Tameable());
         if(type==typeof(Smelter))root.Add(new Switch());
+        if(type==typeof(Incinerator))root.GetComponent<Incinerator>().m_container=root.Add(new Container());
         root.transform.position=new Vector3(x,0,z);
         var data=new ZDO{m_uid=new ZDOID{ID=next++},Hash=100+next,Position=root.transform.position};data.SetOwner(owner);data.Writes=0;view.Data=data;
         ZDOMan.instance.Objects.Add(data);ZNetScene.instance.Views.Add(data,view);ZNetScene.instance.Prefabs.Add(data.Hash,root);controller.Register(data,view);return data;
@@ -1587,9 +1588,9 @@ internal static partial class IntegrationTests
         try {
         InactiveNativeTemplates();Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
-        SeparateMobDefaults();DelayedReadinessInteractions();OwnerStatusSnapshot();TargetedOwnerStatusSnapshot();
+        SeparateMobDefaults();DelayedReadinessInteractions();OwnerStatusSnapshot();TargetedOwnerStatusSnapshot();WorldDefaultAssignments();
 #if GRID_PROTOCOL
-        DestinationLoadProtocol();
+        DestinationLoadProtocol();IncineratorStateProtection();
 #endif
         Console.WriteLine("PASS: "+checks+" full-controller/grid/router fixture assertions; no PUP/PupPatch plugin in fixture.");
         Console.WriteLine("LIMIT: simulated transport and Unity registry; no live multiplayer test.");

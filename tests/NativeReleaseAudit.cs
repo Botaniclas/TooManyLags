@@ -48,6 +48,7 @@ internal static class NativeReleaseAudit
                         Lifecycle(module,native);
                         MovementCadence(module,native);
                         RegionBounds(native);
+                        IncineratorState(authority, native, module);
                         SummonedRules(native, module);
                         Ownership(authority, game);
                         ComposedOwnership(authority, game);
@@ -411,6 +412,44 @@ internal static class NativeReleaseAudit
         Check(origin==2&&divisor==2,"Actual native zones no longer align with fine-cell power-of-two subdivision");
         Console.WriteLine("PASS: actual native 64m/+32 origin and active-area constants inspected; +/-2-zone broad boxes cover the audited native bounds.");
     }
+    private static void IncineratorState(Assembly runtime, AssemblyDefinition native, AssemblyDefinition production)
+    {
+        TypeDefinition station=native.MainModule.GetType("Incinerator");FieldDefinition busy=null;
+        foreach(FieldDefinition field in station.Fields)if(field.Name=="isInUse")busy=field;
+        Check(busy!=null&&!busy.IsStatic&&busy.IsPrivate&&busy.FieldType.FullName=="System.Boolean","Native incinerator busy-state contract changed");
+        Check((bool)runtime.GetType("TooManyLags.IncineratorProtection",true).GetProperty("Supported",Static).GetValue(null,null),"Production direct incinerator state getter failed to bind");
+        MethodDefinition stop=ScopeMethod(station,"StopAOE");bool clears=false;
+        foreach(var instruction in stop.Body.Instructions)
+        {
+            FieldReference field=instruction.Operand as FieldReference;
+            if(instruction.OpCode==Mono.Cecil.Cil.OpCodes.Stfld&&field!=null&&field.Name=="isInUse"&&instruction.Previous.OpCode==Mono.Cecil.Cil.OpCodes.Ldc_I4_0)clears=true;
+        }
+        Check(clears,"Native effect completion no longer releases its busy state");
+        bool begins=false,aborts=false,effectTail=false;
+        foreach(TypeDefinition nested in station.NestedTypes)
+            foreach(MethodDefinition method in nested.Methods)
+                if(method.Name=="MoveNext"&&method.HasBody)
+                    foreach(var instruction in method.Body.Instructions)
+                    {
+                        FieldReference field=instruction.Operand as FieldReference;
+                        if(instruction.OpCode==Mono.Cecil.Cil.OpCodes.Stfld&&field!=null&&field.DeclaringType.FullName=="Incinerator"&&field.Name=="isInUse")
+                        { begins|=instruction.Previous.OpCode==Mono.Cecil.Cil.OpCodes.Ldc_I4_1;aborts|=instruction.Previous.OpCode==Mono.Cecil.Cil.OpCodes.Ldc_I4_0; }
+                        if(instruction.OpCode==Mono.Cecil.Cil.OpCodes.Ldstr&&(string)instruction.Operand=="StopAOE")effectTail=true;
+                    }
+        Check(begins&&aborts&&effectTail,"Native burning lifecycle no longer matches state-based handoff protection");
+        TypeDefinition guard=production.MainModule.GetType("TooManyLags.IncineratorProtection");
+        foreach(MethodDefinition method in guard.Methods)
+        {
+            Check(method.Name!="Update"&&method.Name!="FixedUpdate","Incinerator protection must not add a polling loop");
+            if(!method.HasBody)continue;
+            foreach(var instruction in method.Body.Instructions)
+            {
+                FieldReference field=instruction.Operand as FieldReference;
+                Check(!(instruction.OpCode==Mono.Cecil.Cil.OpCodes.Stfld&&field!=null&&field.DeclaringType.FullName=="Incinerator"),"Guard writes the native incinerator state");
+            }
+        }
+        Console.WriteLine("PASS: actual native incinerator busy flag, burning/abort/effect completion and direct read-only production binding; no new polling loop.");
+    }
     private static void Targets(AssemblyDefinition authority, AssemblyDefinition native, Assembly runtime, Assembly game)
     {
         int configTargets = 0;
@@ -467,7 +506,7 @@ internal static class NativeReleaseAudit
                 PatchParameters(type, target); targets++;
             }
         }
-        Check(configTargets == 3 && targets == 50, "Unexpected Harmony target count: " + targets);
+        Check(configTargets == 3 && targets == 53, "Unexpected Harmony target count: " + targets);
     }
     private static IEnumerable<TypeDefinition> HandoffTargets(AssemblyDefinition module)
     {

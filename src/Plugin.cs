@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.37.0")]
+[assembly: AssemblyVersion("1.0.38.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.37")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.38")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.37", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.38", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -87,7 +87,7 @@ namespace TooManyLags
                 "Server only; restart required. Experimental extra protection introduced in 1.0.15: identified source handoffs, recipient-readiness checks and client relays during ownership changes. false uses the earlier handoff path. Existing inventory, refill and active-use protection stays enabled. Client value is ignored. Ignored with NoServerSideSimulation=true.").Value;
             Kinds kinds = Kinds.None;
             foreach (Kinds kind in Enum.GetValues(typeof(Kinds)))
-                if (kind != Kinds.None && kind != Kinds.Incinerators && Config.Bind("10 - Object Categories", kind.ToString(), true,
+                if (kind != Kinds.None && Config.Bind("10 - Object Categories", kind.ToString(), true,
                     ObjectDescription(kind)).Value) kinds |= kind;
             float cameraInterval = Config.Bind("08 - Camera Heading", "CameraHeadingCheckIntervalSeconds", .05f, new ConfigDescription(
                 "Server only; live console supported. Camera check interval in seconds, sent to all clients. Client value is ignored. 0.05 allows up to 20 checks per second; only coverage changes are sent. Server grid timing is in section 04.", new AcceptableValueRange<float>(.05f, 5f))).Value;
@@ -383,6 +383,8 @@ namespace TooManyLags
                 case Kinds.Signs: name = "Signs"; break;
                 case Kinds.Portals: name = "Portals"; break;
                 case Kinds.Fermenters: name = "Fermenters"; break;
+                case Kinds.Incinerators: name = "Incinerators; experimental protection and guarded clients required. Burning/open inventories discard automatic transfers; new covering player activity retries"; break;
+                case Kinds.WorldMarkers: name = "Existing network roots of dungeon entrances and Vegvisir; server default only, local objects without a ZDO have no owner"; break;
                 case Kinds.Defenses: name = "Traps and turrets"; break;
                 case Kinds.ShieldGenerators: name = "Shield generators"; break;
                 case Kinds.Pickables: name = "Pickable objects and feasts; excludes loose item drops"; break;

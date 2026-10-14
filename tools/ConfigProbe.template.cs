@@ -79,7 +79,7 @@ namespace TooManyLags
             reloaded.Config.SaveOnConfigSet = false;
             reloaded.Bind(); VerifyDefaults(reloaded.Config); reloaded.Config.Save();
             if (File.ReadAllText(path) != generated) throw new Exception("Generated config changed during actual BepInEx reload/save.");
-            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 50 settings in ten ordered English feature sections.");
+            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 52 settings in ten ordered English feature sections.");
             Console.WriteLine("PASS: camera/movement defaults remain 0.05; angular overlap defaults to 30 degrees (0-45); prior settings are preserved; object categories stay last.");
             Console.WriteLine("PASS: actual BepInEx camera and server movement ranges accept 0.05 seconds and clamp to 0.05-5.");
         }
@@ -139,9 +139,9 @@ namespace TooManyLags
             foreach (string category in new[] {
                 "Doors", "Seats", "Beds", "Workstations", "Smelters", "CookingStations", "Fireplaces", "Beehives",
                 "SapCollectors", "Wards", "MapTables", "Wisplights", "TamedAnimals", "Containers", "ItemStands", "Signs",
-                "Portals", "Fermenters", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables"
+                "Portals", "Fermenters", "Incinerators", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables", "WorldMarkers"
             }) expected.Add("10 - Object Categories/" + category, "true");
-            if (config.Count != 50) throw new Exception("Expected 50 config entries; found " + config.Count + ".");
+            if (config.Count != 52) throw new Exception("Expected 52 config entries; found " + config.Count + ".");
             int categoryNotes = 0;
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> entry in config) {
                 string key = entry.Key.Section + "/" + entry.Key.Key, value = Convert.ToString(entry.Value.BoxedValue, CultureInfo.InvariantCulture), wanted;

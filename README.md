@@ -69,6 +69,8 @@ Configure **all gameplay settings on the server** in `BepInEx/config/botanic.too
 
 **Console:** `tml_config list` lists settings; `tml_config <Key>` reads one; `tml_config <Key> <Value>` saves a change. Only admins can change server settings.
 
+**Diagnostics:** With Server-Side Simulation, admins can use `tml_config owner_status` for a one-time server snapshot of nearby ownership, grid targets and loading waits. No background checks; existing clients support the command.
+
 Intervals, delays and mob fallback limits apply immediately. Other settings, including `Enabled` and `EnableAIOwnership`, take effect after a server restart; clients receive the new mode when reconnecting.
 
 Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOwnerDebug/) as an optional client-side debugging tool to see object and mob owners, check ownership transfers and tune your configuration.

@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.32.0")]
+[assembly: AssemblyVersion("1.0.33.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.32")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.33")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.32", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.33", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -307,6 +307,12 @@ namespace TooManyLags
             if (!instance || instance.commands == null) return "TooManyLags live configuration is unavailable on this installation.";
             try { return instance.commands.Execute(command, server); }
             catch (Exception error) { return "Config request failed: " + error.GetBaseException().Message; }
+        }
+        internal static string OwnerStatus(long peer)
+        {
+            if (Controller == null) return "Server object grid unavailable; check Enabled and NoServerSideSimulation.";
+            try { return Controller.OwnerStatus(peer); }
+            catch (Exception error) { return "Owner status unavailable: " + error.GetBaseException().Message; }
         }
         private T ConfigValue<T>(string section, string key)
         {

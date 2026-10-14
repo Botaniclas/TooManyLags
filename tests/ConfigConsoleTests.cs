@@ -61,7 +61,7 @@ namespace TooManyLags
 {
     internal static class Plugin
     {
-        internal static int Calls; internal static bool Server;
+        internal static int Calls, OwnerCalls; internal static long OwnerPeer; internal static bool Server;
         internal static float Interval = .1f, Applied, Overlap = 30f, AppliedOverlap;
         internal static float CameraInterval() { return Interval; }
         internal static void ApplyCameraInterval(float interval) { Applied = interval; }
@@ -69,6 +69,7 @@ namespace TooManyLags
         internal static float CameraPredictionSeconds() { return .1f; }
         internal static void ApplyCameraSettings(float interval, float overlap, float prediction = 0f) { Applied = interval; AppliedOverlap = overlap; }
         internal static string ConfigCommand(string text, bool server) { Calls++; Server = server; return "reply"; }
+        internal static string OwnerStatus(long peer) { OwnerCalls++; OwnerPeer=peer; return "SERVER owner status"; }
         internal static int SessionFlags() { return 3; }
         internal static void ApplyServerSession(bool enabled, bool mobs) { }
         internal static void ClearClientSession() { }
@@ -84,10 +85,27 @@ internal static class ConfigConsoleTests
         try
         {
             typeof(Paths).GetMethod("SetExecutablePath", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "fixture.exe"), null, null, null });
-            Service(args[0]); Endpoint();
+            Service(args[0]); Endpoint(); OwnerEndpoint();
             Console.WriteLine("PASS: " + checks + " live-config validation, persistence, scope, guard-state and authenticated endpoint checks."); return 0;
         }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+    }
+    private static void OwnerEndpoint()
+    {
+        var peer=new ZNetPeer();ZNet.instance=new ZNet{Dedicated=true,Peer=peer};
+        ConfigConsole.Connect(peer);UnityEngine.Time.realtimeSinceStartupAsDouble=100;
+        int calls=Plugin.Calls;
+        peer.m_rpc.Receive("TooManyLags_Config_1","owner_status",1);
+        Check(Plugin.OwnerCalls==0&&peer.m_rpc.Text.Contains("admin rights"),"ownership snapshot rejects non-admin before scanning");
+        ZNet.instance.Admin=true;peer.m_rpc.Receive("TooManyLags_Config_1","owner_status",2);
+        Check(Plugin.OwnerCalls==1&&Plugin.OwnerPeer==peer.m_uid&&Plugin.Calls==calls&&peer.m_rpc.Text=="SERVER owner status","legacy config RPC selects authenticated requesting player without changing config");
+        peer.m_rpc.Receive("TooManyLags_Config_1","owner_status",3);
+        Check(Plugin.OwnerCalls==1&&peer.m_rpc.Text.Contains("two seconds"),"ownership snapshot has separate on-demand rate limit");
+        UnityEngine.Time.realtimeSinceStartupAsDouble=102;peer.m_rpc.Receive("TooManyLags_Config_1","owner_status",4);
+        Check(Plugin.OwnerCalls==2,"explicit snapshot can run again after its rate limit");
+        ZNet.instance.Peer=new ZNetPeer();UnityEngine.Time.realtimeSinceStartupAsDouble=104;
+        peer.m_rpc.Receive("TooManyLags_Config_1","owner_status",5);
+        Check(Plugin.OwnerCalls==2,"detached socket cannot inspect ownership");ConfigConsole.Reset();
     }
     private static void Service(string folder)
     {

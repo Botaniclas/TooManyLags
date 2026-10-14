@@ -249,6 +249,10 @@ public sealed class ZNetScene : UnityEngine.Object
         return Math.Abs(x)<=96 && Math.Abs(z)<=96 && x*x+z*z<112*112;
     }
 }
+public sealed class SimulationDistance
+{
+    public SimulationDistance(int near,int distant) { }
+}
 public sealed class ZDOMan
 {
     public static ZDOMan instance;
@@ -256,6 +260,8 @@ public sealed class ZDOMan
     public static long SessionID=99;
     public static long GetSessionID() { return SessionID; }
     public ZDO GetZDO(ZDOID id){foreach(var data in Objects)if(data.m_uid==id)return data;return null;}
+    public void FindSectorObjects(Vector2s zone,SimulationDistance distance,List<ZDO> found)
+    { foreach(var data in Objects) { Vector2s current=ZoneSystem.GetZone(data.Position);if(current.x==zone.x&&current.y==zone.y)found.Add(data); } }
     private sealed class ZDOPeer
     {
         public struct PeerZDOInfo {public ushort m_ownerRevision;}

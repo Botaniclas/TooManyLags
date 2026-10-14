@@ -1478,12 +1478,30 @@ internal static partial class IntegrationTests
             controller.Reset();Check("world reset keeps the geometry cache empty",nodes.Count==0);
         }
     }
+    private static void OwnerStatusSnapshot()
+    {
+        Fresh(Kinds.Doors|Kinds.Containers,defaultInteractives:true);var player=Peer(1);Peer(7,64);
+        var door=Object(typeof(Door),20,1,7);var chest=Object(typeof(Container),1,1,7);
+        var privateChest=Object(typeof(Container),21,1,7);ZNetScene.instance.FindInstance(privateChest).GetComponent<Container>().m_privacy=Container.PrivacySetting.Private;
+        var unowned=Object(typeof(Door),24,1,0);var unloaded=Object(typeof(Door),28,1,99);
+        var view=ZNetScene.instance.FindInstance(unloaded);controller.Unregister(view);ZNetScene.instance.Views.Remove(unloaded);
+        ZNetScene.instance.Ready=delegate{return false;};Tick(0);
+        int writes=door.Writes+chest.Writes+privateChest.Writes+unowned.Writes+unloaded.Writes,forced=ZDOMan.instance.Forced,area=ZNetScene.instance.AreaQueries,updates=controller.FieldUpdates;
+        string status=controller.OwnerStatus(1);
+        Check("snapshot reports actual server mode and blocking readiness",status.Contains("active=True")&&status.Contains("defaultInteractives=True")&&status.Contains("serverAreaReady=False"));
+        Check("snapshot includes unloaded native data and distinguishes initial eligibility",status.Contains("initialEligible=4")&&status.Contains("liveOnly=1")&&status.Contains("serverOwned=1")&&status.Contains("playerOwned=3")&&status.Contains("unowned=1")&&status.Contains("withoutNode=1"));
+        Check("snapshot shows current owner and field decision separately",status.Contains("owner=7; activePeer=True")&&status.Contains("candidate=")&&status.Contains("no server node"));
+        Check("snapshot reports instance and private-container eligibility without invoking handoffs",status.Contains("identity=True; controllable=False")&&status.Contains("controllable=True"));
+        Check("snapshot does not transfer, send RPCs/data, poll fields or alter use",writes==door.Writes+chest.Writes+privateChest.Writes+unowned.Writes+unloaded.Writes&&forced==ZDOMan.instance.Forced&&player.m_rpc.Calls==0&&controller.FieldUpdates==updates);
+        Check("snapshot performs only its one explicit native readiness query",ZNetScene.instance.AreaQueries==area+1&&status.Length<6000);
+        controller.Reset();Check("snapshot safely reports world teardown",controller.OwnerStatus(1).Contains("No initialized server world"));
+    }
     public static void Main()
     {
         try {
         Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
-        SeparateMobDefaults();DelayedReadinessInteractions();
+        SeparateMobDefaults();DelayedReadinessInteractions();OwnerStatusSnapshot();
 #if GRID_PROTOCOL
         DestinationLoadProtocol();
 #endif

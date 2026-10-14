@@ -55,6 +55,7 @@ namespace TooManyLags
         internal static float CameraPredictionSeconds() { return .1f; }
         internal static void ApplyCameraSettings(float value, float overlap, float prediction = 0f) { Applied = value; AppliedOverlap = overlap; AppliedPrediction = prediction; }
         internal static string ConfigCommand(string text, bool server) { return "fixture"; }
+        internal static string OwnerStatus(long peer) { return "fixture"; }
         internal static int Flags = 3, SessionApplies, SessionClears, SessionReports;
         internal static bool SessionEnabled, SessionMobs;
         internal static bool SessionFail = false;

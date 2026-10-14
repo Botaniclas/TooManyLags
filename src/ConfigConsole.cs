@@ -61,6 +61,7 @@ namespace TooManyLags
             if (peer.m_server && ZNet.instance && !ZNet.instance.IsDedicated()) { cameraNetwork = null; cameraProtocol = 0; }
             double window = -100; int requests = 0;
             double nextCameraRequest = -100;
+            double nextOwnerStatus = -100;
             peer.m_rpc.Register<int>(CameraRequestRpc, delegate(ZRpc rpc, int protocol)
             {
                 ZNet current = ZNet.instance;
@@ -83,8 +84,15 @@ namespace TooManyLags
                 if (++requests > 4 || id <= 0 || command == null || command.Length > 256) return;
                 // Same authenticated socket identity/admin list as vanilla's
                 // remote admin commands; never trust a player name or ZDO owner.
-                string reply = peer.m_socket != null && current.IsAdmin(peer.m_socket.GetHostName()) ?
-                    Plugin.ConfigCommand(command, true) : "Server configuration requires admin rights (adminlist.txt).";
+                string reply;
+                if (peer.m_socket == null || !current.IsAdmin(peer.m_socket.GetHostName()))
+                    reply = "Server configuration requires admin rights (adminlist.txt).";
+                else if (String.Equals(command, "owner_status", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (now < nextOwnerStatus) reply = "Owner status is limited to one snapshot every two seconds.";
+                    else { nextOwnerStatus = now + 2; reply = Plugin.OwnerStatus(peer.m_uid); }
+                }
+                else reply = Plugin.ConfigCommand(command, true);
                 try { rpc.Invoke(ReplyRpc, reply, id); } catch (Exception) { }
             });
             peer.m_rpc.Register<string, int>(ReplyRpc, delegate(ZRpc rpc, string reply, int id)

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Globalization;
 using UnityEngine;
 
 namespace TooManyLags
@@ -379,6 +381,58 @@ namespace TooManyLags
             NativeNode node; return active && !failed && nodes.TryGetValue(id, out node) && ObjectCatalog.OwnerRequest(node.Kind, method) && node.Identity() ? node : null;
         }
         internal bool IsActive { get { return active && !failed; } }
+        // Explicit admin request only. No polling/counters in ownership hot paths.
+        // Inspect one native sector, including data without a server instance.
+        internal string OwnerStatus(long requester)
+        {
+            var output = new StringBuilder("SERVER owner status: active=" + IsActive + "; defaultInteractives=" + defaultInteractives +
+                "; keepOnExit=" + keepOnExit + "; " + compatibility.State());
+            if (!ReferenceEquals(world, ZDOMan.instance) || !network || !scene || indexed == null || catalog == null)
+                return output.Append("\nNo initialized server world.").ToString();
+            ZNetPeer peer = network.GetPeer(requester);
+            if (peer == null || !peer.IsReady()) return output.Append("\nRequesting player unavailable.").ToString();
+            ZDO character = peer.m_characterID.IsNone() ? null : world.GetZDO(peer.m_characterID);
+            Vector3 point = character != null && character.IsValid() ? character.GetPosition() : peer.GetRefPos();
+            if (!Finite(point)) return output.Append("\nPlayer position unavailable.").ToString();
+            Vector2s zone = ZoneSystem.GetZone(point);
+            var data = new List<ZDO>(); world.FindSectorObjects(zone, new SimulationDistance(0, 0), data);
+            int eligible = 0, serverOwned = 0, playerOwned = 0, unowned = 0, unloaded = 0, liveOnly = 0;
+            var samples = new List<ZDO>(); var otherSamples = new List<ZDO>();
+            foreach (ZDO item in data)
+            {
+                if (item == null || !item.IsValid() || !item.Persistent || BakedObjects.IsBaked(item)) continue;
+                bool initial = catalog.NativeDefault(item.GetPrefab(), scene);
+                NativeNode node; bool live = nodes.TryGetValue(item.m_uid, out node) && ReferenceEquals(node.Data, item);
+                if (!initial && (!live || node.Kind == Kinds.TamedAnimals || node.Kind == Kinds.Vehicles)) continue;
+                if (initial) eligible++; else liveOnly++;
+                long current = item.GetOwner();
+                if (current == server) serverOwned++; else if (current == 0) unowned++; else playerOwned++;
+                if (!live) unloaded++;
+                Cell cell; if (!Cell.At(item.GetPosition().x, item.GetPosition().z, cellSize, out cell)) continue;
+                if ((!initial || (current != server && indexed.Grid.Candidate(cell) == 0)) && samples.Count < 8) samples.Add(item);
+                else if (otherSamples.Count < 8) otherSamples.Add(item);
+            }
+            output.Append("\nzone=(").Append(zone.x).Append(',').Append(zone.y).Append("); server=").Append(server).Append("; player=").Append(requester)
+                .Append("; serverAreaReady=").Append(scene.IsAreaReady(point)).Append("; loadedNodes=").Append(nodes.Count)
+                .Append("\nsector ZDOs=").Append(data.Count).Append("; initialEligible=").Append(eligible).Append("; liveOnly=").Append(liveOnly)
+                .Append("; serverOwned=").Append(serverOwned).Append("; playerOwned=").Append(playerOwned).Append("; unowned=").Append(unowned).Append("; withoutNode=").Append(unloaded);
+            foreach (ZDO item in otherSamples) { if (samples.Count == 8) break; samples.Add(item); }
+            foreach (ZDO item in samples)
+            {
+                Vector3 p = item.GetPosition(); Cell cell; Cell.At(p.x, p.z, cellSize, out cell);
+                GameObject prefab = scene.GetPrefab(item.GetPrefab()); string name = prefab ? prefab.name : item.GetPrefab().ToString();
+                if (name.Length > 100) name = name.Substring(0, 100);
+                ZNetPeer current = network.GetPeer(item.GetOwner());
+                bool ownerActive = current != null && current.IsReady() && ZNetScene.InActiveArea(p, ZoneSystem.GetZone(current.GetRefPos()));
+                output.Append("\n").Append(name).Append(" @(").Append(p.x.ToString("0.0", CultureInfo.InvariantCulture)).Append(',').Append(p.z.ToString("0.0", CultureInfo.InvariantCulture))
+                    .Append("): owner=").Append(item.GetOwner()).Append("; activePeer=").Append(ownerActive).Append("; initialEligible=").Append(catalog.NativeDefault(item.GetPrefab(), scene))
+                    .Append("; grid=").Append(indexed.Grid.Owner(cell)).Append("; candidate=").Append(indexed.Grid.Candidate(cell)).Append("; timer=").Append(indexed.Grid.Remaining(cell, Time.unscaledTime).ToString("0.0", CultureInfo.InvariantCulture));
+                NativeNode node; if (nodes.TryGetValue(item.m_uid, out node) && ReferenceEquals(node.Data, item)) output.Append(node.OwnerStatus());
+                else output.Append("; no server node");
+            }
+            if (output.Length > 5600) { output.Length = 5600; output.Append("\n[truncated]"); }
+            return output.ToString();
+        }
         internal static Action<ZDO> ReadinessRemoved { get; set; }
         internal static Action ReadinessReset { get; set; }
         internal static Func<ZDO, long, bool> DestinationLoaded { get; set; }
@@ -485,6 +539,14 @@ namespace TooManyLags
             private ushort loadRevision;
             private Vector3 loadPosition;
             internal bool ServerStation { get { return serverStation; } }
+            internal string OwnerStatus()
+            {
+                float now = Time.unscaledTime;
+                return "; kind=" + Kind + "; identity=" + Identity() + "; controllable=" + Controllable() + "; managed=" + Managed + "; retainedExit=" + (owner.keepOnExit && coveredBefore && owner.indexed.Grid.Candidate(Cell) == 0) +
+                    "; inUse=" + (Data.GetInt(ZDOVars.s_inUse) == 1 || (container && container.IsInUse())) +
+                    "; refillLease=" + (now < refillUntil) + "; openingLease=" + (now < inventoryUntil) +
+                    "; requests=" + Requests + "; jobDelay=" + Math.Max(0, NotBefore - now).ToString("0.0", CultureInfo.InvariantCulture);
+            }
             internal bool Summoned { get { return Kind == Kinds.TamedAnimals && (ObjectCatalog.IsSummoned(tameable) || FriendlyCreatures.IsFriendly(actor)); } }
             internal NativeNode(AuthorityController owner, ZDO data, ZNetView view, Kinds kind, Cell cell, Tameable animal, Character character)
             {

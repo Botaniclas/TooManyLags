@@ -1,4 +1,4 @@
-# TooManyLags - FiresGhettoNetworking Addon 1.0.31 local review build
+# TooManyLags - FiresGhettoNetworking Addon 1.0.31
 
 Scope: only the new inventory/loading corrections and their startup/performance behavior. Field shapes, configured delays, mob policies and PUP guards are unchanged. Native IsAreaReady checks native zone/object loading; it does not prove PUP collider readiness.
 
@@ -19,7 +19,7 @@ An initial control query may arrive before its queued native object data or scen
 - 100 waiting objects across 24 unchanged polls: zero extra peer checks or proof queries before retry is due. Server-area completion resumes at the next poll; positive startup replies also bypass a configured five-second polling interval.
 - Pending overlap, local open use, opening leases, native opening and server-area recovery retire obsolete proofs. Wrong/stale replies, unavailable instances, data floors, owner/revision/position changes, unloading and disconnect remain covered. The native inventory bridge is unchanged from the reviewed 1.0.30 correction.
 
-All 21 verification groups pass on the final build, including 109 native inventory checks, 24,950 controller/grid/router checks with 13,272 actual-protocol additions, 23,101 native-release assertions with the same 50 Harmony targets per audited provider, and existing startup, camera, combat, fallback and optional PUP checks. Verified DLL SHA256: `25A12F936862127AA41C90D98905ADB8F95150611759D6D984FD34BA162C589A`. No live multiplayer test or measured in-game FPS improvement is claimed. Prepared locally; not published or pushed.
+All 21 verification groups pass on the final build, including 109 native inventory checks, 24,950 controller/grid/router checks with 13,272 actual-protocol additions, 23,101 native-release assertions with the same 50 Harmony targets per audited provider, and existing startup, camera, combat, fallback and optional PUP checks. Verified DLL SHA256: `25A12F936862127AA41C90D98905ADB8F95150611759D6D984FD34BA162C589A`. No live multiplayer test or measured in-game FPS improvement is claimed.
 
 ---
 

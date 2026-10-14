@@ -1,5 +1,11 @@
 # Changelog
 
+**Unreleased**
+```
+- Fixes temporary player ownership during login when ServerOwnedInteractivesByDefault=true and a grid timer is pending. Eligible native assignments start at the server; grid timers and active-owner handoff safeguards remain in place.
+- Applies permanent refill ownership to initial assignments before the server instance exists. Incinerators retain their existing native-only ownership policy.
+```
+
 **1.0.31**
 ```
 - Fixes unused chests remaining server-owned after a completed native inventory handoff loses its response. Open inventories and pending openings remain protected.

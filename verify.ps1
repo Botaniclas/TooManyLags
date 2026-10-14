@@ -58,7 +58,7 @@ if(Test-Path -LiteralPath $authorityRegionBenchmarkPath){
     }
 }
 [ordered]@{
-    version='1.0.31';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
+    version='1.0.32';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
     benchmark=$authorityBenchmark;regionBenchmark=$authorityRegionBenchmark;import=$authorityImport;artifactHashes=$authorityHashes;liveMultiplayerTested=$false
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Encoding UTF8
 Write-Output ('Verified release SHA256: '+$authorityVerifiedHash)

@@ -1,3 +1,31 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.32 local test build
+
+## Initial server ownership
+
+With ServerOwnedInteractivesByDefault=true, the native assignment selector now uses the server default while a covered field has not settled or its settled recipient is unavailable. This prevents vanilla from assigning a temporary player owner that subsequently needs a loading-gated player-to-server handoff. The field's deadline, candidate and settled owner are not changed. Settled available player fields still win, and the ordinary native assignment cadence remains unchanged.
+
+The current 1.0.31 controller/transpiler was exercised separately: unowned doors, public chests and workstations outside pending coverage selected the server immediately despite an unready scene; valid active player owners remained unchanged for 65 simulated seconds; an unowned pending overlap instead selected a vanilla player and remained there while loading blocked the subsequent transfer. These are managed fixtures, not proof of the live session's complete cause. The baseline executable is preserved in work/NativeLoginAudit-2026-10-14 outside this repository.
+
+Permanent refill stations also select the server during native assignment, including before a live server instance exists. Eligibility and the refill rule are stored as two bits in the existing prefab cache. A non-refillable trap still uses its settled player field. Incinerators, whose running actions are deliberately unmanaged, are excluded consistently even before registration.
+
+No existing active owner is forcibly stolen. Native active-owner checks, source consent, open inventory/opening protection, refill/use leases and the existing loading checks remain effective. In particular, an object already owned by an active client can still wait for server-area loading; this build does not bypass that safeguard or claim to remove every possible login delay. No client protocol or PUP/physics hook changes are introduced. Server-only update; existing 1.0.31 clients remain supported.
+
+## Cost and focused checks
+
+The change adds no object polling, world/zone scan, timer, RPC, completed-object cache or per-assignment allocation. Flags use the existing prefab cache; identifying a turret adds a child-component lookup once per previously unclassified defense prefab. The native selector still performs no loading scan or source handoff RPC. The active default is still captured at startup and disabled in player-simulation mode.
+
+The targeted controller suite passes 11,853 assertions, including first-owner selection for doors/chests/workstations in solo and overlapping pending fields, unchanged deadlines, 65 seconds of incomplete loading without temporary player ownership, normal takeover after loading, permanent refill rules before instance creation, active-owner retention, exclusions, region release and the existing inventory, camera, field-exit and interaction safeguards. No live multiplayer test is claimed.
+
+All 21 final verification groups pass. The actual-protocol controller fixture passes 25,125 assertions, including the unchanged 13,272 loading/protocol checks; the native audit retains 50 exact Harmony targets and passes 23,119 assertions per audited provider. Native inventory, combat, camera, player-simulation fallback, startup and optional PUP checks also pass. Defaults are unchanged apart from the generated version header. Verified DLL SHA256: `9A68ABFD8FA205F589B55B1A6B5C1847D6F407ED3E313D9812C11D256FD5D6D4`. Prepared locally; not published or pushed.
+
+## FiresGhettoNetworking ownership comparison
+
+The actual cached FiresGhettoNetworking 1.5.53 DLL was decompiled for this comparison. Broad ServerOwnershipPatches replaces the native nearby-sector assignment pass: persistent eligible ZDOs without an active owner select the server whenever a connected peer covers the sector. It has no IsAreaReady or IsZoneLoaded gate in that ownership path, and it also retains active player owners. It is a periodic data-assignment rule, not an instance-loading event. TooManyLags' early selector keeps vanilla's loop and adopts the same initial server target for its narrower eligible category set.
+
+Selective ServerOwnershipPatchesV3 caches Character prefabs and optionally Ship prefabs. Its extra active-player takeover requires an actual server instance and excludes tamed creatures; ordinary interactables are instead returned from server to player ownership. Neither assignment method checks Container.IsInUse/RPC_RequestOpen or the TooManyLags refill/use leases. Other FiresGhettoNetworking subsystems still have their own safeguards. The creature-only forced takeover is therefore not copied into the interactive grid, and both competing ownership options remain disabled by the existing session policy.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.31
 
 Scope: only the new inventory/loading corrections and their startup/performance behavior. Field shapes, configured delays, mob policies and PUP guards are unchanged. Native IsAreaReady checks native zone/object loading; it does not prove PUP collider readiness.

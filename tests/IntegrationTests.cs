@@ -673,6 +673,8 @@ internal static partial class IntegrationTests
         patcher.Patch(AccessTools.Method(typeof(ZDOMan),"ReleaseNearbyZDOS"),transpiler:new HarmonyMethod(AccessTools.Method(typeof(OwnershipPatch),"Transpiler")));
         try
         {
+            Cell initialCell;
+            Check("native default fixture maps its actual object cell",Cell.At(1,1,out initialCell));
             Fresh(Kinds.Doors,defaultInteractives:true);var player=Peer(1);var door=Object(typeof(Door),40,1,0);
             ZNetScene.instance.Ready=delegate{return false;};Tick(0);int queries=ZNetScene.instance.AreaQueries;
             ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
@@ -700,7 +702,7 @@ internal static partial class IntegrationTests
             Fresh(Kinds.Doors,defaultInteractives:true);player=Peer(1);var other=Peer(2,64);door=Object(typeof(Door),1,1,0);
             ZNetScene.instance.Ready=delegate{return false;};Tick(0);
             ZDOMan.instance.ReleaseNearbyZDOS(other.Position,2);
-            Check("unsettled grid preserves native assignment instead of skipping timer",door.GetOwner()==2);
+            Check("unsettled grid initializes server default without settling its timer",door.GetOwner()==99&&Index().Grid.Owner(initialCell)==0);
             var unowned=Object(typeof(Door),2,1,0);Tick(2);ZDOMan.instance.ReleaseNearbyZDOS(other.Position,2);
             Check("settled active player field overrides native peer pass",unowned.GetOwner()==1);
             var staticPiece=Object(null,3,1,0);ZDOMan.instance.ReleaseNearbyZDOS(other.Position,2);
@@ -720,6 +722,49 @@ internal static partial class IntegrationTests
             Check("public unowned inventory can get its initial server owner",chest.GetOwner()==99);
             Check("private inventory retains native initial owner",privateChest.GetOwner()==1);
             Check("tames vehicles and rigid bodies retain existing loading path",tame.GetOwner()==1&&vehicle.GetOwner()==1&&physics.GetOwner()==1);
+
+            // A slow scene must never turn the first pending field into a
+            // player->server takeover. Initial ownership is not a field grant.
+            foreach (bool shared in new[] { false, true })
+            {
+                Fresh(Kinds.Doors|Kinds.Containers|Kinds.Workstations,defaultInteractives:true);
+                player=Peer(1);if(shared)Peer(2);
+                var initial=new[]{Object(typeof(Door),1,1,0),Object(typeof(Container),2,1,0),Object(typeof(CraftingStation),3,1,0)};
+                ZNetScene.instance.Ready=delegate{return false;};Tick(0);
+                int areaQueries=ZNetScene.instance.AreaQueries;
+                ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+                foreach(var data in initial)Check("pending login starts directly at server: "+shared,data.GetOwner()==99&&data.Writes==1);
+                Check("pending login neither settles timer nor requests a source handoff",Index().Grid.Owner(initialCell)==0&&player.m_rpc.Calls==0&&ZNetScene.instance.AreaQueries==areaQueries);
+                Tick(1);
+                foreach(var data in initial)Check("initial default does not advance field timer",data.GetOwner()==99&&data.Writes==1);
+                Tick(2);
+                Check("field timer still settles at its configured deadline",Index().Grid.Owner(initialCell)==(shared?99:1));
+                for(int i=3;i<=65;i++){Tick(i);ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);}
+                foreach(var data in initial)Check("slow scene never creates a temporary native player owner",data.GetOwner()==99&&data.Writes==1);
+                ZNetScene.instance.Ready=delegate{return true;};Tick(66);
+                foreach(var data in initial)Check("loaded field retains intended settled owner",data.GetOwner()==(shared?99:1)&&data.Writes==(shared?1:2));
+            }
+
+            // Native assignment can precede the server instance entirely.
+            // The registered prefab, not a populated live-node table, decides.
+            Fresh(Kinds.Smelters|Kinds.CookingStations|Kinds.Fireplaces|Kinds.Fermenters|Kinds.ShieldGenerators|Kinds.Defenses|Kinds.Incinerators,
+                defaultInteractives:true,refillStations:true);
+            player=Peer(1);Tick(0);Tick(2);
+            var earlyStations=new List<ZDO>();
+            foreach(Type type in new[]{typeof(Smelter),typeof(CookingStation),typeof(Fireplace),typeof(Fermenter),typeof(ShieldGenerator),typeof(Turret)})
+            {
+                var data=Object(type,1,1,0);var instance=ZNetScene.instance.FindInstance(data);
+                controller.Unregister(instance);ZNetScene.instance.Views.Remove(data);earlyStations.Add(data);
+            }
+            var nativeIncinerator=Object(typeof(Incinerator),2,1,0);var nativeView=ZNetScene.instance.FindInstance(nativeIncinerator);
+            controller.Unregister(nativeView);ZNetScene.instance.Views.Remove(nativeIncinerator);
+            var nativeTrap=Object(typeof(Trap),3,1,0);Tick(3);
+            ZNetScene.instance.Ready=delegate{return false;};int prefabAreaQueries=ZNetScene.instance.AreaQueries;
+            ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+            foreach(var data in earlyStations)Check("permanent station starts at server even before its instance exists",data.GetOwner()==99&&data.Writes==1);
+            Check("non-refillable trap retains settled player grid rule",nativeTrap.GetOwner()==1);
+            Check("excluded incinerator retains native initial ownership before registration",nativeIncinerator.GetOwner()==1);
+            Check("prefab-only assignment adds no loading scan or takeover RPC",ZNetScene.instance.AreaQueries==prefabAreaQueries&&player.m_rpc.Calls==0);
         }
         finally {patcher.UnpatchSelf();}
     }

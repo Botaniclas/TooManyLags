@@ -358,13 +358,18 @@ namespace TooManyLags
             Vector3 position = data.GetPosition(); Cell cell;
             if (!Finite(position) || !Cell.At(position.x, position.z, cellSize, out cell)) return nativeOwner;
             NativeNode node;
-            if (nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data) && (!node.Identity() || !node.Controllable() || node.UseProtected())) return nativeOwner;
+            bool known = nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data);
+            if (known && (!node.Identity() || !node.Controllable() || node.UseProtected())) return nativeOwner;
+            if (refillStations && catalog.NativeRefillDefault(data.GetPrefab(), scene)) return server;
             long candidate = indexed.Grid.Candidate(cell), target = indexed.Grid.Owner(cell);
             if (candidate != 0)
             {
-                // Pending fields retain their timer. Settled fields choose their
-                // existing owner, even if another native peer's pass found them.
-                if (target == 0 || !AvailableOwner(target, position)) return nativeOwner;
+                // A first native assignment uses the configured server default
+                // until a field settles. Never give an arbitrary native player
+                // this temporary owner and require a loading-gated takeover.
+                // This selects the initial owner; it does not settle the timer
+                // or steal a still-active native owner.
+                if (target == 0 || !AvailableOwner(target, position)) return server;
                 return target;
             }
             return server;

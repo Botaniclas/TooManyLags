@@ -53,6 +53,8 @@ namespace UnityEngine
             foreach (GameObject child in Children) result.AddRange(child.GetComponentsInChildren<T>(inactive));
             return result.ToArray();
         }
+        public T GetComponentInChildren<T>(bool inactive) where T : Component
+        { T[] values=GetComponentsInChildren<T>(inactive);return values.Length==0?null:values[0]; }
     }
     public class Transform
     {

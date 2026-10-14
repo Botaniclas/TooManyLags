@@ -19,7 +19,8 @@ namespace TooManyLags
     internal sealed class ObjectCatalog
     {
         private readonly Dictionary<int, Kinds> prefabs = new Dictionary<int, Kinds>();
-        private readonly Dictionary<int, bool> nativeDefaults = new Dictionary<int, bool>();
+        // Two cached bits: eligible stationary default and permanent refill rule.
+        private readonly Dictionary<int, byte> nativeDefaults = new Dictionary<int, byte>();
         private readonly Kinds enabled;
         private readonly HashSet<int> looseDrops = new HashSet<int>();
         internal bool IsLooseDrop(int hash) { return looseDrops.Contains(hash); }
@@ -54,11 +55,15 @@ namespace TooManyLags
         // Separate from the live-instance cache: a template with runtime-added
         // components must never poison the existing grid's classification.
         internal bool NativeDefault(int hash, ZNetScene scene)
+        { return (NativeDefaultFlags(hash, scene) & 1) != 0; }
+        internal bool NativeRefillDefault(int hash, ZNetScene scene)
+        { return (NativeDefaultFlags(hash, scene) & 2) != 0; }
+        private byte NativeDefaultFlags(int hash, ZNetScene scene)
         {
-            bool eligible; if (nativeDefaults.TryGetValue(hash, out eligible)) return eligible;
-            GameObject prefab = scene.GetPrefab(hash); if (!prefab) return false;
+            byte flags; if (nativeDefaults.TryGetValue(hash, out flags)) return flags;
+            GameObject prefab = scene.GetPrefab(hash); if (!prefab) return 0;
             Kinds kind = Classify(prefab);
-            eligible = kind != Kinds.None && (kind & enabled) != 0 && kind != Kinds.TamedAnimals && kind != Kinds.Vehicles &&
+            bool eligible = kind != Kinds.None && (kind & enabled) != 0 && kind != Kinds.TamedAnimals && kind != Kinds.Vehicles && kind != Kinds.Incinerators &&
                 prefab.GetComponentsInChildren<Rigidbody>(true).Length == 0;
             if (eligible)
             {
@@ -67,7 +72,10 @@ namespace TooManyLags
                     if ((inventory.m_rootObjectOverride ? inventory.m_rootObjectOverride : inventory.GetComponentInParent<ZNetView>()) == root &&
                         (++inventories > 1 || inventory.m_privacy != Container.PrivacySetting.Public)) { eligible = false; break; }
             }
-            nativeDefaults.Add(hash, eligible); return eligible;
+            flags = eligible ? (byte)1 : (byte)0;
+            if (eligible && (kind == Kinds.Smelters || kind == Kinds.CookingStations || kind == Kinds.Fireplaces ||
+                kind == Kinds.Fermenters || kind == Kinds.ShieldGenerators || (kind == Kinds.Defenses && prefab.GetComponentInChildren<Turret>(true)))) flags |= 2;
+            nativeDefaults.Add(hash, flags); return flags;
         }
         // Native staff companions use these unsummoning rules. Starts-tamed
         // also describes ordinary hens; following can be cleared by commands.

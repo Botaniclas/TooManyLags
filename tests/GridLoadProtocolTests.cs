@@ -41,6 +41,36 @@ internal static partial class IntegrationTests
     { TooManyLags.GridHandoffs.Protocol.Start(typeof(FiresGhettoNetworkMod.FiresGhettoNetworkMod).Assembly); }
     private static void GridHello(ZNetPeer peer,bool modern)
     { GridReceive(peer,GridPacket(0,modern?(Action<ZPackage>)delegate(ZPackage p){p.Write(1);}:null)); }
+    private static void RefillProtocolLease()
+    {
+        Fresh(Kinds.Smelters,defaultInteractives:true);Peer(1);
+        var serverPeer=new ZNetPeer{Uid=99,m_server=true};ZNet.instance.Peers.Add(serverPeer);
+        var data=Object(typeof(Smelter),1,1,1);
+        bool dedicated=ZNet.instance.Dedicated;long session=ZDOMan.SessionID;var previous=ZNet.instance.ServerPeer;
+        GridStart();
+        try
+        {
+            ZNet.instance.Dedicated=false;ZDOMan.SessionID=1;ZNet.instance.ServerPeer=serverPeer;
+            GridReceive(serverPeer,GridPacket(1,delegate(ZPackage p){p.Write(true);}));
+            int commits=0;
+            typeof(TooManyLags.GridHandoffs.Protocol).GetField("nativeCommit",BindingFlags.Static|BindingFlags.NonPublic).SetValue(null,
+                (Action<ZRpc,ZDOID,long>)delegate{commits++;});
+            var receive=typeof(TooManyLags.GridHandoffs.Protocol).GetMethod("ReceiveRequest",BindingFlags.Static|BindingFlags.NonPublic);
+            var request=new ZRoutedRpc.RoutedRPCData{m_targetPeerID=1,m_targetZDO=data.m_uid,m_senderPeerID=1,m_methodHash="RPC_AddOre".GetStableHashCode(),m_parameters=new ZPackage()};
+            Action<long> commit=delegate(long token){GridReceive(serverPeer,GridPacket(2,delegate(ZPackage p){p.Write(token);p.Write(data.m_uid);p.Write(2L);p.Write((uint)data.OwnerRevision);}));};
+            Check("owned refill RPC stays on the native client path",(bool)receive.Invoke(null,new object[]{request}));
+            Time.unscaledTime=.5f;commit(1);Check("client refill lease blocks a source handoff",commits==0);
+            Time.unscaledTime=.75f;receive.Invoke(null,new object[]{request});
+            Time.unscaledTime=1.74f;commit(2);Check("another client refill renews the full one-second hold",commits==0);
+            request.m_methodHash="RPC_Repair".GetStableHashCode();receive.Invoke(null,new object[]{request});
+            Time.unscaledTime=1.75f;commit(3);Check("client refill hold expires at one second and unrelated RPCs do not extend it",commits==1);
+        }
+        finally
+        {
+            ZNet.instance.Dedicated=dedicated;ZDOMan.SessionID=session;ZNet.instance.ServerPeer=previous;
+            TooManyLags.GridHandoffs.Protocol.Stop();
+        }
+    }
     private static void DestinationLoadProtocol()
     {
         int initial=checks;Plugin.Warnings.Clear();

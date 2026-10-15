@@ -1,3 +1,15 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.44 renewing refill protection
+
+Refill ownership protection is reduced from 10 seconds to 1 second in all three existing paths: the server grid node, the cooperative source-client protocol, and the local agent used without Server-Side Simulation. Each matching observed refill RPC replaces the deadline with current unscaled time plus one second, so repeated inserts keep renewing protection. No new loop, timer, RPC, allocation path or object lookup is added. Inventory/opening, active-use, burning, recipient readiness and stale-owner forwarding rules are unchanged. Update both server and clients; older clients still enforce their compiled 10-second source hold.
+
+The full-controller/grid/router fixture passes 29,438 assertions. Regressions cover repeated server-observed inserts across a settled overlap, exact one-second expiry in red/forward fields, native solo-owner release, and an authenticated client source commit. A non-refill repair request does not extend the client refill hold. The player-simulation runtime fixture also exercises renewal across the original expiry and release exactly one second after the latest refill.
+
+All 22 verification groups pass, including the player-simulation runtime, real BepInEx generation/reload, native ownership/interaction contracts and 54 exact Harmony targets. Imported AI source hashes remain unchanged. Verified DLL SHA256: `8B56F02D5182AF7B182B11E1EFF731C2135FFE7CD5793D2E41BED67A0B7107C5`. Complete results are in verification.json.
+
+This is a local candidate; no live multiplayer test, publication or push is claimed.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.43 optional static grid
 
 UseGridForStaticBuildings defaults to false. When enabled with Server-Side Simulation, eligible non-interactive building pieces share the existing cell index, transition timers, guarded ownership path, overlap policy and unload cleanup. Static server-default ownership is independent of interactive defaults. The conservative existing static filter is reused: a persistent, non-distant network root with Piece and fixed-position WearNTear, no Rigidbody and no additional behaviour components. The previous server-only static manager remains in use when the optional grid is off. No second object index, periodic scan or timer is introduced.

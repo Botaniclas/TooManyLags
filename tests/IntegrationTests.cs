@@ -175,16 +175,16 @@ internal static partial class IntegrationTests
         ZNetScene.instance.FindInstance(chest).OnInvoke=delegate(long target,string method,object[] args){
             Check("disabled mode retains native inventory acquisition",target==7&&method=="RPC_RequestOpen"&&(long)args[0]==0);inventoryQueries++;
         };
-        Tick(.1f);Tick(1);
+        Tick(.1f);Time.unscaledTime=.5f;stationNode.Refilled("RPC_AddFuel".GetStableHashCode());Tick(1);
         Check("distant source can hand off without a TML capability greeting",handoffs==1&&controller.Cooperative.Pending(door)&&door.GetOwner()==7);
         Check("open inventory and refill lease remain protected with the extra guard off",chest.GetOwner()==7&&station.GetOwner()==7&&inventoryQueries==0);
-        Import(door,1,false);Tick(2);uint state;
+        Time.unscaledTime=1.5f;stationNode.Refilled("RPC_AddFuel".GetStableHashCode());Import(door,1,false);Tick(2);uint state;
         Check("native receipt completes without adding recipient-readiness work",door.GetOwner()==1&&!controller.Cooperative.Pending(door)&&!controller.TryRecipientState(door,1,out state));
         ZDOMan.instance.MarkSent(1,door);
         Check("stable interaction stays on the native fast path",!controller.Router.TryHandle(ZRoutedRpc.instance,Request(door,"UseDoor",1),false)&&ZRoutedRpc.instance.Remote.Count==0);
-        chest.Use=0;Tick(3);
+        Time.unscaledTime=2.5f;stationNode.Refilled("RPC_AddFuel".GetStableHashCode());chest.Use=0;Tick(3);
         Check("closed inventory requests native consent instead of a forced owner write",inventoryQueries==1&&chest.GetOwner()==7&&chest.Writes==0);
-        Check("ten-second refill lease is independent of the experimental mode",station.GetOwner()==7&&station.Writes==0);
+        Check("renewed one-second refill lease is independent of the experimental mode",station.GetOwner()==7&&station.Writes==0);
     }
     private static void CooperativeAndRouting()
     {
@@ -276,9 +276,11 @@ internal static partial class IntegrationTests
 
         Fresh(Kinds.Smelters);Peer(1);station=Object(typeof(Smelter));Tick(0);Tick(2);ZDOMan.instance.MarkSent(1,station);
         var refill=Request(station,"RPC_AddOre",1);Tick(3);controller.Router.TryHandle(ZRoutedRpc.instance,refill,false);
-        Peer(2,1,1);Tick(4);Tick(6);Check("grid refill mode protects observed active inserts",station.GetOwner()==1);
-        Tick(12);Check("observed refill lease lasts ten seconds",station.GetOwner()==1);
-        Tick(13);Check("refill lease expiry permits intended grid change",station.GetOwner()==99);
+        Peer(2,1,1);
+        for(int time=4;time<=6;time++){Time.unscaledTime=time-.25f;controller.Router.TryHandle(ZRoutedRpc.instance,refill,false);Tick(time);}
+        Check("grid refill mode protects repeated active inserts",station.GetOwner()==1);
+        Tick(6.74f);Check("observed refill lease lasts one second after the last refill",station.GetOwner()==1);
+        Tick(6.75f);Check("refill lease expiry permits intended grid change",station.GetOwner()==99);
 
         var refillKinds=Kinds.Smelters|Kinds.CookingStations|Kinds.Fireplaces|Kinds.Fermenters|Kinds.ShieldGenerators|Kinds.Defenses;
         foreach(bool permanent in new[]{false,true})
@@ -919,8 +921,8 @@ internal static partial class IntegrationTests
 
         Fresh(Kinds.Smelters,directional:true,pattern:GridCoveragePattern.Rounded7x7);Peer(1);var station=Object(typeof(Smelter));Tick(0);ZDOMan.instance.MarkSent(1,station);
         var refill=Request(station,"RPC_AddOre",1);Tick(1);controller.Router.TryHandle(ZRoutedRpc.instance,refill,false);
-        Peer(2);Tick(2);Tick(10.99f);Check("red overlap retains full observed refill lease",station.GetOwner()==1);
-        Tick(11);Check("refill expiry permits zero-timer settled overlap",station.GetOwner()==99);
+        Peer(2);Tick(1.2f);Tick(1.99f);Check("red overlap retains full one-second refill lease",station.GetOwner()==1);
+        Tick(2);Check("refill expiry permits zero-timer settled overlap",station.GetOwner()==99);
 
         Fresh(Kinds.TamedAnimals,directional:true,pattern:GridCoveragePattern.Rounded7x7);Peer(1);var animal=Object(typeof(Character));animal.Tamed=true;controller.DataChanged(animal);Tick(0);
         var tameable=ZNetScene.instance.FindInstance(animal).GetComponent<Tameable>();tameable.m_commandable=true;animal.Follow="player";Peer(2);Tick(1);
@@ -1056,8 +1058,8 @@ internal static partial class IntegrationTests
         Check("forward zero timer cannot steal an open chest",dataChest.GetOwner()==7&&requests==0);dataChest.Use=0;controller.DataChanged(dataChest);Tick(.3f);
         Check("closed forward chest starts native consent request",requests==1&&dataChest.GetOwner()==7);Import(dataChest,99,false);Tick(.4f);Check("forward inventory still waits for exact native grant",dataChest.GetOwner()==99);controller.InventoryResponse(chest,7,true);Tick(.5f);Check("forward chest finishes after actual receipt and grant",dataChest.GetOwner()==1);
 
-        Fresh(Kinds.Smelters,cellSize:4,pattern:GridCoveragePattern.Rounded5x5,directional:true);Peer(1);var station=Object(typeof(Smelter),1,9);Tick(0);Tick(.2f);ZDOMan.instance.MarkSent(1,station);Tick(1);controller.Router.TryHandle(ZRoutedRpc.instance,Request(station,"RPC_AddOre",1),false);Peer(2);Tick(1.2f);Tick(10.99f);
-        Check("forward overlap preserves observed refill lease",station.GetOwner()==1);Tick(11);Check("forward refill lease expires normally",station.GetOwner()==99);
+        Fresh(Kinds.Smelters,cellSize:4,pattern:GridCoveragePattern.Rounded5x5,directional:true);Peer(1);var station=Object(typeof(Smelter),1,9);Tick(0);Tick(.2f);ZDOMan.instance.MarkSent(1,station);Tick(1);controller.Router.TryHandle(ZRoutedRpc.instance,Request(station,"RPC_AddOre",1),false);Peer(2);Tick(1.2f);Tick(1.99f);
+        Check("forward overlap preserves observed refill lease",station.GetOwner()==1);Tick(2);Check("forward refill lease expires normally",station.GetOwner()==99);
         Fresh(Kinds.TamedAnimals,cellSize:4,pattern:GridCoveragePattern.Rounded5x5,directional:true);Peer(1);var tame=Object(typeof(Character),1,9);tame.Tamed=true;controller.DataChanged(tame);Tick(0);Tick(.2f);
         Check("idle tame uses same forward timer",tame.GetOwner()==1);var tameable=ZNetScene.instance.FindInstance(tame).GetComponent<Tameable>();tameable.m_commandable=true;tame.Follow="player";Peer(2);Tick(.3f);Tick(.6f);
         Check("forward timer leaves following tame protected",tame.GetOwner()==1);tame.Follow="";tameable.m_saddle=tameable.gameObject.Add(new Sadle{User=true});Tick(.7f);Check("forward timer leaves ridden tame protected",tame.GetOwner()==1);tameable.m_saddle.User=false;Tick(.8f);Check("idle tame follows settled forward overlap",tame.GetOwner()==99);
@@ -1196,7 +1198,7 @@ internal static partial class IntegrationTests
 
         Fresh(Kinds.Smelters,nativeSolo:true,directional:true);first=Peer(1,512);station=Object(typeof(Smelter),513,1,1);Tick(0);ZDOMan.instance.MarkSent(1,station);
         controller.Router.TryHandle(ZRoutedRpc.instance,Request(station,"RPC_AddOre",1),false);
-        Check("observed refill lease protects native solo owner",!controller.Persistent(station));Time.unscaledTime=10;
+        Check("observed refill lease protects native solo owner",!controller.Persistent(station));Time.unscaledTime=1;
         Check("refill lease expires without forcing an ownership change",controller.Persistent(station));
 
         Fresh(Kinds.Doors,nativeSolo:true,directional:true);first=Peer(1,512);far=Peer(2,512);var source=Peer(7,576);FiresGhettoNetworkMod.FgnVersionGate.Match=true;door=Object(typeof(Door),513);
@@ -1591,7 +1593,7 @@ internal static partial class IntegrationTests
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
         SeparateMobDefaults();DelayedReadinessInteractions();OwnerStatusSnapshot();TargetedOwnerStatusSnapshot();WorldDefaultAssignments();KinematicDoorDefaults();
 #if GRID_PROTOCOL
-        DestinationLoadProtocol();IncineratorStateProtection();
+        RefillProtocolLease();DestinationLoadProtocol();IncineratorStateProtection();
 #endif
         Console.WriteLine("PASS: "+checks+" full-controller/grid/router fixture assertions; no PUP/PupPatch plugin in fixture.");
         Console.WriteLine("LIMIT: simulated transport and Unity registry; no live multiplayer test.");

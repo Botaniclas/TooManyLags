@@ -32,8 +32,9 @@ internal static class HandoffRuntimeTests
     {
         Reset();var view=Object(Kinds.Smelters);Plugin.Local.Refilling(view.Data,"RPC_AddOre".GetStableHashCode());long n=++token;
         Commit(Plugin.Local,view.Data,Kinds.Smelters,n);Check(Result()==2,"Refill lease starts immediately");
-        Time.unscaledTime=9.99f;Commit(Plugin.Local,view.Data,Kinds.Smelters,n);Check(Result()==2,"Refill protected for full ten seconds");
-        Time.unscaledTime=10f;Commit(Plugin.Local,view.Data,Kinds.Smelters,n);Check(Result()==1,"Expired refill protection releases promptly");
+        Time.unscaledTime=.75f;Plugin.Local.Refilling(view.Data,"RPC_AddOre".GetStableHashCode());
+        Time.unscaledTime=1.74f;Commit(Plugin.Local,view.Data,Kinds.Smelters,n);Check(Result()==2,"Repeated refill renews protection for one second");
+        Time.unscaledTime=1.75f;Commit(Plugin.Local,view.Data,Kinds.Smelters,n);Check(Result()==1,"Expired refill protection releases promptly");
         Reset();view=Object(Kinds.TamedAnimals);var animal=view.gameObject.Add<Tameable>();var actor=view.gameObject.Add<Character>();var tameAi=view.gameObject.Add<MonsterAI>();tameAi.Init();actor.Tamed=true;n=++token;
         animal.Rider=true;Commit(Plugin.Local,view.Data,Kinds.TamedAnimals,n);Check(Result()==2,"Rider retains ownership");
         animal.Rider=false;animal.m_commandable=true;view.Data.Set(ZDOVars.s_follow,"player");Commit(Plugin.Local,view.Data,Kinds.TamedAnimals,n);Check(Result()==2,"Following retains ownership");

@@ -775,7 +775,7 @@ namespace TooManyLags
             }
             internal void Refilled(int method)
             {
-                if (ObjectCatalog.RefillRequest(Kind, method)) { refillOwner = Data.GetOwner(); refillRevision = Data.OwnerRevision; refillAt = Time.unscaledTime; refillUntil = refillAt + 10f; }
+                if (ObjectCatalog.RefillRequest(Kind, method)) { refillOwner = Data.GetOwner(); refillRevision = Data.OwnerRevision; refillAt = Time.unscaledTime; refillUntil = refillAt + 1f; }
                 if (method == "RPC_RequestOpen".GetStableHashCode() || method == "RPC_RequestStack".GetStableHashCode() || method == "RPC_RequestTakeAll".GetStableHashCode())
                 { inventoryOwner = Data.GetOwner(); inventoryAt = Time.unscaledTime; inventoryUntil = inventoryAt + RequestRouter.InventoryRequestLifetime; }
             }

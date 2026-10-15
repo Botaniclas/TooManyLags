@@ -452,7 +452,7 @@ namespace TooManyLags.GridHandoffs
                 if (data.IsOwner() && view.gameObject.activeInHierarchy)
                 {
                     if (ObjectCatalog.RefillRequest(kind.Kind, request.m_methodHash))
-                    { Lease lease = refills.GetOrCreateValue(data); lease.Until = Time.unscaledTime + 10; }
+                    { Lease lease = refills.GetOrCreateValue(data); lease.Until = Time.unscaledTime + 1f; }
                     return true;
                 }
             }

@@ -245,7 +245,7 @@ namespace TooManyLags.PlayerSimulation
         {
             if (ZNet.IsSinglePlayer || !ObjectCatalog.IsRefillMethod(method) || data == null || !data.IsOwner() || !ZNetScene.instance) return;
             ZNetView view = ZNetScene.instance.FindInstance(data); if (!view) return;
-            if (ObjectCatalog.RefillRequest(State(view).Kind, method)) refill[data.m_uid] = new Lease { Revision = data.OwnerRevision, Until = Time.unscaledTime + 10f };
+            if (ObjectCatalog.RefillRequest(State(view).Kind, method)) refill[data.m_uid] = new Lease { Revision = data.OwnerRevision, Until = Time.unscaledTime + 1f };
         }
         internal bool MayForward(ZDO data, int method)
         {

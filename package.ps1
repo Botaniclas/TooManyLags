@@ -46,6 +46,14 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'botanic.toomanylags.fgnaddon.cf
 Copy-Item -LiteralPath $authorityDll -Destination (Join-Path $authorityOutput ($authorityStem+'.dll')) -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README-Thunderstore.md') -Destination (Join-Path $authorityOutput ($authorityStem+'-README.md')) -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'VALIDATION.md') -Destination (Join-Path $authorityOutput ($authorityStem+'-Verification.md')) -Force
+$authorityWiki=Join-Path $PSScriptRoot 'docs\wiki'
+if(Test-Path -LiteralPath $authorityWiki -PathType Container){
+    $authorityWikiOutput=Join-Path $authorityOutput ($authorityStem+'-Wiki')
+    New-Item -ItemType Directory -Force -Path $authorityWikiOutput | Out-Null
+    $authorityWikiFiles=@(Get-ChildItem -LiteralPath $authorityWiki -Filter '*.md' -File | Select-Object -ExpandProperty FullName)
+    Copy-Item -LiteralPath $authorityWikiFiles -Destination $authorityWikiOutput -Force
+    Compress-Archive -LiteralPath $authorityWikiFiles -DestinationPath (Join-Path $authorityOutput ($authorityStem+'-wiki.zip')) -Force
+}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $authorityArchive=[IO.Compression.ZipFile]::OpenRead($authorityZip)
 try{

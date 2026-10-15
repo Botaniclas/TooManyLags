@@ -42,6 +42,7 @@ Thanks for helping improve the mod. Have fun, and enjoy smoother adventures toge
 
 - With `ServerOwnedInteractivesByDefault=true`, eligible new or abandoned stationary interactives receive their initial server owner during vanilla assignment, including while grid timers are pending. Settled grid fields take priority; permanent refill ownership stays server-owned. Active owners keep the existing guarded handoff path; vehicles and animals keep their existing loading safeguards.
 - A camera-directed grid covers nearby interactive objects and idle tamed animals. One player's fields go to that player; overlapping fields go to the server. Stationary players still count. KeepOwnershipOnCellExit=true keeps the rear cutout; false covers the full shape with a red 3x3 centre and the orange row ahead.
+- Optional `UseGridForStaticBuildings` (off) includes eligible non-interactive building pieces in the same grid. Static and interactive server defaults are independent. PUP FPS remains optional; baked originals/clusters stay excluded until ordinary pieces are restored.
 - `CameraDirectionOverlapDegrees` sets base angular overlap between adjacent directions: **30° by default**, adjustable from **0–45°** on the server. At 0°, one base direction is active; at 45°, two. Clients receive the server's angle; character-heading fallback uses it too. Changed coverage triggers the next server pass immediately; unchanged coverage does no field work. Isolated players use vanilla ownership by default.
 - `CameraRotationPredictionSeconds` prepares fields in your turning direction **0.1 seconds ahead** by default; **0 disables**, range 0–0.5. Faster turns can add one direction, up to three in total, while keeping your current coverage. Newly added fields use the **inner/red delay** (default **0 seconds**); existing fields keep their delays. Brief reversals are damped; usage protection stays active. Set it on the server; updated clients receive it automatically.
 - Hostile Mobs use AI target ownership with attack protection, consent, retries and safe server fallback. Outdated handoffs retry the latest target without a six-second lock; attacks finish before the target is checked again. Update server and clients together. Hostile summons follow the same rules. Friendly magic summons, including skeletons, spirit animals and roots, stay outside both the grid and mob ownership policy. Ordinary tamed animals still use the grid; active controls retain their safeguards.
@@ -72,6 +73,10 @@ https://github.com/user-attachments/assets/8555a985-7696-4cc6-865a-5115c3695f72
 
 Configure **all gameplay settings on the server** in `BepInEx/config/botanic.toomanylags.fgnaddon.cfg`, including `Enabled`, `EnableAIOwnership` and camera settings. Clients follow the server when connecting; their local copies are ignored. Only `EnableLogs` is local. Config descriptions state their scope; object categories share one note at the bottom.
 
+Start with **Simulation Settings** (interactive, then static objects) and **General**. Other sections have tuned defaults; adjust only when needed.
+
+Simulation settings and `KeepOwnershipOnCellExit` distribute CPU load between clients and server. Once the grid acquires nearby objects locally, **perceived latency is unchanged**.
+
 **Console:** `tml_config list` lists settings; `tml_config <Key>` reads one; `tml_config <Key> <Value>` saves a change. Only admins can change server settings.
 
 **Diagnostics:** With Server-Side Simulation, admins can use `tml_config owner_status` for a one-time ownership/loading snapshot in the console and server's `BepInEx/LogOutput.log`, even with `EnableLogs=false`. Add part of a prefab name, e.g. `tml_config owner_status torch`, to inspect that object type. Shows missing instances and native creation/zone readiness. No background checks; existing clients support the command.
@@ -80,16 +85,20 @@ Intervals, delays and mob fallback limits apply immediately. Other settings, inc
 
 Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOwnerDebug/) as an optional client-side debugging tool to see object and mob owners, check ownership transfers and tune your configuration.
 
+**Grid settings:** Defaults should work well. Larger grids are recommended for poor connections, giving handoffs more lead time and covering more objects.
+
 | Feature | Defaults and options |
 |---|---|
 | Simulation mode | `NoServerSideSimulation=false`: full Server-Side Simulation. Set true for weak server CPUs; transfers stay between players. |
+| Interactive defaults | `ServerOwnedInteractivesByDefault=false`: vanilla default; true selects a server default outside player fields. |
+| Static defaults/grid | `ServerOwnedStaticBuildingsByDefault=false`: vanilla default; true selects the server. `UseGridForStaticBuildings=false`: optional nearby client sharing. Both require Server-Side Simulation. |
 | Grid | 4-metre cells, rounded 7x7. Also 6.4/8/16 metres and square 3x3/rounded 5x5. 6.4 metres divides each vanilla zone into 10x10 cells. 4 metres requires a rounded grid. |
 | Direction and delays | Camera direction; overlap 0–45°, default 30 (`CameraDirectionOverlapDegrees`, server-controlled, live console supported). Inner 0s, forward 0.2s, outer 3s. Full-grid mode uses 2s. Missing camera data uses character heading. |
 | Server overlap cooldown | `ServerOverlapCooldownSeconds=1`: after an overlapping field switches to the server, keep it there and ignore new grid ownership decisions for 1s. Then the next movement/heading update can request it again; expiry alone causes no transfer. 0 disables. Requires Server-Side Simulation. |
 | Handoff protection | Always enabled with Server-Side Simulation; no config switch. A saved `EnableExperimentalInteractionProtection=false` is ignored. Inventory, refill and active-use safeguards remain active. |
 | Checks | Movement and camera each default to 0.05s; both support 0.05–5s. Changed camera coverage gets send priority and wakes the next server pass, without another interval wait. Network delivery and protected handoffs can still add delay. |
-| Leaving fields | Keep ownership: on. In directional mode, when only one player remains, red fields transfer automatically; forward/outer fields keep their owner until that player's next cell or heading-sector change. Fully vacated fields retain ownership. Native release still applies. |
-| Categories and overrides | 26 object groups; separate static, default-interactive, default-mob and permanent-refill server ownership. These overrides default off and are ignored with NoServerSideSimulation=true. |
+| Leaving fields | `KeepOwnershipOnCellExit=true`: retain vacated fields, gradually sharing simulation. false returns to server defaults and requires Server-Side Simulation plus at least one interactive/static server default. Native region release still applies. |
+| Categories and overrides | 26 interactive/mob groups at the bottom; optional default-mob and permanent-refill server ownership. Overrides default off and require Server-Side Simulation. |
 | Hostile Mobs | AI ownership on; server fallback target ping 200ms, other-player distance 6 metres. Without Server-Side Simulation, fallback uses a lower-latency nearby player. |
 
 ## Requirements and installation
@@ -99,7 +108,7 @@ Use [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOw
 2. Configure the server using the supplied config in `BepInEx/config/`, or let first startup generate it. Client gameplay settings need no adjustment.
 3. Restart. **TooManyLags automatically applies all required FiresGhettoNetworking settings at startup; no manual FiresGhettoNetworking configuration is needed.** These overrides apply to the current session only. Your saved FiresGhettoNetworking config and other FiresGhettoNetworking settings remain unchanged.
 
-**Updating:** Object categories now use `10 - Object Categories`. Use the supplied config and reapply your custom values. Existing configs retain their saved check intervals; set both to `0.05` to use the new defaults. Update all clients too.
+**Updating:** Use the supplied new config and reapply custom values. Interactive/static defaults move to Simulation Settings; exit retention moves to General. `ServerOwnedStaticBuildings` is renamed `ServerOwnedStaticBuildingsByDefault`. Update server and clients for the optional static grid.
 
 **PUP FPS is optional.**
 

@@ -47,7 +47,7 @@ internal static partial class IntegrationTests
     private static bool loadingObserver;
     private static ZNetPeer observer;
     private static void Check(string label,bool result){checks++;if(!result)throw new Exception(label);}
-    private static void Fresh(Kinds kinds,bool statics=false,bool defaultInteractives=false,bool refillStations=false,float cellSize=8,GridCoveragePattern pattern=GridCoveragePattern.Square3x3,bool keepOnExit=true,bool directional=false,float innerDelay=0,float outerDelay=3,float checkIntervalSeconds=1,float forwardDelay=.2f,bool nativeSolo=false,float overlapCooldown=0,bool defaultMobs=false)
+    private static void Fresh(Kinds kinds,bool statics=false,bool defaultInteractives=false,bool refillStations=false,float cellSize=8,GridCoveragePattern pattern=GridCoveragePattern.Square3x3,bool keepOnExit=true,bool directional=false,float innerDelay=0,float outerDelay=3,float checkIntervalSeconds=1,float forwardDelay=.2f,bool nativeSolo=false,float overlapCooldown=0,bool defaultMobs=false,bool staticGrid=false)
     {
         if(controller!=null)controller.Reset();
         next=1;failures=0;Time.time=Time.unscaledTime=0;
@@ -62,7 +62,7 @@ internal static partial class IntegrationTests
         FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=true;
         FiresGhettoNetworkMod.HelmOwnership.ServerOwnsShips=false;
         var fgn=new FiresGhettoNetworkMod.FiresGhettoNetworkMod();
-        controller=new AuthorityController(kinds,2,new CompatibilityBridge(fgn),delegate{failures++;},statics,delegate{failures++;},checkIntervalSeconds,defaultInteractives,refillStations,cellSize,pattern,keepOnExit,directional,innerDelay,outerDelay,forwardDelay,overlapCooldown,defaultMobs);
+        controller=new AuthorityController(kinds,2,new CompatibilityBridge(fgn),delegate{failures++;},statics,delegate{failures++;},checkIntervalSeconds,defaultInteractives,refillStations,cellSize,pattern,keepOnExit,directional,innerDelay,outerDelay,forwardDelay,overlapCooldown,defaultMobs,staticGrid);
         Plugin.Controller=controller;
     }
     private static void Tick(float now){Time.time=Time.unscaledTime=now;controller.Tick();Check("controller active",controller.IsActive&&failures==0);}
@@ -1585,6 +1585,7 @@ internal static partial class IntegrationTests
     }
     public static void Main()
     {
+        StaticGridCoverage();
         try {
         InactiveNativeTemplates();Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();

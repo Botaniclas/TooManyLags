@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.42.0")]
+[assembly: AssemblyVersion("1.0.43.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.42")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.43")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.42", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.43", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -38,22 +38,25 @@ namespace TooManyLags
         private void Awake()
         {
             instance = this;
-            bool enabled = Config.Bind("01 - General", "Enabled", true, "Server only; restart required. Enable TooManyLags for this server session. Clients follow the server; their local value is ignored. Handoff safeguards are always active with Server-Side Simulation.").Value;
+            bool defaultInteractives = Config.Bind("00 - Simulation Settings - Interactive Objects", "ServerOwnedInteractivesByDefault", false,
+                "Server only; restart required. Simulation settings and exit retention distribute CPU load; once the grid acquires nearby objects locally, perceived latency is unchanged. true: server default for managed interactions/idle tamed animals; false: vanilla default. Requires Server-Side Simulation.").Value;
+            bool buildings = Config.Bind("00 - Simulation Settings - Static Objects", "ServerOwnedStaticBuildingsByDefault", false,
+                "Server only; restart required. true: server default for eligible non-interactive building pieces; false: vanilla default. UseGridForStaticBuildings lets nearby clients share their simulation. Requires Server-Side Simulation.").Value;
+            bool staticGrid = Config.Bind("00 - Simulation Settings - Static Objects", "UseGridForStaticBuildings", false,
+                "Server only; restart required. Include eligible static building pieces in the existing grid. Overlaps use the server; empty fields follow KeepOwnershipOnCellExit. PUP FPS is optional; baked clusters are excluded. Requires Server-Side Simulation.").Value;
+            bool enabled = Config.Bind("01 - General", "Enabled", true, "Server only; restart required. Enable TooManyLags for this server session. Clients follow the server; their local value is ignored. Handoff safeguards are always active with Server-Side Simulation. Later sections contain tuned defaults; adjust only when needed.").Value;
             bool enableAI = Config.Bind("09 - AI Mob Ownership", "EnableAIOwnership", true,
                 "Server only; restart required. Enable target-based Hostile Mob ownership. Clients follow the server; their local value is ignored. Attacks block transfers until attack end.").Value;
             bool noSimulation = Config.Bind("01 - General", "NoServerSideSimulation", false,
                 "Server only; restart required. Recommended for dedicated servers with a weak or already overloaded CPU. true: disable FiresGhettoNetworking Server-Side Simulation and keep simulation on players; shared fields prefer the player with lower latency. Functionality is limited: no server ownership, and server-owned building/default/refill options are ignored. false: full Server-Side Simulation mode.").Value;
             logs = Config.Bind("01 - General", "EnableLogs", false, "Local to this server/client. Live console: tml_config EnableLogs true/false. Enable extra diagnostic messages. Startup failures are always reported.").Value;
             Diagnostics = logs;
-            bool buildings = Config.Bind("02 - Static Buildings", "ServerOwnedStaticBuildings", false, "Server only; restart required. Keep eligible non-interactive building pieces server-owned. Independent of the interactive grid. Ignored with NoServerSideSimulation=true.").Value;
-            bool defaultInteractives = Config.Bind("03 - Default Ownership and Overrides", "ServerOwnedInteractivesByDefault", false,
-                "Server only; restart required. true: server default outside player coverage, with grid transfers nearby. false: vanilla ownership when players are alone or far apart. KeepOwnershipOnCellExit preserves ownership after a field is vacated. Ignored with NoServerSideSimulation=true.").Value;
             bool refillStations = Config.Bind("03 - Default Ownership and Overrides", "ServerOwnedRefillStations", false,
                 "Server only; restart required. Keep enabled refill stations server-owned, even inside player fields: smelters, cooking/fire stations, fermenters, shield generators and turrets. false: grid rules with 10 seconds of protection after observed refilling. Ignored with NoServerSideSimulation=true.").Value;
             bool defaultMobs = Config.Bind("03 - Default Ownership and Overrides", "ServerOwnedMobsByDefault", false,
                 "Server only; restart required. Give idle tamed animals a server default outside player fields, even when the interactive default is off. Hostile Mobs without a player target use guarded server handoffs (requires EnableAIOwnership); player targets keep normal target ownership. Friendly magic summons, bosses and active riding/following stay excluded. Requires Server-Side Simulation; can increase server CPU usage.").Value;
             float cellSize = Config.Bind("04 - Grid Settings", "GridCellSizeMeters", 4f, new ConfigDescription(
-                "Server only; restart required. Cell size in metres: 4, 6.4, 8 or 16. 6.4 divides each vanilla zone into 10x10 cells. 4 metres requires Rounded5x5/Rounded7x7. Does not change vanilla/PUP loading distances.",
+                "Server only; restart required. Defaults should work well. Larger grids are recommended for poor connections: they give handoffs more lead time, covering more objects. Cell size in metres: 4, 6.4, 8 or 16; 4 requires a rounded grid. Does not change vanilla/PUP loading distances.",
                 new AcceptableValueList<float>(4f, 6.4f, 8f, 16f))).Value;
             ConfigEntry<string> patternConfig = Config.Bind("04 - Grid Settings", "GridCoveragePattern", "Rounded7x7", new ConfigDescription(
                 "Server only; restart required. Base shape: Square3x3 is square; Rounded5x5/Rounded7x7 are rounded. With KeepOwnershipOnCellExit=true, directional mode omits central and far rear fields; false keeps the complete shape. Overlaps use the server, or a lower-latency player with NoServerSideSimulation=true.",
@@ -81,11 +84,12 @@ namespace TooManyLags
             float interval = Config.Bind("04 - Grid Settings", IntervalConfig.Key, IntervalConfig.Default, new ConfigDescription(
                 "Server only; live console supported. Check interval in seconds for movement and fallback heading. Received camera-coverage changes request an immediate pass. Only changed coverage requests fields; existing timers/handoffs also progress while standing.", new AcceptableValueRange<float>(.05f, 5f))).Value;
             if (Single.IsNaN(interval) || Single.IsInfinity(interval)) interval = IntervalConfig.Default;
-            bool keepOnExit = Config.Bind("04 - Grid Settings", "KeepOwnershipOnCellExit", true,
-                "Server only; restart required. true: keep ownership after everyone leaves. In directional mode, when one player remains, only red fields transfer automatically; orange/yellow wait for that player's next cell/heading change. Completed player fields are cached until relevant changes/unloading. false: complete directional footprint with a red 3x3 centre, normal departure transfers and no cache. Native release and pinned stations still apply.").Value;
+            ConfigEntry<bool> retention = Config.Bind("01 - General", "KeepOwnershipOnCellExit", true,
+                "Server only; restart required. true: keep vacated fields, gradually sharing CPU load between clients/server. false: return to server defaults; requires Server-Side Simulation and an interactive/static server default. false also keeps the full directional footprint. Native region release still applies.");
+            bool keepOnExit = retention.Value;
             Kinds kinds = Kinds.None;
             foreach (Kinds kind in Enum.GetValues(typeof(Kinds)))
-                if (kind != Kinds.None && Config.Bind("10 - Object Categories", kind.ToString(), true,
+                if (kind != Kinds.None && kind != Kinds.StaticBuildings && Config.Bind("10 - Object Categories", kind.ToString(), true,
                     ObjectDescription(kind)).Value) kinds |= kind;
             float cameraInterval = Config.Bind("08 - Camera Heading", "CameraHeadingCheckIntervalSeconds", .05f, new ConfigDescription(
                 "Server only; live console supported. Camera check interval in seconds, sent to all clients. Client value is ignored. 0.05 allows up to 20 checks per second; only coverage changes are sent. Server grid timing is in section 04.", new AcceptableValueRange<float>(.05f, 5f))).Value;
@@ -103,6 +107,12 @@ namespace TooManyLags
             if (!Application.isBatchMode || !enabled) return;
             enabledMod = true;
             playerSimulation = noSimulation;
+            if (!keepOnExit && !ConfigCommands.CanReturnOnExit(!playerSimulation, defaultInteractives, buildings))
+            {
+                keepOnExit = true;
+                retention.Value = true;
+                Logger.LogWarning("KeepOwnershipOnCellExit forced to true: cell returns require Server-Side Simulation and server-default ownership for interactive or static objects.");
+            }
             try
             {
                 bool activated = FgnSessionSettings.Apply(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config,
@@ -119,7 +129,7 @@ namespace TooManyLags
             }
             if (playerSimulation) return;
             if (!gridProtocol) return;
-            if (!buildings && kinds == Kinds.None) return;
+            if (!buildings && !staticGrid && kinds == Kinds.None) return;
             try
             {
                 PluginInfo fgn = networkPlugin;
@@ -128,7 +138,7 @@ namespace TooManyLags
                 // Bind required client protocol signatures before installing
                 // any hooks; changed APIs are reported even when logs are off.
                 new FgnOwnerHandoff(bridge.Assembly, 1L);
-                Controller = new AuthorityController(kinds, delay, bridge, RuntimeFault, buildings, RequestFault, interval, defaultInteractives, refillStations, cellSize, pattern, keepOnExit, directional, innerDelay, outerDelay, forwardDelay, overlapCooldown, defaultMobs);
+                Controller = new AuthorityController(kinds, delay, bridge, RuntimeFault, buildings, RequestFault, interval, defaultInteractives, refillStations, cellSize, pattern, keepOnExit, directional, innerDelay, outerDelay, forwardDelay, overlapCooldown, defaultMobs, staticGrid);
                 OwnershipTranspiler.Rewrite(PatchProcessor.GetOriginalInstructions(AccessTools.Method(typeof(ZDOMan), "ReleaseNearbyZDOS")), AccessTools.Method(typeof(OwnershipPatch), "Persistent"));
                 PickableServerPatch.Rewrite(PatchProcessor.GetOriginalInstructions(AccessTools.Method(typeof(Pickable), "RPC_Pick")));
                 harmony = new Harmony(Id);

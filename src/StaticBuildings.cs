@@ -74,11 +74,11 @@ namespace TooManyLags
             state.Ready = true; state.ReadyPosition = position; return true;
         }
         internal void Remove(ZNetView view) { states.Remove(view); }
-        private static bool Safe(GameObject root)
+        internal static bool Safe(GameObject root, MonoBehaviour[] components = null)
         {
             Piece piece = root.GetComponent<Piece>(); WearNTear wear = root.GetComponent<WearNTear>(); ZNetView view = root.GetComponent<ZNetView>();
             if (!piece || !wear || !wear.m_staticPosition || !view || !view.m_persistent || view.m_distant || root.GetComponentsInChildren<Rigidbody>(true).Length != 0) return false;
-            foreach (MonoBehaviour component in root.GetComponentsInChildren<MonoBehaviour>(true))
+            foreach (MonoBehaviour component in components ?? root.GetComponentsInChildren<MonoBehaviour>(true))
             {
                 if (!component) return false; Type type = component.GetType();
                 if ((type != typeof(Piece) && type != typeof(WearNTear) && type != typeof(ZNetView)) || component.gameObject != root) return false;

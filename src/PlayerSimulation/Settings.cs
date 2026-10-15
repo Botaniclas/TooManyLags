@@ -23,7 +23,7 @@ namespace TooManyLags.PlayerSimulation
             Pattern = shape == "Rounded7x7" ? GridCoveragePattern.Rounded7x7 : shape == "Rounded5x5" ? GridCoveragePattern.Rounded5x5 : GridCoveragePattern.Square3x3;
             if (CellSize == 4 && Pattern == GridCoveragePattern.Square3x3) throw new ArgumentException("4-metre cells require a rounded grid.");
             Interval = Number(config, "04 - Grid Settings", "MovementRotationCheckIntervalSeconds", .05f);
-            Keep = Read(config, "04 - Grid Settings", "KeepOwnershipOnCellExit", true);
+            Keep = Read(config, "01 - General", "KeepOwnershipOnCellExit", true);
             Directional = Read(config, "05 - Directional Grid Mode", "DirectionalGridMode", true);
             Inner = Number(config, "05 - Directional Grid Mode", "InnerTransitionDelaySeconds", 0);
             Forward = Number(config, "05 - Directional Grid Mode", "ForwardTransitionDelaySeconds", .2f);

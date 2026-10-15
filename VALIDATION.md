@@ -1,3 +1,19 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.43 optional static grid
+
+UseGridForStaticBuildings defaults to false. When enabled with Server-Side Simulation, eligible non-interactive building pieces share the existing cell index, transition timers, guarded ownership path, overlap policy and unload cleanup. Static server-default ownership is independent of interactive defaults. The conservative existing static filter is reused: a persistent, non-distant network root with Piece and fixed-position WearNTear, no Rigidbody and no additional behaviour components. The previous server-only static manager remains in use when the optional grid is off. No second object index, periodic scan or timer is introduced.
+
+PUP FPS and BotanicPupPatch remain optional. Baked originals stay excluded; an ordinary restored piece can register through the existing lifecycle. Initial static grid nodes reuse the authenticated recipient proof and native first-owner selection. A trailing boolean in the existing server Welcome selects static RPC relaying; absent or false preserves ordinary static RPC handling, including when a new client connects to an older server. The optional static grid needs updated clients for these handoff safeguards. Existing collision, inventory, refill and active-use protections are retained.
+
+The generated config has 52 entries in ten ordered English sections, with interactive/static Simulation Settings first, General next and the 26 object categories last. ServerOwnedStaticBuildings is renamed ServerOwnedStaticBuildingsByDefault; interactive defaults and KeepOwnershipOnCellExit move sections. Users should use the new config and reapply custom values. KeepOwnershipOnCellExit=false requires Server-Side Simulation and at least one interactive/static server default: invalid manual startup combinations normalize to true with a warning, and invalid console changes are rejected. These checks occur only at startup or when changing relevant config keys.
+
+Focused regressions cover solo and separated players, shared native regions, overlap, both exit policies, independent defaults, initial uninstantiated pieces, late server registration, legacy/off-state RPCs, PUP exclusion and restoration. The full-controller/grid/router fixture passes 29,433 assertions; 1,000 further stationary passes after static settlement add zero object jobs, hierarchy scans or lookups. These are work-count and simulated transport checks, not live CPU measurements or a multiplayer guarantee.
+
+All 22 verification groups pass, including real BepInEx config generation/reload, live-console combination checks, existing inventory/refill/use races, player-simulation mode, and 54 exact native Harmony targets. Actual native ownership rewrite and FiresGhettoNetworking/PUP contracts remain compatible with the audited versions. Imported AI source hashes remain unchanged. Verified DLL SHA256: `2B2DA721FCB620D4F58B564AA009209AD5C3004A4E0089887B94E11CDA6864F9`. Complete results are in verification.json.
+
+This is a local candidate; no live multiplayer test, publication or push is claimed.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.42 mandatory handoff protection
 
 The optional EnableExperimentalInteractionProtection binding is removed. In enabled dedicated-server sessions with Server-Side Simulation, startup now always attempts the existing handoff protocol before installing the interactive ownership controller. Installation failure retains the same cleanup and refuses to install that controller; it does not fall back to the earlier unguarded protocol path. No handoff implementation, wire format, loading/use rule, runtime timer or scan is changed. The mode without Server-Side Simulation returns through its existing startup path, and disabled sessions remain disabled.

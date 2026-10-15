@@ -2,6 +2,8 @@
 
 **Unreleased**
 ```
+- Adds optional UseGridForStaticBuildings (default false): eligible non-interactive pieces share the existing grid's client ownership, server overlaps, delays and exit policy. PUP FPS remains optional; baked originals stay excluded. Requires Server-Side Simulation and updated clients.
+- Separates interactive and static server defaults at the top of the config; ServerOwnedStaticBuildings becomes ServerOwnedStaticBuildingsByDefault. Moves KeepOwnershipOnCellExit to General; false requires Server-Side Simulation and at least one interactive/static server default. Invalid startup combinations retain ownership and report a warning. Use the supplied new config and reapply custom values.
 - Makes interaction handoff protection mandatory with Server-Side Simulation. Removes EnableExperimentalInteractionProtection; saved false values no longer disable safeguards, early grid transfers or guarded incinerator ownership. The mode without Server-Side Simulation keeps its existing protection.
 ```
 

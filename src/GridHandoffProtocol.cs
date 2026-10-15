@@ -14,7 +14,7 @@ namespace TooManyLags.GridHandoffs
     {
         private const string RpcName = "TooManyLags_GridHandoff_1";
         private enum Message { Hello, Welcome, Commit, Status, Result, Ready, ReadyResult, Relay, ReadyLost, Loaded }
-        private sealed class Connection { internal ZNetPeer Peer; internal bool Capable, LoadedProof, IncineratorGuard, InitialProof; internal readonly CommitFence Fence = new CommitFence(); internal readonly CapabilityGreeting Greeting = new CapabilityGreeting(); }
+        private sealed class Connection { internal ZNetPeer Peer; internal bool Capable, LoadedProof, IncineratorGuard, InitialProof, StaticGrid; internal readonly CommitFence Fence = new CommitFence(); internal readonly CapabilityGreeting Greeting = new CapabilityGreeting(); }
         private sealed class Advertisement { internal ZNetPeer Peer; internal ZDOID Id; internal long Token; }
         private sealed class Readiness
         {
@@ -111,8 +111,10 @@ namespace TooManyLags.GridHandoffs
             if (!started || !ZNet.instance || !ZNet.instance.IsDedicated() || peer == null || !peer.IsReady() || peer.m_rpc == null) return;
             Connection c;
             if (connections.TryGetValue(peer.m_rpc, out c) && Current(c, peer.m_rpc))
-                try { Send(peer, Message.Welcome, delegate(ZPackage p) { p.Write(c.Capable); }); } catch (Exception) { }
+                try { Send(peer, Message.Welcome, delegate(ZPackage p) { Welcome(p, c.Capable); }); } catch (Exception) { }
         }
+        private static void Welcome(ZPackage packet, bool acknowledged)
+        { packet.Write(acknowledged); packet.Write(Plugin.Controller != null && Plugin.Controller.StaticGridEnabled); }
         private static void PeerReady(ZRpc rpc)
         {
             Connection c;
@@ -151,7 +153,7 @@ namespace TooManyLags.GridHandoffs
                       bool changed = !c.Capable || (!c.LoadedProof && proof) || c.IncineratorGuard != incinerator || c.InitialProof != initial;
                       c.Capable = true; c.LoadedProof = proof; c.IncineratorGuard = incinerator; c.InitialProof = initial;
                       if (changed && Plugin.Controller != null) Plugin.Controller.CapabilityChanged(c.Peer.m_uid);
-                      Send(c.Peer, Message.Welcome, delegate(ZPackage p) { p.Write(true); }); return; }
+                      Send(c.Peer, Message.Welcome, delegate(ZPackage p) { Welcome(p, true); }); return; }
                     if (!c.Capable || Plugin.Controller == null || ZDOMan.instance == null) return;
                     if (message == Message.Result)
                     {
@@ -204,6 +206,7 @@ namespace TooManyLags.GridHandoffs
                     // New offers distinguish advertisement from acknowledgement.
                     // Old servers acknowledge with a second header-only Welcome.
                     bool? acknowledgement = packet.Size() > sizeof(int) ? packet.ReadBool() : (bool?)null;
+                    c.StaticGrid = packet.GetPos() < packet.Size() && packet.ReadBool();
                     if (c.Greeting.Welcome(acknowledgement)) { c.Capable = true; clientGreetingPending = false; }
                     else { clientGreetingPending = true; ClientHello(); }
                     return;
@@ -443,6 +446,8 @@ namespace TooManyLags.GridHandoffs
             {
                 KindCache kind;
                 if (!kinds.TryGetValue(view, out kind)) { kind = new KindCache { Kind = ObjectCatalog.Classify(view.gameObject) }; kinds.Add(view, kind); }
+                Connection selected;
+                if (kind.Kind == Kinds.StaticBuildings && (!connections.TryGetValue(server.m_rpc, out selected) || !selected.StaticGrid)) return true;
                 if (kind.Kind == Kinds.None || kind.Kind == Kinds.TamedAnimals || !ObjectCatalog.OwnerRequest(kind.Kind, request.m_methodHash)) return true;
                 if (data.IsOwner() && view.gameObject.activeInHierarchy)
                 {

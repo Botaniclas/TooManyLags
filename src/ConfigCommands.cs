@@ -21,6 +21,8 @@ namespace TooManyLags
         }
         internal static bool Local(string key)
         { return String.Equals(key, "EnableLogs", StringComparison.OrdinalIgnoreCase); }
+        internal static bool CanReturnOnExit(bool serverSimulation, bool defaultInteractives, bool defaultStatics)
+        { return serverSimulation && (defaultInteractives || defaultStatics); }
         internal static bool Live(string key)
         {
             switch (key)
@@ -56,6 +58,7 @@ namespace TooManyLags
                 (entry.Description.AcceptableValues != null && !entry.Description.AcceptableValues.IsValid(value)))
                 return "Invalid value for " + key + ".\n" + entry.Description.Description + "\n" + (entry.Description.AcceptableValues == null ? "" : entry.Description.AcceptableValues.ToDescriptionString());
             if (InvalidGrid(key, value)) return "Invalid grid combination: 4-metre cells require Rounded5x5 or Rounded7x7. Change the other setting first.";
+            if (InvalidReturn(key, value)) return "Invalid ownership combination: KeepOwnershipOnCellExit=false requires Server-Side Simulation and server-default ownership for interactive or static objects. Enable a server default or keep ownership on exit.";
             bool live = Live(key);
             if (Equals(entry.BoxedValue, value)) return key + " is already " + Value(value) + "." + (Pending(entry) ? RestartNotice(key) : "");
             object before = entry.BoxedValue; bool autoSave = config.SaveOnConfigSet;
@@ -102,6 +105,24 @@ namespace TooManyLags
             return size == 4 && pattern == "Square3x3";
         }
         private static string Value(object value) { return Convert.ToString(value, CultureInfo.InvariantCulture); }
+        private bool InvalidReturn(string key, object value)
+        {
+            if (key != "KeepOwnershipOnCellExit" && key != "NoServerSideSimulation" &&
+                key != "ServerOwnedInteractivesByDefault" && key != "ServerOwnedStaticBuildingsByDefault") return false;
+            bool keep = true, noSimulation = false, interactives = false, statics = false;
+            foreach (var pair in config)
+            {
+                object selected = pair.Key.Key == key ? value : pair.Value.BoxedValue;
+                switch (pair.Key.Key)
+                {
+                    case "KeepOwnershipOnCellExit": keep = (bool)selected; break;
+                    case "NoServerSideSimulation": noSimulation = (bool)selected; break;
+                    case "ServerOwnedInteractivesByDefault": interactives = (bool)selected; break;
+                    case "ServerOwnedStaticBuildingsByDefault": statics = (bool)selected; break;
+                }
+            }
+            return !keep && !CanReturnOnExit(!noSimulation, interactives, statics);
+        }
         private static bool Parse(Type type, string text, out object value)
         {
             value = null;

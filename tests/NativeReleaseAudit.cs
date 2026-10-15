@@ -143,7 +143,7 @@ internal static class NativeReleaseAudit
             if(Object.Equals(instruction.Operand,"EnableExperimentalInteractionProtection")) optionalProtection=true;
         Check(!optionalProtection,"Actual plugin must not bind or read an optional interaction-protection switch");
         Check(ScopeCall(awake,"TooManyLags.GridHandoffs.Protocol","Start")>=0,"Actual server startup must retain required grid-handoff protocol installation");
-        foreach(string key in new[]{"ServerOwnedStaticBuildings","ServerOwnedInteractivesByDefault","ServerOwnedRefillStations"})
+        foreach(string key in new[]{"ServerOwnedStaticBuildingsByDefault","UseGridForStaticBuildings","ServerOwnedInteractivesByDefault","ServerOwnedRefillStations"})
         {
             int bound=0;
             for(int i=0;i+1<awake.Body.Instructions.Count;i++)
@@ -166,7 +166,7 @@ internal static class NativeReleaseAudit
         TypeDefinition interval=authority.MainModule.GetType("TooManyLags.IntervalConfig");
         Check(interval!=null,"Movement interval constants missing");
         foreach(MethodDefinition method in interval.Methods)Check(method.Name!="LegacyDefault","Obsolete config migration retained");
-        foreach(string section in new[]{"01 - General","02 - Static Buildings","03 - Default Ownership and Overrides","04 - Grid Settings","05 - Directional Grid Mode","06 - Full Grid Mode","10 - Object Categories"})
+        foreach(string section in new[]{"00 - Simulation Settings - Interactive Objects","00 - Simulation Settings - Static Objects","01 - General","03 - Default Ownership and Overrides","04 - Grid Settings","05 - Directional Grid Mode","06 - Full Grid Mode","10 - Object Categories"})
         {
             bool configured=false;foreach(var instruction in awake.Body.Instructions)if(Object.Equals(instruction.Operand,section))configured=true;
             Check(configured,"Generated config section missing: "+section);

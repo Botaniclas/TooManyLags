@@ -13,7 +13,8 @@ namespace TooManyLags
         Containers = 8192, ItemStands = 16384, Signs = 32768, Portals = 65536,
         Fermenters = 131072, Incinerators = 262144, Defenses = 524288,
         ShieldGenerators = 1048576, Pickables = 2097152, Offerings = 4194304,
-        Vehicles = 8388608, OtherInteractables = 16777216, WorldMarkers = 33554432
+        Vehicles = 8388608, OtherInteractables = 16777216, WorldMarkers = 33554432,
+        StaticBuildings = 67108864
     }
 
     internal sealed class ObjectCatalog
@@ -168,7 +169,8 @@ namespace TooManyLags
                 return actor is Player || view.m_distant ? Kinds.None : Kinds.TamedAnimals;
             Kinds result = Kinds.None;
             bool interactive = false;
-            foreach (MonoBehaviour component in root.GetComponentsInChildren<MonoBehaviour>(true))
+            MonoBehaviour[] components = root.GetComponentsInChildren<MonoBehaviour>(true);
+            foreach (MonoBehaviour component in components)
             {
                 if (!component) continue;
                 Container container = component as Container;
@@ -182,7 +184,7 @@ namespace TooManyLags
                 { for (Type current = type; current != null && kind == Kinds.None; current = current.BaseType) groups.TryGetValue(current, out kind); types.Add(type, kind); }
                 result |= kind;
             }
-            if (!interactive) return Kinds.None;
+            if (!interactive) return StaticBuildings.Safe(root, components) ? Kinds.StaticBuildings : Kinds.None;
             // Local world interactions do not send requests to their ZDO owner.
             // Only their existing, persistent network root gets a server default;
             // do not manage an entire location or another child ZNetView.

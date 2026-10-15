@@ -62,7 +62,7 @@ Vanilla region unloading and ownership release still apply. Keeping ownership do
 
 Larger cells or a larger pattern prepare ownership farther ahead. This is useful for poor connections or fast movement, but covers more objects and can create more ownership work. **Try the defaults first; enlarge coverage if ownership arrives too late.** These settings do not change vanilla or PUP FPS loading distances.
 
-**`DirectionalGridMode = true`** concentrates coverage towards your camera direction. Missing camera data uses character direction. With the default exit-retention setting, some rear cells make no new ownership requests.
+**`DirectionalGridMode = true`** concentrates coverage towards your camera direction. **Leave this enabled.** Missing camera data uses character direction. With the default exit-retention setting, some rear cells make no new ownership requests.
 
 The three directional timers have different purposes:
 

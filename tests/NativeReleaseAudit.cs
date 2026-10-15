@@ -138,6 +138,11 @@ internal static class NativeReleaseAudit
         Check(plugin != null, "Plugin missing");
         MethodDefinition awake=null;foreach(MethodDefinition method in plugin.Methods)if(method.Name=="Awake")awake=method;
         Check(awake!=null&&awake.HasBody,"Actual plugin config setup missing");
+        bool optionalProtection=false;
+        foreach(var instruction in awake.Body.Instructions)
+            if(Object.Equals(instruction.Operand,"EnableExperimentalInteractionProtection")) optionalProtection=true;
+        Check(!optionalProtection,"Actual plugin must not bind or read an optional interaction-protection switch");
+        Check(ScopeCall(awake,"TooManyLags.GridHandoffs.Protocol","Start")>=0,"Actual server startup must retain required grid-handoff protocol installation");
         foreach(string key in new[]{"ServerOwnedStaticBuildings","ServerOwnedInteractivesByDefault","ServerOwnedRefillStations"})
         {
             int bound=0;

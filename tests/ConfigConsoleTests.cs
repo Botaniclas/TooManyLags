@@ -119,6 +119,7 @@ internal static class ConfigConsoleTests
     {
         Directory.CreateDirectory(folder);
         string path = Path.Combine(folder, "config.cfg");
+        File.WriteAllText(path, "[07 - Experimental Interaction Protection]\nEnableExperimentalInteractionProtection = false\n");
         ConfigFile config = new ConfigFile(path, false); config.SaveOnConfigSet = false;
         ConfigEntry<float> outer = config.Bind("05", "OuterTransitionDelaySeconds", 3f, new ConfigDescription("Server only", new AcceptableValueRange<float>(0, 30)));
         ConfigEntry<float> camera = config.Bind("08", "CameraHeadingCheckIntervalSeconds", .1f, new ConfigDescription("Server only", new AcceptableValueRange<float>(.05f, 5)));
@@ -132,9 +133,8 @@ internal static class ConfigConsoleTests
         ConfigEntry<bool> ai = config.Bind("09", "EnableAIOwnership", true, "Server only; restart required");
         ConfigEntry<bool> enabled = config.Bind("01", "Enabled", true, "Server only; restart required");
         ConfigEntry<bool> doors = config.Bind("07", "Doors", true, "Server only; restart required");
-        ConfigEntry<bool> experimental = config.Bind("07 - Experimental Interaction Protection", "EnableExperimentalInteractionProtection", false, "Server only; restart required. Experimental.");
         outer.Value = 3; camera.Value = .1f; overlap.Value = 1f; logs.Value = false; ping.Value = 200;
-        size.Value = 4; shape.Value = "Rounded7x7"; ai.Value = true; enabled.Value = true; doors.Value = true; experimental.Value = false; config.Save();
+        size.Value = 4; shape.Value = "Rounded7x7"; ai.Value = true; enabled.Value = true; doors.Value = true; config.Save();
         int applies = 0; string changed = null;
         ConfigCommands commands = new ConfigCommands(config, delegate(string key) { applies++; changed = key; });
         Check(commands.Execute("outertransitiondelayseconds 0,2", true).Contains("applied") && outer.Value == .2f && changed == outer.Definition.Key && applies == 1, "canonical key, invariant/comma input and runtime callback");
@@ -150,13 +150,9 @@ internal static class ConfigConsoleTests
         Check(commands.Execute("CameraHeadingCheckIntervalSeconds 0.05", true).Contains("applied") && camera.Value == .05f, "server camera interval range");
         Check(commands.Execute("EnableLogs true", false).Contains("applied") && logs.Value, "local logging");
         int before = applies;
-        Check(!ConfigCommands.Live(experimental.Definition.Key), "experimental handoff mode is startup-only");
-        string modeReply = commands.Execute("EnableExperimentalInteractionProtection true", true);
-        Check(modeReply.Contains("Takes effect after server restart") && !modeReply.Contains("every client") && experimental.Value && applies == before, "experimental toggle saves server choice without changing in-flight safeguards");
-        Check(commands.Execute("EnableExperimentalInteractionProtection", true).Contains("restart pending; active: False"), "experimental read distinguishes active and pending modes");
-        Check(commands.Execute("EnableExperimentalInteractionProtection", false).Contains("Wrong setting scope"), "client-local console cannot override server guard choice");
-        Check(new ConfigFile(path, false).Bind("07 - Experimental Interaction Protection", experimental.Definition.Key, false, "").Value, "experimental server choice survives restart");
-        Check(commands.Execute("EnableExperimentalInteractionProtection false", true).Contains("no restart pending") && !experimental.Value && applies == before, "restore default without live mode teardown");
+        Check(commands.Execute("EnableExperimentalInteractionProtection false", true).Contains("Unknown setting") && applies == before, "saved obsolete protection key cannot disable safeguards through the server console");
+        Check(commands.Execute("EnableExperimentalInteractionProtection false", false).Contains("Unknown setting") && applies == before, "client console cannot disable mandatory safeguards");
+        Check(!commands.Execute("list", true).Contains("EnableExperimentalInteractionProtection"), "obsolete orphan key is not an active console setting");
         Check(commands.Execute("EnableLogs true", false).Contains("already") && applies == before, "unchanged value has no writes/runtime work");
         Check(commands.Execute("GridCoveragePattern Square3x3", true).Contains("Invalid grid combination") && shape.Value == "Rounded7x7", "rejects square grid with 4-metre cells");
         Check(commands.Execute("GridCellSizeMeters 5", true).Contains("Invalid value") && size.Value == 4, "restart values obey allowed list");

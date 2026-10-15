@@ -355,7 +355,7 @@ namespace TooManyLags.GridHandoffs
         }
         internal static bool Ready(ZDOMan world, long owner, ZDO data)
         {
-            // Experimental narrow path: unchanged native ownership needs no
+            // Guarded narrow path: unchanged native ownership needs no
             // additional handshake. Real TML transfers and receiver relays arm
             // the existing loaded node, retaining their readiness protection.
             uint minimum;

@@ -1,3 +1,13 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.42 mandatory handoff protection
+
+The optional EnableExperimentalInteractionProtection binding is removed. In enabled dedicated-server sessions with Server-Side Simulation, startup now always attempts the existing handoff protocol before installing the interactive ownership controller. Installation failure retains the same cleanup and refuses to install that controller; it does not fall back to the earlier unguarded protocol path. No handoff implementation, wire format, loading/use rule, runtime timer or scan is changed. The mode without Server-Side Simulation returns through its existing startup path, and disabled sessions remain disabled.
+
+Fresh configs contain 51 entries in nine feature sections; all remaining values and section names are retained. Existing files may retain the old key as an orphan, but it is not bound, read or exposed to tml_config. The real BepInEx config probe covers a saved false value, and console tests reject changes to the obsolete key without a runtime callback. Actual compiled startup IL is checked for the absence of that config read and the continued required handoff-protocol installation. Existing 1.0.41 clients already install the same server-selected protocol, so this change requires a server update/restart and no protocol migration.
+
+All 22 verification groups pass, including the updated real-config and compiled-startup checks, 28,384 full-controller assertions, inventory/refill/use races, the player-simulation mode and 54 native Harmony targets. Verified DLL SHA256: `319C210F11AF9265CBAC05A0D45720C18DBCB3F79CC188EF9EDC11D829795346`. This is a local 1.0.42 candidate; no live multiplayer test or publication is claimed.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.41 login, zone-border and startup work
 
 The user reports different server-owned pickables, logs and berry bushes waiting after each login, then becoming usable after the usual server-loading delay. That observation is consistent with a missing early node, but does not independently prove every affected live object has this cause. A specific registration gap is reproduced against unchanged 1.0.40: TrackInitialObject runs on ownership-field writes, but Persistent deliberately retains eligible server defaults and prevents the native write branch. An object that already has the server owner can consequently remain absent from the grid until AddInstance finally registers its real server view. This also applies when a previous early event preceded a ready reference area, or a no-view record was pruned while the server ownership data remained resident.

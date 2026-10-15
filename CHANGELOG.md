@@ -1,5 +1,10 @@
 # Changelog
 
+**Unreleased**
+```
+- Makes interaction handoff protection mandatory with Server-Side Simulation. Removes EnableExperimentalInteractionProtection; saved false values no longer disable safeguards, early grid transfers or guarded incinerator ownership. The mode without Server-Side Simulation keeps its existing protection.
+```
+
 **1.0.41**
 ```
 - Fixes delayed grid ownership and unusable harvestables, torches, doors and public chests after login or returning to neighbouring zones. Eligible server defaults enter the grid before server instantiation; loading proofs share native area checks and avoid duplicate inventory searches. Update server and clients; early transfers require experimental protection.

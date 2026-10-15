@@ -7,17 +7,17 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.41.0")]
+[assembly: AssemblyVersion("1.0.42.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.41")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.42")]
     [BepInDependency(FgnId)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.41", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.42", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -38,7 +38,7 @@ namespace TooManyLags
         private void Awake()
         {
             instance = this;
-            bool enabled = Config.Bind("01 - General", "Enabled", true, "Server only; restart required. Enable TooManyLags for this server session. Clients follow the server; their local value is ignored.").Value;
+            bool enabled = Config.Bind("01 - General", "Enabled", true, "Server only; restart required. Enable TooManyLags for this server session. Clients follow the server; their local value is ignored. Handoff safeguards are always active with Server-Side Simulation.").Value;
             bool enableAI = Config.Bind("09 - AI Mob Ownership", "EnableAIOwnership", true,
                 "Server only; restart required. Enable target-based Hostile Mob ownership. Clients follow the server; their local value is ignored. Attacks block transfers until attack end.").Value;
             bool noSimulation = Config.Bind("01 - General", "NoServerSideSimulation", false,
@@ -83,8 +83,6 @@ namespace TooManyLags
             if (Single.IsNaN(interval) || Single.IsInfinity(interval)) interval = IntervalConfig.Default;
             bool keepOnExit = Config.Bind("04 - Grid Settings", "KeepOwnershipOnCellExit", true,
                 "Server only; restart required. true: keep ownership after everyone leaves. In directional mode, when one player remains, only red fields transfer automatically; orange/yellow wait for that player's next cell/heading change. Completed player fields are cached until relevant changes/unloading. false: complete directional footprint with a red 3x3 centre, normal departure transfers and no cache. Native release and pinned stations still apply.").Value;
-            bool interactionProtection = Config.Bind("07 - Experimental Interaction Protection", "EnableExperimentalInteractionProtection", true,
-                "Server only; restart required. Experimental extra protection introduced in 1.0.15: identified source handoffs, recipient-readiness checks and client relays during ownership changes. false uses the earlier handoff path. Existing inventory, refill and active-use protection stays enabled. Client value is ignored. Ignored with NoServerSideSimulation=true.").Value;
             Kinds kinds = Kinds.None;
             foreach (Kinds kind in Enum.GetValues(typeof(Kinds)))
                 if (kind != Kinds.None && Config.Bind("10 - Object Categories", kind.ToString(), true,
@@ -113,14 +111,14 @@ namespace TooManyLags
             }
             catch (Exception error)
             { enabledMod = false; Logger.LogWarning("TooManyLags inactive: required FGN session settings could not be applied. " + error.GetBaseException()); return; }
-            if (!playerSimulation && interactionProtection)
+            if (!playerSimulation)
             {
                 try { GridHandoffs.Protocol.Start(networkPlugin.Instance.GetType().Assembly); gridProtocol = true; }
                 catch (Exception error)
                 { GridHandoffs.Protocol.Stop(); Logger.LogWarning("Interactive ownership inactive: grid handoff safeguards unavailable. " + error.GetBaseException()); }
             }
             if (playerSimulation) return;
-            if (interactionProtection && !gridProtocol) return;
+            if (!gridProtocol) return;
             if (!buildings && kinds == Kinds.None) return;
             try
             {
@@ -383,7 +381,7 @@ namespace TooManyLags
                 case Kinds.Signs: name = "Signs"; break;
                 case Kinds.Portals: name = "Portals"; break;
                 case Kinds.Fermenters: name = "Fermenters"; break;
-                case Kinds.Incinerators: name = "Incinerators; experimental protection and guarded clients required. Burning/open inventories discard automatic transfers; new covering player activity retries"; break;
+                case Kinds.Incinerators: name = "Incinerators; guarded clients required. Burning/open inventories discard automatic transfers; new covering player activity retries"; break;
                 case Kinds.WorldMarkers: name = "Existing network roots of dungeon entrances and Vegvisir; server default only, local objects without a ZDO have no owner"; break;
                 case Kinds.Defenses: name = "Traps and turrets"; break;
                 case Kinds.ShieldGenerators: name = "Shield generators"; break;

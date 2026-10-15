@@ -67,19 +67,31 @@ namespace TooManyLags
             string[] sections = {
                 "01 - General", "02 - Static Buildings", "03 - Default Ownership and Overrides",
                 "04 - Grid Settings", "05 - Directional Grid Mode", "06 - Full Grid Mode",
-                "07 - Experimental Interaction Protection", "08 - Camera Heading", "09 - AI Mob Ownership", "10 - Object Categories"
+                "08 - Camera Heading", "09 - AI Mob Ownership", "10 - Object Categories"
             };
             int found = 0;
             foreach (string line in File.ReadAllLines(path)) if (line.StartsWith("[", StringComparison.Ordinal)) {
                 if (found >= sections.Length || line != "[" + sections[found] + "]") throw new Exception("Unexpected section or order: " + line);
                 found++;
             }
-            if (found != 10) throw new Exception("Expected ten ordered English feature sections.");
+            if (found != 9) throw new Exception("Expected nine ordered English feature sections.");
             ConfigProbe reloaded = new ConfigProbe { Config = new ConfigFile(path, false, metadata) };
             reloaded.Config.SaveOnConfigSet = false;
             reloaded.Bind(); VerifyDefaults(reloaded.Config); reloaded.Config.Save();
             if (File.ReadAllText(path) != generated) throw new Exception("Generated config changed during actual BepInEx reload/save.");
-            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 52 settings in ten ordered English feature sections.");
+            string legacyPath = path + ".legacy.cfg";
+            try
+            {
+                File.WriteAllText(legacyPath, generated + "\n[07 - Experimental Interaction Protection]\nEnableExperimentalInteractionProtection = false\n");
+                ConfigProbe legacy = new ConfigProbe { Config = new ConfigFile(legacyPath, false, metadata) };
+                legacy.Config.SaveOnConfigSet = false;
+                legacy.Bind(); VerifyDefaults(legacy.Config);
+                ConfigEntry<bool> removed;
+                if (legacy.Config.TryGetEntry<bool>(new ConfigDefinition("07 - Experimental Interaction Protection", "EnableExperimentalInteractionProtection"), out removed))
+                    throw new Exception("Removed protection switch must not become an active config entry.");
+            }
+            finally { if (File.Exists(legacyPath)) File.Delete(legacyPath); }
+            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 51 settings in nine ordered English feature sections; legacy protection=false is unbound and ignored.");
             Console.WriteLine("PASS: camera/movement defaults remain 0.05; angular overlap defaults to 30 degrees (0-45); prior settings are preserved; object categories stay last.");
             Console.WriteLine("PASS: actual BepInEx camera and server movement ranges accept 0.05 seconds and clamp to 0.05-5.");
         }
@@ -128,7 +140,6 @@ namespace TooManyLags
                 {"05 - Directional Grid Mode/ForwardTransitionDelaySeconds", "0.2"}, {"05 - Directional Grid Mode/OuterTransitionDelaySeconds", "3"},
                 {"05 - Directional Grid Mode/ServerOverlapCooldownSeconds", "1"},
                 {"06 - Full Grid Mode/TransitionDelaySeconds", "2"},
-                {"07 - Experimental Interaction Protection/EnableExperimentalInteractionProtection", "true"},
                 {"08 - Camera Heading/CameraHeadingCheckIntervalSeconds", "0.05"},
                 {"08 - Camera Heading/CameraDirectionOverlapDegrees", "30"},
                 {"08 - Camera Heading/CameraRotationPredictionSeconds", "0.1"},
@@ -141,7 +152,7 @@ namespace TooManyLags
                 "SapCollectors", "Wards", "MapTables", "Wisplights", "TamedAnimals", "Containers", "ItemStands", "Signs",
                 "Portals", "Fermenters", "Incinerators", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables", "WorldMarkers"
             }) expected.Add("10 - Object Categories/" + category, "true");
-            if (config.Count != 52) throw new Exception("Expected 52 config entries; found " + config.Count + ".");
+            if (config.Count != 51) throw new Exception("Expected 51 config entries; found " + config.Count + ".");
             int categoryNotes = 0;
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> entry in config) {
                 string key = entry.Key.Section + "/" + entry.Key.Key, value = Convert.ToString(entry.Value.BoxedValue, CultureInfo.InvariantCulture), wanted;

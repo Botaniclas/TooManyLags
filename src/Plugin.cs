@@ -39,7 +39,7 @@ namespace TooManyLags
         {
             instance = this;
             bool defaultInteractives = Config.Bind("00 - Simulation Settings - Interactive Objects", "ServerOwnedInteractivesByDefault", false,
-                "Server only; restart required. Simulation settings and exit retention distribute CPU load; once the grid acquires nearby objects locally, perceived latency is unchanged. true: server default for managed interactions/idle tamed animals; false: vanilla default. Requires Server-Side Simulation.").Value;
+                "Server only; restart required. Simulation settings and exit retention only distribute CPU load between server and clients. They do not affect perceived latency. true: server default for managed interactions/idle tamed animals; false: vanilla default. Requires Server-Side Simulation.").Value;
             bool buildings = Config.Bind("00 - Simulation Settings - Static Objects", "ServerOwnedStaticBuildingsByDefault", false,
                 "Server only; restart required. true: server default for eligible non-interactive building pieces; false: vanilla default. UseGridForStaticBuildings lets nearby clients share their simulation. Requires Server-Side Simulation.").Value;
             bool staticGrid = Config.Bind("00 - Simulation Settings - Static Objects", "UseGridForStaticBuildings", false,

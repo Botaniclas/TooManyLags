@@ -75,7 +75,7 @@ Configure **all gameplay settings on the server** in `BepInEx/config/botanic.too
 
 Start with **Simulation Settings** (interactive, then static objects) and **General**. Other sections have tuned defaults; adjust only when needed.
 
-Simulation settings and `KeepOwnershipOnCellExit` distribute CPU load between clients and server. Once the grid acquires nearby objects locally, **perceived latency is unchanged**.
+Simulation settings and `KeepOwnershipOnCellExit` only distribute CPU load between server and clients. They do not affect perceived latency.
 
 **Console:** `tml_config list` lists settings; `tml_config <Key>` reads one; `tml_config <Key> <Value>` saves a change. Only admins can change server settings.
 

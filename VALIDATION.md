@@ -8,7 +8,7 @@ The generated config has 52 entries in ten ordered English sections, with intera
 
 Focused regressions cover solo and separated players, shared native regions, overlap, both exit policies, independent defaults, initial uninstantiated pieces, late server registration, legacy/off-state RPCs, PUP exclusion and restoration. The full-controller/grid/router fixture passes 29,433 assertions; 1,000 further stationary passes after static settlement add zero object jobs, hierarchy scans or lookups. These are work-count and simulated transport checks, not live CPU measurements or a multiplayer guarantee.
 
-All 22 verification groups pass, including real BepInEx config generation/reload, live-console combination checks, existing inventory/refill/use races, player-simulation mode, and 54 exact native Harmony targets. Actual native ownership rewrite and FiresGhettoNetworking/PUP contracts remain compatible with the audited versions. Imported AI source hashes remain unchanged. Verified DLL SHA256: `2B2DA721FCB620D4F58B564AA009209AD5C3004A4E0089887B94E11CDA6864F9`. Complete results are in verification.json.
+All 22 verification groups pass, including real BepInEx config generation/reload, live-console combination checks, existing inventory/refill/use races, player-simulation mode, and 54 exact native Harmony targets. Actual native ownership rewrite and FiresGhettoNetworking/PUP contracts remain compatible with the audited versions. Imported AI source hashes remain unchanged. Verified DLL SHA256: `1283A0F27F6D3BD9AF83F7E6EEA93E73D750B25261183646B5C5CADD78D1B74E`. Complete results are in verification.json.
 
 This is a local candidate; no live multiplayer test, publication or push is claimed.
 

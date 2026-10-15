@@ -1,7 +1,5 @@
 # Configuration
 
-These settings describe TooManyLags 1.0.44. Earlier releases can use different config sections or protection periods.
-
 ## FiresGhettoNetworking and simulation mode
 
 TooManyLags applies required FiresGhettoNetworking settings at startup, including enabling **Server-Side Simulation** on the dedicated server by default. Their saved config values are ignored while TooManyLags is enabled; the config file stays unchanged. Other FiresGhettoNetworking settings and incompatible-mod safety blocks remain active.

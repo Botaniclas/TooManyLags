@@ -32,7 +32,7 @@ White objects belong to the server; purple objects belong to the player in these
 
 ## Configuration
 
-Defaults should work well. Find configuration, admin commands, compatibility details and troubleshooting in the **[Thunderstore Wiki](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_FGN_Addon/wiki)**. Gameplay settings are configured on the server.
+Defaults should work well. Find configuration, admin commands and compatibility details in the **[Thunderstore Wiki](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_FGN_Addon/wiki)**. Gameplay settings are configured on the server.
 
 ## How it works and what to expect
 
@@ -46,3 +46,7 @@ Your own **very poor connection** can still be felt in these situations:
 2. **Fighting the same mob together:** when it targets someone else, its simulation runs elsewhere and your connection can delay what you see. If an ordinary Hostile Mob targets you, it normally runs locally; above the configured ping limit (**200 ms** by default), another eligible player within **6 metres of the mob** triggers server fallback once loading and handoff safeguards allow it. Both values are configurable. Bosses have separate shared-combat rules in the Wiki.
 
 With a very poor connection, give other players space when fighting the same enemy.
+
+## Report bugs and ideas
+
+Real-world testing is still limited. Please share bugs and ideas through [GitHub Issues](https://github.com/Botaniclas/TooManyLags/issues).

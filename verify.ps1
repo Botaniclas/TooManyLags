@@ -42,7 +42,7 @@ foreach($authoritySource in $authorityImport.files){
     if($authoritySource.import_sha256 -ne (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot ('src\'+$authoritySource.file)) -Algorithm SHA256).Hash){throw ('Imported source changed since equivalence review: '+$authoritySource.file)}
 }
 $authorityHashes=[ordered]@{}
-foreach($authorityItem in @('botanic.toomanylags.fgnaddon.cfg','README.md','README-Thunderstore.md','manifest.json','docs\grid-demo-1.gif','docs\grid-demo-2.gif','docs\wiki\README.md','docs\wiki\01-Configuration.md','docs\wiki\02-Ownership-and-compatibility.md','docs\wiki\03-Troubleshooting.md','tests\combat-import-equivalence.json')){
+foreach($authorityItem in @('botanic.toomanylags.fgnaddon.cfg','README.md','README-Thunderstore.md','manifest.json','docs\grid-demo-1.gif','docs\grid-demo-2.gif','docs\wiki\README.md','docs\wiki\01-Configuration.md','docs\wiki\02-Ownership-and-compatibility.md','docs\wiki\03-Report-bugs-and-ideas.md','tests\combat-import-equivalence.json')){
     $authorityHashes[$authorityItem]=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $authorityItem) -Algorithm SHA256).Hash
 }
 $authorityBenchmark=$null

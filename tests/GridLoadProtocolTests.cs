@@ -23,14 +23,14 @@ internal static partial class IntegrationTests
     { return GridPacket(6,delegate(ZPackage p){p.Write(data.m_uid);p.Write(token);p.Write(available);if(replica.HasValue)p.Write(replica.Value);}); }
     private static int GridCacheCount()
     { return ((IDictionary)typeof(TooManyLags.GridHandoffs.Protocol).GetField("ready",BindingFlags.Static|BindingFlags.NonPublic).GetValue(null)).Count; }
-    private static ZPackage GridClientReply(ZNetPeer serverPeer,ZPackage query,bool areaReady)
+    private static ZPackage GridClientReply(ZNetPeer serverPeer,ZPackage query,bool areaReady,Func<Vector3,bool> regionReady=null)
     {
         bool dedicated=ZNet.instance.Dedicated;long session=ZDOMan.SessionID;var previous=ZNet.instance.ServerPeer;
         var oldReady=ZNetScene.instance.Ready;var replies=GridCapture(serverPeer);
         try
         {
             ZNet.instance.Dedicated=false;ZDOMan.SessionID=1;ZNet.instance.ServerPeer=serverPeer;
-            ZNetScene.instance.Ready=delegate{return areaReady;};Time.frameCount++;
+            ZNetScene.instance.Ready=regionReady??delegate{return areaReady;};Time.frameCount++;
             GridReceive(serverPeer,query);TooManyLags.GridHandoffs.Protocol.FlushDeferred();Check("authenticated server receives one client proof",replies.Count==1);return replies[0];
         }
         finally { ZNet.instance.Dedicated=dedicated;ZDOMan.SessionID=session;ZNet.instance.ServerPeer=previous;ZNetScene.instance.Ready=oldReady; }

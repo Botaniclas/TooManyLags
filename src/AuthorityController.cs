@@ -366,7 +366,14 @@ namespace TooManyLags
                 // Vanilla checks the server UID against its own ref-pos; retain
                 // these defaults while a ready peer loads the area instead.
                 if (defaultInteractives && data.GetOwner() == server && (!known || (node.Identity() && node.Controllable())) &&
-                    catalog.NativeDefault(data.GetPrefab(), scene) && DefaultArea(data.GetPosition())) return false;
+                    catalog.NativeDefault(data.GetPrefab(), scene) && DefaultArea(data.GetPosition()))
+                {
+                    // Retaining the same owner performs no SetOwnerInternal
+                    // write. Recover a missing initial record here as well,
+                    // before waiting for the server scene to instantiate it.
+                    if (node == null) TrackInitialObject(data);
+                    return false;
+                }
                 return statics != null && statics.Manage(data) ? false : persistent;
             }
             catch (Exception error) { Fail(error); return persistent; }

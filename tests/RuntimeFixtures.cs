@@ -222,6 +222,7 @@ public sealed class ZNet : UnityEngine.Object
     public bool Dedicated = true;
     public ZNetPeer ServerPeer;
     public ZNetPeer GetServerPeer(){return ServerPeer;}
+    public UnityEngine.Vector3 GetReferencePosition(){foreach(var peer in Peers)if(peer.m_uid==ZDOMan.GetSessionID())return peer.Position;return new UnityEngine.Vector3();}
     [MethodImpl(MethodImplOptions.NoInlining)] public void OnNewConnection(ZNetPeer peer) { }
     [MethodImpl(MethodImplOptions.NoInlining)] public void RPC_PeerInfo(ZRpc rpc) { }
     [MethodImpl(MethodImplOptions.NoInlining)] public void Disconnect(ZNetPeer peer){Peers.Remove(peer);}

@@ -229,7 +229,7 @@ namespace TooManyLags.GridHandoffs
                         localPending.Add(new LocalProbe { Link = c, Rpc = rpc, Id = id, Token = token, Owner = owner,
                             Revision = revision, Minimum = minimum, Position = position, InitialKind = initial }); return;
                     }
-                    bool available = objectReady && ZoneSystem.instance && AreaReady(data.GetPosition());
+                    bool available = objectReady && ZoneSystem.instance && AreaReady(data.GetPosition(), view);
                     // Before ownership the data belongs to the server. Its
                     // authenticated reply requests any needed resync there.
                     if (!available && !before && data != null) ZDOMan.instance.ForceSendZDO(id);
@@ -272,9 +272,22 @@ namespace TooManyLags.GridHandoffs
             if (present) ZDOMan.instance.ForceSendZDO(id);
             Send(c.Peer, Message.Result, delegate(ZPackage p) { p.Write(token); p.Write(id); p.Write(c.Fence.Decided(token)); p.Write(present); p.Write(owner); p.Write(revision); p.Write(state); });
         }
-        private static bool AreaReady(Vector3 point)
+        private static bool AreaReady(Vector3 point, ZNetView view)
         {
             if (frame != Time.frameCount) { frame = Time.frameCount; areas.Clear(); }
+            KindCache cache;
+            if (!kinds.TryGetValue(view, out cache)) { cache = new KindCache { Kind = ObjectCatalog.Classify(view.gameObject) }; kinds.Add(view, cache); }
+            if (!cache.Inspected) InitialView(view, cache.Kind);
+            if (cache.Initial && (!cache.Inventory || cache.Inventory.m_privacy == Container.PrivacySetting.Public))
+            {
+                // A stationary neighbour is ready inside the client's loaded
+                // footprint. IsAreaReady at the object would additionally wait
+                // for outer sectors the client need not currently instantiate.
+                Vector3 reference = ZNet.instance.GetReferencePosition();
+                if (Single.IsNaN(reference.x) || Single.IsInfinity(reference.x) || Single.IsNaN(reference.z) || Single.IsInfinity(reference.z) ||
+                    !ZNetScene.InActiveArea(point, ZoneSystem.GetZone(reference)) || !ZoneSystem.instance.IsZoneLoaded(ZoneSystem.GetZone(point))) return false;
+                point = reference;
+            }
             Vector2s zone = ZoneSystem.GetZone(point); bool result;
             if (!areas.TryGetValue(zone, out result)) { result = ZNetScene.instance.IsAreaReady(point); areas.Add(zone, result); }
             return result;
@@ -296,7 +309,7 @@ namespace TooManyLags.GridHandoffs
                         (q.InitialKind != Kinds.None ? q.Owner != 0 && q.Owner != ZDOMan.GetSessionID() : q.Owner == c.Peer.m_uid) &&
                         data.OwnerRevision == q.Revision && data.DataRevision >= q.Minimum && data.GetPosition() == q.Position;
                     bool available = replica && view && view.IsValid() && ReferenceEquals(view.GetZDO(), data) &&
-                        view.gameObject.activeInHierarchy && (q.InitialKind == Kinds.None || InitialView(view, q.InitialKind) != null) && ZoneSystem.instance && AreaReady(q.Position);
+                        view.gameObject.activeInHierarchy && (q.InitialKind == Kinds.None || InitialView(view, q.InitialKind) != null) && ZoneSystem.instance && AreaReady(q.Position, view);
                     if (available)
                     { advertised.Remove(view); advertised.Add(view, new Advertisement { Peer = c.Peer, Id = q.Id, Token = q.Token }); }
                     try { Send(c.Peer, Message.ReadyResult, delegate(ZPackage p) { p.Write(q.Id); p.Write(q.Token); p.Write(available); p.Write(replica); }); }

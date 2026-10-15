@@ -2,6 +2,8 @@
 
 **Unreleased**
 ```
+- Fixes some already server-owned harvestables and other stationary interactions waiting for server instantiation before entering the grid after login or returning to an area. Missing early records are recovered during vanilla's existing ownership pass, including neighbouring zones. Server-side fix; 1.0.40 clients remain compatible.
+- Fixes loaded stationary interactions across a 64-metre zone boundary waiting for unrelated outer client sectors. Loading proofs now check the actual object/terrain zone inside the player's ready native footprint; dynamic physics keeps its existing area checks. Update server and clients for the complete startup fix.
 - Fixes stationary interactions, including harvestables, torches, doors and public chests, waiting for server instantiation before entering a loaded client's grid after login. Requires updated clients and experimental protection; recipient loading, field delays and source-use protection remain mandatory. Pending source commits reuse their loading proof and survive server instantiation without restarting the handoff.
 - Unready overlap takeovers now keep the available player owner and wait for a fresh covering grid request. Server loading completion alone never replays that takeover; a later exclusive player policy remains usable.
 - Fixes delayed initial server ownership for fixed doors/gates with animated kinematic child bodies. Moving roots, synchronized/dynamic physics and normal loading/use safeguards remain excluded or protected.

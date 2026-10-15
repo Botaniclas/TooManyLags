@@ -1,17 +1,18 @@
 using System;
 using System.Collections.Generic;
+using HarmonyLib;
 using TooManyLags;
 using UnityEngine;
 
 internal static partial class IntegrationTests
 {
-    private static ZDO UncreatedHarvest(string name, float x = 1, float z = 1)
+    private static ZDO UncreatedHarvest(string name, float x = 1, float z = 1, bool notify = true)
     {
         var prefab = new GameObject { name = name, activeInHierarchy = false };
         prefab.Add(new ZNetView()); prefab.Add(new Pickable());
         var data = new ZDO { m_uid = new ZDOID { ID = next++ }, Hash = 100 + next, Position = new Vector3(x, 0, z) };
         ZDOMan.instance.Objects.Add(data); ZNetScene.instance.Prefabs.Add(data.Hash, prefab);
-        data.SetOwner(99); data.Writes = 0; controller.OwnerChanged(data);
+        data.SetOwner(99); data.Writes = 0; if (notify) controller.OwnerChanged(data);
         return data;
     }
     private static ZNetView HarvestView(ZDO data)
@@ -22,11 +23,11 @@ internal static partial class IntegrationTests
     }
     private static void HarvestHello(ZNetPeer peer)
     { GridReceive(peer, GridPacket(0, delegate(ZPackage p) { p.Write(5); })); }
-    private static ZPackage HarvestProof(ZNetPeer server, ZDO data, ZPackage query, bool areaReady, Action<GameObject> alter = null)
+    private static ZPackage HarvestProof(ZNetPeer server, ZDO data, ZPackage query, bool areaReady, Action<GameObject> alter = null,Func<Vector3,bool> regionReady=null)
     {
         var view = HarvestView(data); if (alter != null) alter(view.gameObject);
         ZNetScene.instance.Views.Add(data, view);
-        try { return GridClientReply(server, query, areaReady); }
+        try { return GridClientReply(server, query, areaReady,regionReady); }
         finally { ZNetScene.instance.Views.Remove(data); }
     }
     private static void HarvestLoading()
@@ -100,7 +101,128 @@ internal static partial class IntegrationTests
         SharedServerLoadRequests();
         GeneralInitialLoading();
         HarvestCleanupAndScope();
+        RetainedHarvestRegistration();
+        ClientSectorBorderProof();
+        ClientSectorBorderWork();
         Console.WriteLine("PASS: "+(checks-start)+" early-harvest assertions: loaded recipient only, unchanged native creation, exact-once queued pick, same-node adoption, bounded lifecycle and legacy/physics/inventory exclusions.");
+    }
+    private static void ClientSectorBorderProof()
+    {
+        Fresh(Kinds.Pickables,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true);
+        var peer=Peer(1,31,31);var server=new ZNetPeer{Uid=99,m_server=true};ZNet.instance.Peers.Add(server);GridStart();
+        try
+        {
+            HarvestHello(peer);Tick(0);var sent=GridCapture(peer);int step=0;
+            Func<Vector3,bool> playerReady=delegate(Vector3 point){return ZoneSystem.GetZone(point).Equals(ZoneSystem.GetZone(peer.Position));};
+            foreach(Vector3 position in new[]{new Vector3(33,0,31),new Vector3(31,0,33),new Vector3(33,0,33)})
+            {
+            float now=.1f+step++;var data=UncreatedHarvest("BlueberryBush",position.x,position.z);
+            ZNetScene.instance.Ready=delegate{return false;};Tick(now);var query=sent[sent.Count-1];
+            var reply=HarvestProof(server,data,query,true,null,playerReady);
+            Check("loaded neighbouring-sector harvest uses ready player footprint instead of missing outer sectors",GridReplyAvailable(reply));
+            var wrong=HarvestProof(server,data,query,true,null,delegate(Vector3 point){return !playerReady(point);});
+            Check("ready object-centred area cannot bypass an unready player footprint",!GridReplyAvailable(wrong));
+            ZoneSystem.instance.Loaded=false;wrong=HarvestProof(server,data,query,true,null,playerReady);ZoneSystem.instance.Loaded=true;
+            Check("ready player footprint never bypasses the harvest's unloaded terrain zone",!GridReplyAvailable(wrong));
+            MovePeer(peer,1024,1024);wrong=HarvestProof(server,data,query,true);MovePeer(peer,31,31);
+            Check("loaded old harvest outside current native reference area cannot prove ready",!GridReplyAvailable(wrong));
+            GridReceive(peer,reply);Tick(now+.1f);Check("neighbouring-sector harvest transfers while server is unready",data.GetOwner()==1&&!data.Created);
+            Check("post-owner startup delivery still requires current native state",!TooManyLags.GridHandoffs.Protocol.Ready(ZDOMan.instance,1,data));
+            query=sent[sent.Count-1];reply=HarvestProof(server,data,query,true,null,playerReady);
+            Check("post-owner delivery uses the same loaded local footprint across a sector boundary",GridReplyAvailable(reply));
+            GridReceive(peer,reply);Check("queued interaction can finish without loading outer client sectors",TooManyLags.GridHandoffs.Protocol.Ready(ZDOMan.instance,1,data));
+            }
+            foreach(Type type in new[]{typeof(Vagon),typeof(Character),typeof(Pickable)})
+            {
+                var data=Object(type,33,31,1);var view=ZNetScene.instance.FindInstance(data);
+                if(type==typeof(Pickable))view.gameObject.Add(new Rigidbody());
+                var query=GridPacket(5,delegate(ZPackage p){p.Write(data.m_uid);p.Write(9000L);p.Write(1L);p.Write((uint)data.OwnerRevision);p.Write(data.DataRevision);});
+                Check("dynamic physics still requires object-centred readiness: "+type.Name,!GridReplyAvailable(GridClientReply(server,query,true,playerReady)));
+                Check("dynamic physics keeps its original object-ready result: "+type.Name,GridReplyAvailable(GridClientReply(server,query,true,delegate(Vector3 point){return !playerReady(point);})));
+            }
+        }
+        finally{TooManyLags.GridHandoffs.Protocol.Stop();}
+    }
+    private static void ClientSectorBorderWork()
+    {
+        Fresh(Kinds.Pickables,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true);
+        var peer=Peer(1,31,31);var server=new ZNetPeer{Uid=99,m_server=true};ZNet.instance.Peers.Add(server);GridStart();
+        var temporary=new List<ZDO>();
+        try
+        {
+            HarvestHello(peer);Tick(0);var sent=GridCapture(peer);
+            foreach(Vector3 p in new[]{new Vector3(33,0,31),new Vector3(31,0,33),new Vector3(33,0,33)})temporary.Add(UncreatedHarvest("RaspberryBush",p.x,p.z));
+            ZNetScene.instance.Ready=delegate{return false;};Tick(.1f);
+            foreach(var data in temporary)ZNetScene.instance.Views.Add(data,HarvestView(data));
+            var replies=GridCapture(server);
+            try
+            {
+                ZNet.instance.Dedicated=false;ZNet.instance.ServerPeer=server;ZDOMan.SessionID=1;Time.frameCount++;
+                ZNetScene.instance.Ready=delegate(Vector3 p){return ZoneSystem.GetZone(p).Equals(ZoneSystem.GetZone(peer.Position));};
+                int scans=ZNetScene.instance.AreaQueries;
+                foreach(var query in sent)GridReceive(server,query);
+                Check("three neighbouring object sectors share one native player-area scan",ZNetScene.instance.AreaQueries-scans==1);
+                Check("shared player-area result still proves every actual object",replies.Count==3&&replies.TrueForAll(GridReplyAvailable));
+            }
+            finally
+            {
+                foreach(var data in temporary)ZNetScene.instance.Views.Remove(data);
+                ZNet.instance.Dedicated=true;ZNet.instance.ServerPeer=null;ZDOMan.SessionID=99;ZNetScene.instance.Ready=delegate{return false;};
+            }
+            foreach(var reply in replies)GridReceive(peer,reply);Tick(.2f);
+            Check("shared area proof does not replace individual object and state requirements",temporary.TrueForAll(delegate(ZDO data){return data.GetOwner()==1&&!data.Created;}));
+        }
+        finally{TooManyLags.GridHandoffs.Protocol.Stop();}
+    }
+    private static void RetainedHarvestRegistration()
+    {
+        var patcher=new Harmony("botanic.authority.test.retained-harvest");
+        patcher.Patch(AccessTools.Method(typeof(ZDOMan),"ReleaseNearbyZDOS"),transpiler:new HarmonyMethod(AccessTools.Method(typeof(OwnershipPatch),"Transpiler")));
+        try
+        {
+            foreach(string reason in new[]{"ordinary owner event","existing server owner","owner before reference ready","return after pruning"})
+            {
+                Fresh(Kinds.Pickables,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true);
+                var peer=Peer(1,31,31);var server=new ZNetPeer{Uid=99,m_server=true};ZNet.instance.Peers.Add(server);GridStart();
+                try
+                {
+                    HarvestHello(peer);Tick(0);var objects=new List<ZDO>();
+                    if(reason=="owner before reference ready"){peer.Ready=false;server.Ready=false;}
+                    bool notify=reason!="existing server owner";
+                    objects.Add(UncreatedHarvest("Pickable_Branch",29,31,notify));
+                    objects.Add(UncreatedHarvest("BlueberryBush",33,31,notify));
+                    objects.Add(UncreatedHarvest("RaspberryBush",31,33,notify));
+                    objects.Add(UncreatedHarvest("Pickable_Carrot",33,33,notify));
+                    peer.Ready=true;server.Ready=true;
+                    if(reason=="return after pruning")
+                    {
+                        MovePeer(peer,1024,1024);server.Ready=false;Tick(.01f);server.Ready=true;MovePeer(peer,31,31);Tick(.02f);
+                    }
+                    if(reason=="owner before reference ready")Tick(.05f);
+                    var adjacent=UncreatedHarvest("Pickable_Log",30,31);
+                    Check("adjacent ordinary owner event is registered",controller.InitialObject(adjacent));
+                    Check("regression covers the login sector plus three neighbouring sectors",!ZoneSystem.GetZone(objects[0].GetPosition()).Equals(ZoneSystem.GetZone(objects[3].GetPosition())));
+                    ZNetScene.instance.Ready=delegate{return false;};var sent=GridCapture(peer);
+                    ZDOMan.instance.ReleaseNearbyZDOS(peer.Position,1);
+                    foreach(var data in objects)Check("native owner retention also indexes missing harvest: "+reason,controller.InitialObject(data));
+                    Check("native retention does not write ownership or send a handoff",objects.TrueForAll(delegate(ZDO d){return d.GetOwner()==99&&d.Writes==0;})&&sent.Count==0);
+                    Tick(.1f);Check("all four sectors request destination loading",sent.Count==objects.Count+1);
+                    foreach(var query in new List<ZPackage>(sent))
+                    {
+                        query.SetPos(0);query.ReadInt();var data=ZDOMan.instance.GetZDO(query.ReadZDOID());
+                        GridReceive(peer,HarvestProof(server,data,query,true));
+                    }
+                    Tick(.2f);
+                    foreach(var data in objects)Check("loaded client can claim retained harvest across sector borders: "+reason,data.GetOwner()==1&&!data.Created);
+                    int jobs=controller.ScheduledAttempts,scans=GameObject.Scans,packets=sent.Count;
+                    for(int i=0;i<25;i++){ZDOMan.instance.ReleaseNearbyZDOS(peer.Position,1);Tick(1+i);}
+                    Check("later native passes do not reindex or query completed harvest",jobs==controller.ScheduledAttempts&&scans==GameObject.Scans&&packets==sent.Count);
+                    Console.WriteLine("PASS: harvest across login sector and three neighbours; "+reason+".");
+                }
+                finally{TooManyLags.GridHandoffs.Protocol.Stop();}
+            }
+        }
+        finally{patcher.UnpatchSelf();}
     }
     private static void HarvestQueuedRequests()
     {

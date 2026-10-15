@@ -39,6 +39,7 @@ namespace UnityEngine
     public class GameObject : Object
     {
         public static int Scans, Lookups;
+        public int ContainerHierarchyReads;
         public string name;
         public bool activeInHierarchy = true;
         public readonly Transform transform = new Transform();
@@ -49,6 +50,7 @@ namespace UnityEngine
         public T GetComponent<T>() where T : Component { Lookups++; foreach (Component component in Components) if (component is T) return (T)component; return null; }
         public T[] GetComponentsInChildren<T>(bool inactive) where T : Component
         {
+            if (typeof(T) == typeof(Container)) ContainerHierarchyReads++;
             Scans++; List<T> result = new List<T>();
             foreach (Component component in Components) if (component is T) result.Add((T)component);
             foreach (GameObject child in Children) result.AddRange(child.GetComponentsInChildren<T>(inactive));

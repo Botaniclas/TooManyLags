@@ -1,17 +1,12 @@
 # Changelog
 
-**Unreleased**
+**1.0.41**
 ```
-- Fixes some already server-owned harvestables and other stationary interactions waiting for server instantiation before entering the grid after login or returning to an area. Missing early records are recovered during vanilla's existing ownership pass, including neighbouring zones. Server-side fix; 1.0.40 clients remain compatible.
-- Fixes loaded stationary interactions across a 64-metre zone boundary waiting for unrelated outer client sectors. Loading proofs now check the actual object/terrain zone inside the player's ready native footprint; dynamic physics keeps its existing area checks. Update server and clients for the complete startup fix.
-- Fixes stationary interactions, including harvestables, torches, doors and public chests, waiting for server instantiation before entering a loaded client's grid after login. Requires updated clients and experimental protection; recipient loading, field delays and source-use protection remain mandatory. Pending source commits reuse their loading proof and survive server instantiation without restarting the handoff.
-- Unready overlap takeovers now keep the available player owner and wait for a fresh covering grid request. Server loading completion alone never replays that takeover; a later exclusive player policy remains usable.
-- Fixes delayed initial server ownership for fixed doors/gates with animated kinematic child bodies. Moving roots, synchronized/dynamic physics and normal loading/use safeguards remain excluded or protected.
-- Adds guarded grid/default ownership for incinerators. Burning/open inventories reject transfers until a fresh covering player update; requires experimental protection and updated clients. Older clients keep native incinerator ownership.
-- Adds optional WorldMarkers server defaults for existing dungeon-entrance/Vegvisir network objects with ServerOwnedInteractivesByDefault=true. Local objects without a ZDO remain unchanged; native active-owner and region-release rules stay intact.
-- Adds prefab-name filters to admin ownership diagnostics and prioritizes pending local transfers, showing missing server instances, native creation/zone gates and loading waits without background checks.
-- Fixes inactive prefabs missing initial server ownership with ServerOwnedInteractivesByDefault=true. Eligible interactions can receive the server owner before scene loading completes; inactive inventory controls retain the same privacy and handoff safeguards.
-- Removes the PUP FPS version lock for AI server takeovers and supports its newer dedicated-collider readiness proof. Unfinished replacements and incompatible interfaces still block takeover; existing attack, loading and handoff safeguards remain active.
+- Fixes delayed grid ownership and unusable harvestables, torches, doors and public chests after login or returning to neighbouring zones. Eligible server defaults enter the grid before server instantiation; loading proofs share native area checks and avoid duplicate inventory searches. Update server and clients; early transfers require experimental protection.
+- Keeps the available player owner when an overlapping field requests a server that is not ready. Only a fresh covering movement/rotation update retries that takeover; pending source handoffs survive server instantiation without restarting.
+- Adds incinerator ownership with open-inventory and burning protection; requires updated clients and experimental protection. Adds optional WorldMarkers server defaults for existing networked dungeon entrances and Vegvisirs when ServerOwnedInteractivesByDefault=true.
+- Supports newer PUP FPS dedicated-collider readiness without an exact-version lock for AI server takeovers. Unfinished replacements and incompatible interfaces still block takeover.
+- Adds prefab-name filters to admin ownership diagnostics, including missing server instances and loading waits, without background checks.
 ```
 
 **1.0.34**

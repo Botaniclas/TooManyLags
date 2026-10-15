@@ -102,12 +102,22 @@ namespace TooManyLags
         // owner, not an inactive prefab or a first-load server placeholder.
         internal static bool InitialRoot(GameObject root, Kinds expected)
         {
+            Container inventory;
+            return InitialRoot(root, expected, out inventory);
+        }
+        internal static bool InitialRoot(GameObject root, Kinds expected, out Container inventory)
+        {
+            inventory = null;
             if (expected == Kinds.None || expected == Kinds.TamedAnimals || expected == Kinds.Vehicles || expected == Kinds.WorldMarkers ||
                 root.transform.parent != null || Classify(root) != expected || !Stationary(root, expected)) return false;
-            ZNetView view = root.GetComponent<ZNetView>(); int count = 0;
-            foreach (Container inventory in root.GetComponentsInChildren<Container>(true))
-                if ((inventory.m_rootObjectOverride ? inventory.m_rootObjectOverride : inventory.GetComponentInParent<ZNetView>(true)) == view &&
-                    (++count > 1 || inventory.m_privacy != Container.PrivacySetting.Public)) return false;
+            ZNetView view = root.GetComponent<ZNetView>(); int count = 0; Container found = null;
+            foreach (Container candidate in root.GetComponentsInChildren<Container>(true))
+                if ((candidate.m_rootObjectOverride ? candidate.m_rootObjectOverride : candidate.GetComponentInParent<ZNetView>(true)) == view)
+                {
+                    if (++count > 1 || candidate.m_privacy != Container.PrivacySetting.Public) return false;
+                    found = candidate;
+                }
+            inventory = found;
             return true;
         }
         internal static bool Stationary(GameObject root, Kinds kind)

@@ -67,7 +67,32 @@ internal static partial class IntegrationTests
         InitialLoadedSourceGuards(true);
         InitialQueuedUse();
         InitialQuietWork();
+        InitialInventoryInspectionWork();
         Console.WriteLine("PASS: "+(checks-start)+" general initial-object assertions: every eligible category, real client view, existing ownership tuple, source inventory/use protection and no idle object rescans.");
+    }
+    private static void InitialInventoryInspectionWork()
+    {
+        var commit=typeof(TooManyLags.GridHandoffs.Protocol).GetMethod("InitialCommit",BindingFlags.Static|BindingFlags.NonPublic);
+        Fresh(Kinds.Containers,defaultInteractives:true);
+        GridStart();
+        try
+        {
+            for(int i=0;i<100;i++)
+            {
+                var root=new GameObject();var view=root.Add(new ZNetView());
+                var child=new GameObject();child.transform.parent=root.transform;root.Children.Add(child);
+                var inventory=child.Add(new Container());
+                Check("child inventory accepts an idle initial commit",(bool)commit.Invoke(null,new object[]{view,Kinds.Containers}));
+                Check("initial inspection traverses the inventory hierarchy once",root.ContainerHierarchyReads==1&&child.ContainerHierarchyReads==1);
+                int scans=GameObject.Scans;
+                inventory.InUse=true;Check("cached child inventory still blocks an open inventory",!(bool)commit.Invoke(null,new object[]{view,Kinds.Containers}));inventory.InUse=false;
+                inventory.Loading(true);Check("cached child inventory still blocks local inventory loading",!(bool)commit.Invoke(null,new object[]{view,Kinds.Containers}));inventory.Loading(false);
+                inventory.m_privacy=Container.PrivacySetting.Private;Check("cached child inventory still checks current privacy",!(bool)commit.Invoke(null,new object[]{view,Kinds.Containers}));inventory.m_privacy=Container.PrivacySetting.Public;
+                Check("cached child inventory becomes usable after use ends",(bool)commit.Invoke(null,new object[]{view,Kinds.Containers}));
+                Check("warm inventory guards require no hierarchy rescans",GameObject.Scans==scans);
+            }
+        }
+        finally{TooManyLags.GridHandoffs.Protocol.Stop();}
     }
     private static void InitialLoadedSourceGuards(bool attachDuringCommit)
     {

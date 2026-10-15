@@ -332,13 +332,8 @@ namespace TooManyLags.GridHandoffs
             if (cache.Kind != expected) return null;
             if (!cache.Inspected)
             {
-                cache.Inspected = true; cache.Initial = ObjectCatalog.InitialRoot(view.gameObject, expected);
-                if (cache.Initial)
-                {
-                    foreach (Container inventory in view.GetComponentsInChildren<Container>(true))
-                        if ((inventory.m_rootObjectOverride ? inventory.m_rootObjectOverride : inventory.GetComponentInParent<ZNetView>(true)) == view) cache.Inventory = inventory;
-                    if (expected == Kinds.Incinerators) cache.Incinerator = view.GetComponent<Incinerator>();
-                }
+                cache.Inspected = true; cache.Initial = ObjectCatalog.InitialRoot(view.gameObject, expected, out cache.Inventory);
+                if (cache.Initial && expected == Kinds.Incinerators) cache.Incinerator = view.GetComponent<Incinerator>();
             }
             return cache.Initial && (!cache.Inventory || cache.Inventory.m_privacy == Container.PrivacySetting.Public) ? cache : null;
         }

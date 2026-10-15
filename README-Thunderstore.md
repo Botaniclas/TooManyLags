@@ -36,7 +36,11 @@ Defaults should work well. Find configuration, admin commands, compatibility det
 
 ## How it works and what to expect
 
-With the default Server-Side Simulation mode, nearby objects run locally before you interact with them. Shared fields use the server, and Hostile Mobs normally follow their player target's ownership. The aim is almost no noticeable connection lag, with two situations where **your own very poor connection** can still be felt:
+With the default Server-Side Simulation mode, nearby objects run locally before you interact with them. Shared fields use the server, and Hostile Mobs normally follow their player target's ownership.
+
+**Outside the two cases below, the goal is to eliminate all connection-related lag from supported interactions, making multiplayer feel like single-player.**
+
+Your own **very poor connection** can still be felt in these situations:
 
 1. **Close to other players:** overlapping fields run on the server, so interactions can reflect your own latency.
 2. **Fighting the same mob together:** when it targets someone else, its simulation runs elsewhere and your connection can delay what you see. If an ordinary Hostile Mob targets you, it normally runs locally; above the configured ping limit (**200 ms** by default), another eligible player within **6 metres of the mob** triggers server fallback once loading and handoff safeguards allow it. Both values are configurable. Bosses have separate shared-combat rules in the Wiki.

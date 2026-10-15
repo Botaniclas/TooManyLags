@@ -12,7 +12,7 @@ TooManyLags applies required FiresGhettoNetworking settings at startup, includin
 
 Edit `BepInEx/config/botanic.toomanylags.fgnaddon.cfg` **on the server**. This controls every gameplay setting, including camera settings, `Enabled` and `EnableAIOwnership`. Clients follow the server when connecting; only `EnableLogs` is local.
 
-Start with the defaults. The most useful choices are **where simulation runs**, **how far ahead the grid prepares ownership**, and **when shared combat moves to the server**.
+The default settings should be optimal for most setups. However, adjust **simulation mode** and **cell ownership retention** (`KeepOwnershipOnCellExit`) to suit your needs.
 
 ### 1. Distribute simulation between server and clients
 

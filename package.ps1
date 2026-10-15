@@ -5,7 +5,7 @@ $authorityConfigRelease=Join-Path $PSScriptRoot 'release-config\BepInEx\config'
 $authorityDll=Join-Path $PSScriptRoot 'bin\TooManyLags.dll'
 $authorityVerification=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Raw | ConvertFrom-Json
 $authorityManifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'manifest.json') -Raw | ConvertFrom-Json
-$authorityVersion='1.0.44'
+$authorityVersion='1.0.45'
 $authorityStem='TooManyLags-FGNAddon-'+$authorityVersion
 $authorityHash=(Get-FileHash -LiteralPath $authorityDll -Algorithm SHA256).Hash
 if($authorityVerification.version -ne $authorityVersion -or $authorityVerification.dllSha256 -ne $authorityHash){throw 'DLL differs from verified build.'}
@@ -22,6 +22,8 @@ $authorityZip=Join-Path $authorityOutput ($authorityStem+'.zip')
 Compress-Archive -LiteralPath $authorityFiles -DestinationPath $authorityZip -Force
 $authoritySources=@('src','tests','tools','README.md','VALIDATION.md','manifest.json','icon.png','botanic.toomanylags.fgnaddon.cfg','generate-config.ps1','build.ps1','verify.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-integration.ps1','test-directional.ps1','test-field-cache.ps1','test-regions.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1','benchmark.ps1','benchmark-regions.ps1','package.ps1','verification.json') | ForEach-Object {Join-Path $PSScriptRoot $_}
 $authoritySources+=Join-Path $PSScriptRoot 'CHANGELOG.md'
+$authoritySources+=Join-Path $PSScriptRoot 'test-pup-compatibility.ps1'
+$authoritySources+=Join-Path $PSScriptRoot 'audit-pup-native.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-config-console.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-camera-recovery.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-recipient-scope.ps1'

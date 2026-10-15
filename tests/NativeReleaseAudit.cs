@@ -231,12 +231,13 @@ internal static class NativeReleaseAudit
         {
             if (attribute.AttributeType.FullName != "BepInEx.BepInDependency") continue;
             dependencies++;
+            string id = Convert.ToString(attribute.ConstructorArguments[0].Value);
             Check(attribute.ConstructorArguments.Count == 2 &&
-                Convert.ToString(attribute.ConstructorArguments[0].Value) == "com.Fire.FiresGhettoNetworkMod" &&
-                Convert.ToInt32(attribute.ConstructorArguments[1].Value) == 1,
-                "Only unversioned hard FGN dependency permitted");
+                ((id == "com.Fire.FiresGhettoNetworkMod" && Convert.ToInt32(attribute.ConstructorArguments[1].Value) == 1) ||
+                ((id == "com.pup.instancecombiner.safe" || id == "botanic.pup.patch") && Convert.ToInt32(attribute.ConstructorArguments[1].Value) == 2)),
+                "Only unversioned required FGN and optional PUP load-order dependencies permitted");
         }
-        Check(dependencies == 1, "Exactly one plugin dependency required");
+        Check(dependencies == 3, "One required dependency and two optional load-order dependencies expected");
         foreach (AssemblyNameReference reference in authority.MainModule.AssemblyReferences)
             Check(reference.Name.IndexOf("pup", StringComparison.OrdinalIgnoreCase) < 0, "Unexpected Pup assembly dependency");
         int configRegistrations = 0, configAdminChecks = 0;
@@ -244,7 +245,8 @@ internal static class NativeReleaseAudit
         {
             // Imported AI contracts and optional direct PUP readiness have their
             // own actual-IL audits; the original grid restrictions stay scoped.
-            if(type.FullName.StartsWith("TooManyLags.FgnCombat",StringComparison.Ordinal)||
+            if(type.FullName.StartsWith("TooManyLags.PupCompatibility.",StringComparison.Ordinal)||
+                type.FullName.StartsWith("TooManyLags.FgnCombat",StringComparison.Ordinal)||
                 type.FullName.StartsWith("TooManyLags.FgnMobHandoff",StringComparison.Ordinal)||
                 type.FullName.StartsWith("TooManyLags.FgnBossPolicy",StringComparison.Ordinal)||
                 type.FullName.StartsWith("TooManyLags.FgnTargetEvents",StringComparison.Ordinal)||
@@ -517,6 +519,9 @@ internal static class NativeReleaseAudit
     {
         foreach (TypeDefinition type in module.MainModule.Types)
         {
+            // Optional PUP targets are audited separately against actual PUP
+            // metadata and installed only by its dependency-gated lifecycle.
+            if (type.FullName.StartsWith("TooManyLags.PupCompatibility.", StringComparison.Ordinal)) continue;
             yield return type;
             if (type.FullName == "TooManyLags.GridHandoffs.Protocol")
                 foreach (TypeDefinition nested in type.NestedTypes) yield return nested;

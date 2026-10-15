@@ -8,9 +8,13 @@ TooManyLags applies required FiresGhettoNetworking settings at startup, includin
 
 **Server-Side Simulation adds CPU workload to the server.** For a weak or already overloaded server CPU, set `NoServerSideSimulation=true`. Objects and Hostile Mobs then stay player-owned; shared fields prefer the better-connected player. Server-owned buildings, default ownership and permanent station ownership are unavailable. Inventory, refilling and active-use safeguards remain; all clients need the mod for full handoffs. Shared interactions can still depend on the selected player's latency.
 
+## Optional PUP FPS compatibility
+
+`EnablePupCompatibility=true` in section `02 - PUP FPS Compatibility` adds the built-in collision/stability guards when PUP FPS is present. No separate BotanicPupPatch is needed. Without the required mods, or when a separate PupPatch is detected, the embedded module stays completely inactive. Configure this switch locally on each installation and restart; see **Compatibility** for details.
+
 ## Server configuration
 
-Edit `BepInEx/config/botanic.toomanylags.fgnaddon.cfg` **on the server**. This controls every gameplay setting, including camera settings, `Enabled` and `EnableAIOwnership`. Clients follow the server when connecting; only `EnableLogs` is local.
+Edit `BepInEx/config/botanic.toomanylags.fgnaddon.cfg` **on the server**. This controls every gameplay setting, including camera settings, `Enabled` and `EnableAIOwnership`. Clients follow the server when connecting; `EnableLogs` and `EnablePupCompatibility` are local. The PUP switch requires a game/server restart and automatically stays inactive without its dependencies or when a separate BotanicPupPatch is loaded.
 
 The default settings should be optimal for most setups. However, adjust **simulation mode** and **cell ownership retention** (`KeepOwnershipOnCellExit`) to suit your needs.
 

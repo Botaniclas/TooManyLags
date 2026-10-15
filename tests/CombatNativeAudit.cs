@@ -54,7 +54,7 @@ internal static class NativeCombatAudit
                 int at=body.IndexOf(target);
                 Check(at>=0&&body[at].OpCode.Name.StartsWith("ldloc",StringComparison.Ordinal)&&body[at+1].OpCode.Name=="ldc.i4.1"&&body[at+2].OpCode.Name=="add","legacy dedicated skip lands directly at the loop increment");
             }
-            TypeDefinition cells=adapter.Module.Types.Single(t=>t.Name.StartsWith("TypedCellReadiness`",StringComparison.Ordinal));
+            TypeDefinition cells=adapter.Module.Types.Single(t=>t.FullName.StartsWith("TooManyLags.TypedCellReadiness`",StringComparison.Ordinal));
             Check(cells.Fields.Any(f=>f.Name=="dedicatedPrepared"&&f.FieldType.FullName=="System.Func`4<UnityEngine.Vector2Int,UnityEngine.Vector3,System.Single,System.Boolean>"),"adapter stores typed dedicated proxy query");
             Check(Method(cells,".ctor").Body.Instructions.Any(i=>i.OpCode.Name=="ldstr"&&(string)i.Operand=="HasPreparedDedicatedCollision")&&
                 Method(cells,"Ready").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="Invoke"&&((MethodReference)i.Operand).DeclaringType.FullName.StartsWith("System.Func`4<",StringComparison.Ordinal)),"release cell readiness binds and invokes optional native dedicated proof");
@@ -317,8 +317,8 @@ internal static class NativeCombatAudit
                 Method(combat,"HandoffAttackRejected").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="AttackReady")&&
                 Method(combat,"ResultPostfix").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="HandoffAttackRejected"),"early ready events wait for pending result and are consumed after its cleanup");
             Check(Method(combat,"ServerReady").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.FullName=="TooManyLags.NativePup"&&((MethodReference)i.Operand).Name=="ReadyPoint"),"server takeover reuses optional PUP collision readiness");
-            Check(!addon.MainModule.Types.Any(t=>t.Name=="CollisionGuard"||t.Name=="FgnTakeover"||t.Name=="Statics"),"imported combat policy adds no PupPatch body/support hook modules");
-            TypeDefinition nativeAdapter=addon.MainModule.Types.Single(t=>t.Name=="NativePup");
+            Check(!addon.MainModule.Types.Any(t=>t.Namespace=="TooManyLags"&&(t.Name=="CollisionGuard"||t.Name=="FgnTakeover"||t.Name=="Statics")),"combat policy remains separate from the optional PUP body/support module");
+            TypeDefinition nativeAdapter=addon.MainModule.Types.Single(t=>t.FullName=="TooManyLags.NativePup");
             Check(!nativeAdapter.Methods.Any(m=>new[]{"Attach","Existing","ForceStep","ReadyBounds","NeededByNativeBody"}.Contains(m.Name))&&
                 !nativeAdapter.Fields.Any(f=>new[]{"GuardType","ReadyMethod","MobMethod","PreserveMethod","RepairMethod","RetainMethod","ForceWait"}.Contains(f.Name)),
                 "optional PUP adapter contains only readiness and no physics/support hook surface");

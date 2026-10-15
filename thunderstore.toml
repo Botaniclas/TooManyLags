@@ -4,7 +4,7 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "Botaniclas"
 name = "TooManyLags_FGN_Addon"
-versionNumber = "1.0.44"
+versionNumber = "1.0.45"
 description = "Built to avoid almost all connection-related lag. Go beyond Server-Side Simulation with this FiresGhettoNetworking addon: local interactions and smarter Hostile Mob ownership. Install, play, and never look back."
 websiteUrl = "https://github.com/Botaniclas/TooManyLags"
 containsNsfwContent = false

@@ -1,0 +1,62 @@
+{
+  "source": "BotanicPupPatch 2.1.1",
+  "namespace": "TooManyLags.PupCompatibility",
+  "files": [
+    {
+      "file": "CellReadiness.cs",
+      "source_sha256": "4BD6F44EBA8E40AC42770CF8AC3E88E1F5B69240F33C66CB0831C4476764652C",
+      "import_sha256": "58FF40DC5AFD9849B626A4ECD07080167B58187C985BF3BC426C8B24F782EA18",
+      "namespace_only": true
+    },
+    {
+      "file": "FieldReader.cs",
+      "source_sha256": "D810DC6A054862BF3667B594B368CB2C967A6000C87E1BA9F83A4647EA37413B",
+      "import_sha256": "1983E780CA309FF4BFF89D9562BE9BA679BB08F421E88C64C9C45AD83DC239B2",
+      "namespace_only": true
+    },
+    {
+      "file": "NativePup.cs",
+      "source_sha256": "06E5467492E1ED4DCEA73CD2FB28973159075DE0C5E3D001672EFB84930FC027",
+      "import_sha256": "B70909488FEE58C4F15030636BDE7B640569D763EFA795B7097CC1D07F89C22D",
+      "namespace_only": true
+    },
+    {
+      "file": "NativeWaitPatch.cs",
+      "source_sha256": "1ACDCD95891AE1CE342E40722E7223A86EA7A9789DA635488B118F88CCFF7FBD",
+      "import_sha256": "DD2BF88FB602AF1FE23A755FA5B4673758F8476751C6683D7E9038F2A9E0ACD4",
+      "namespace_only": true
+    },
+    {
+      "file": "Statics.cs",
+      "source_sha256": "3477F9A7AE47ECFAD7D0E5AFB09FED08CEFEBCEBB9E4E9DDB21A47DCB2A33E2F",
+      "import_sha256": "1DD5CCEFA1CC228FAFC379EFD015B20AD4C1BB503A388D36F61FB97E27D6F3B9",
+      "namespace_only": true
+    },
+    {
+      "file": "StructuralTranspiler.cs",
+      "source_sha256": "ABFFB5DF842638D7F04CBF0E7431D5D145052AC6C21920CE1546B38DA2E4E61D",
+      "import_sha256": "DF47436659A9A95C3568DF6A4065E1E0DB917FD515CCF9DB36B6C9828162837C",
+      "namespace_only": true
+    },
+    {
+      "file": "SupportBounds.cs",
+      "source_sha256": "3F9DA034BB777823B934478E7451AAEC330C81543D2FACA63A0C5125224FED46",
+      "import_sha256": "2265A20A3D700AE2E10128EEA37C43C99A75009FB1AD376CF1D58920E37A1E51",
+      "namespace_only": true
+    },
+    {
+      "file": "FgnTakeover.cs",
+      "source_sha256": "142FC343DE20D541C972366F04E3D84C8211D4E19D789B31AF117F9DCE848A10",
+      "import_sha256": "0BD9FB34E916B960DDC25B481670B028D5050C2083B73EE2F880AB9F7CB466F4",
+      "namespace_only": true
+    },
+    {
+      "file": "PupServerStreaming.cs",
+      "source_sha256": "5772E1DF8B658836E6B1B9B070FDA37869472E9624B27CED059628950D67B1AC",
+      "import_sha256": "421C7EEB905904906B9BFA01BAF49AE10F272C2CA88162A4635032ADFD8AECB8",
+      "namespace_only": true
+    }
+  ],
+  "lifecycle": "BepInEx entry point replaced by a dependency-gated disposable module; no second plugin or Unity component. Standalone PupPatch or the legacy cart guard suppresses embedded installation. Core/fgn/streaming Harmony ownership is isolated. Config is local and restart-only.",
+  "combat": "Already included and extended by the current TML FgnCombatOwnership module; not installed a second time. Existing takeover of an external PupPatch optional combat feature is unchanged."
+}

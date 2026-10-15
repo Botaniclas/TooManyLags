@@ -7,17 +7,19 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.44.0")]
+[assembly: AssemblyVersion("1.0.45.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.44")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.45")]
     [BepInDependency(FgnId)]
+    [BepInDependency(PupId, BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("botanic.pup.patch", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.44", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.45", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -35,6 +37,7 @@ namespace TooManyLags
         private bool sessionStarted;
         private IDisposable clientOverrides;
         private MobPolicyHandoff clientTakeover;
+        private PupCompatibility.Plugin pupCompatibility;
         private void Awake()
         {
             instance = this;
@@ -51,6 +54,8 @@ namespace TooManyLags
                 "Server only; restart required. Recommended for dedicated servers with a weak or already overloaded CPU. true: disable FiresGhettoNetworking Server-Side Simulation and keep simulation on players; shared fields prefer the player with lower latency. Functionality is limited: no server ownership, and server-owned building/default/refill options are ignored. false: full Server-Side Simulation mode.").Value;
             logs = Config.Bind("01 - General", "EnableLogs", false, "Local to this server/client. Live console: tml_config EnableLogs true/false. Enable extra diagnostic messages. Startup failures are always reported.").Value;
             Diagnostics = logs;
+            bool pupCompatibilityEnabled = Config.Bind("02 - PUP FPS Compatibility", "EnablePupCompatibility", true,
+                "Local to this server/client; restart required. Built-in PUP FPS collision, building-stability and FiresGhettoNetworking handoff safeguards. Automatically inactive without the required mods or when a separate BotanicPupPatch supplies the guards. Inactive mode installs no guard hooks and does no runtime work. AI ownership remains controlled by section 09.").Value;
             bool refillStations = Config.Bind("03 - Default Ownership and Overrides", "ServerOwnedRefillStations", false,
                 "Server only; restart required. Keep enabled refill stations server-owned, even inside player fields: smelters, cooking/fire stations, fermenters, shield generators and turrets. false: grid rules with 1 second of protection, renewed by each observed refill. Ignored with NoServerSideSimulation=true.").Value;
             bool defaultMobs = Config.Bind("03 - Default Ownership and Overrides", "ServerOwnedMobsByDefault", false,
@@ -99,6 +104,12 @@ namespace TooManyLags
                 "Server only; live console supported. Predict camera rotation this many seconds ahead. Adds at most one adjacent direction; new fields use the inner/red delay. Keeps current coverage and handoff protection. 0 disables. Requires updated clients; character fallback is unchanged.", new AcceptableValueRange<float>(0f, .5f))).Value;
             CameraHeading.Configure(cameraOverlap, cameraPrediction);
             // Configuration ends here.
+            PluginInfo pupGuard, pupPlugin, pupNetwork;
+            bool externalPupGuard = (Chainloader.PluginInfos.TryGetValue("botanic.pup.patch", out pupGuard) && pupGuard.Instance) ||
+                (Chainloader.PluginInfos.TryGetValue("niclas.pup.cartguard", out pupGuard) && pupGuard.Instance);
+            pupCompatibility = PupCompatibility.Plugin.Start(pupCompatibilityEnabled,
+                Chainloader.PluginInfos.TryGetValue(PupId, out pupPlugin) ? pupPlugin.Instance : null,
+                Chainloader.PluginInfos.TryGetValue(FgnId, out pupNetwork) && pupNetwork.Instance ? pupNetwork.Instance.GetType().Assembly : null, externalPupGuard);
             configuredAI = enableAI;
             if (!Chainloader.PluginInfos.TryGetValue(FgnId, out networkPlugin) || !networkPlugin.Instance)
             { enabledMod = false; Logger.LogWarning("TooManyLags inactive: FiresGhettoNetworking is not loaded."); return; }
@@ -407,6 +418,7 @@ namespace TooManyLags
         private void Cleanup() { if (harmony != null) harmony.UnpatchSelf(); }
         private void OnDestroy()
         {
+            if (pupCompatibility != null) { pupCompatibility.Dispose(); pupCompatibility = null; }
             GridHandoffs.Protocol.Stop();
             ConfigConsole.Reset(); if (configHarmony != null) configHarmony.UnpatchSelf(); commands = null;
             FgnCombatOwnership.Stop(); FgnCombatStatus.Reset();

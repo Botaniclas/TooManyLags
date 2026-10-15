@@ -1,6 +1,6 @@
 {
   "name": "TooManyLags_FGN_Addon",
-  "version_number": "1.0.44",
+  "version_number": "1.0.45",
   "website_url": "https://github.com/Botaniclas/TooManyLags",
   "description": "Built to avoid almost all connection-related lag. Go beyond Server-Side Simulation with this FiresGhettoNetworking addon: local interactions and smarter Hostile Mob ownership. Install, play, and never look back.",
   "dependencies": [

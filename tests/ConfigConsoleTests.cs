@@ -127,6 +127,7 @@ internal static class ConfigConsoleTests
         ConfigEntry<float> prediction = config.Bind("08", "CameraRotationPredictionSeconds", .1f, new ConfigDescription("Server only", new AcceptableValueRange<float>(0, .5f)));
         ConfigEntry<float> overlap = config.Bind("05", "ServerOverlapCooldownSeconds", 1f, new ConfigDescription("Server only", new AcceptableValueRange<float>(0, 30)));
         ConfigEntry<bool> logs = config.Bind("01", "EnableLogs", false, "Local");
+        ConfigEntry<bool> pupCompatibility = config.Bind("02 - PUP FPS Compatibility", "EnablePupCompatibility", true, "Local; restart required");
         ConfigEntry<int> ping = config.Bind("09", "ServerFallbackPingMs", 200, new ConfigDescription("Server only", new AcceptableValueRange<int>(0, 2000)));
         ConfigEntry<float> size = config.Bind("04", "GridCellSizeMeters", 4f, new ConfigDescription("Server only; restart required", new AcceptableValueList<float>(4f, 6.4f, 8f, 16f)));
         ConfigEntry<string> shape = config.Bind("04", "GridCoveragePattern", "Rounded7x7", new ConfigDescription("Server only; restart required", new AcceptableValueList<string>("Rounded5x5", "Square3x3", "Rounded7x7")));
@@ -142,6 +143,14 @@ internal static class ConfigConsoleTests
         keep.Value = true; staticDefault.Value = interactiveDefault.Value = noSimulation.Value = false; config.Save();
         int applies = 0; string changed = null;
         ConfigCommands commands = new ConfigCommands(config, delegate(string key) { applies++; changed = key; });
+        Check(commands.Execute("EnablePupCompatibility false", false).Contains("restarting this game/server") && !pupCompatibility.Value && applies == 0,
+            "local PUP switch saves for restart without changing active guards");
+        Check(commands.Execute("EnablePupCompatibility true", true).Contains("Wrong setting scope") && !pupCompatibility.Value,
+            "remote server commands cannot change a client's guard switch");
+        Check(commands.Execute("list", false).Contains("EnablePupCompatibility") && !commands.Execute("list", true).Contains("EnablePupCompatibility"),
+            "PUP compatibility appears only in local configuration");
+        Check(commands.Execute("EnablePupCompatibility true", false).Contains("no restart pending") && pupCompatibility.Value && applies == 0,
+            "restoring the local guard switch clears the pending restart without runtime work");
         Check(commands.Execute("outertransitiondelayseconds 0,2", true).Contains("applied") && outer.Value == .2f && changed == outer.Definition.Key && applies == 1, "canonical key, invariant/comma input and runtime callback");
         ConfigFile saved = new ConfigFile(path, false);
         Check(saved.Bind("05", outer.Definition.Key, 9f, "").Value == .2f, "persists to config file");

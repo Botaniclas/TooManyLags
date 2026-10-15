@@ -18,6 +18,8 @@ Leave connection lag behind. TooManyLags brings nearby interactions to your own 
 
 **Server-Side Simulation is enabled by default and increases server CPU usage.** For a weak server CPU, use the mode recommended above.
 
+**Optional PUP FPS support is built in.** With PUP FPS installed, TooManyLags includes BotanicPupPatch's collision and building-stability guards. Set `EnablePupCompatibility=false` locally and restart to disable them (default true). Missing dependencies or a separate BotanicPupPatch automatically disable the embedded module, with no guard hooks or runtime work.
+
 ## See it in action
 
 White objects belong to the server; purple objects belong to the player in these recordings. Colours are shown with the optional [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOwnerDebug/) tool.

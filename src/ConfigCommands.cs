@@ -20,7 +20,7 @@ namespace TooManyLags
                 if (!Live(pair.Key.Key)) active.Add(pair.Key.Key, pair.Value.BoxedValue);
         }
         internal static bool Local(string key)
-        { return String.Equals(key, "EnableLogs", StringComparison.OrdinalIgnoreCase); }
+        { return String.Equals(key, "EnableLogs", StringComparison.OrdinalIgnoreCase) || String.Equals(key, "EnablePupCompatibility", StringComparison.OrdinalIgnoreCase); }
         internal static bool CanReturnOnExit(bool serverSimulation, bool defaultInteractives, bool defaultStatics)
         { return serverSimulation && (defaultInteractives || defaultStatics); }
         internal static bool Live(string key)
@@ -40,7 +40,7 @@ namespace TooManyLags
             string[] args = command.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             if (args.Length == 1 && String.Equals(args[0], "list", StringComparison.OrdinalIgnoreCase))
             {
-                StringBuilder output = new StringBuilder(server ? "SERVER settings (live/restart):" : "LOCAL settings (live):");
+                StringBuilder output = new StringBuilder(server ? "SERVER settings (live/restart):" : "LOCAL settings (live/restart):");
                 foreach (var pair in config)
                     if (server != Local(pair.Key.Key)) output.Append('\n').Append(Display(pair.Value));
                 return output.ToString();
@@ -51,7 +51,7 @@ namespace TooManyLags
                 if (String.Equals(pair.Key.Key, args[0], StringComparison.OrdinalIgnoreCase)) { entry = pair.Value; break; }
             if (entry == null) return "Unknown setting. Use tml_config list.";
             string key = entry.Definition.Key;
-            if (server == Local(key)) return "Wrong setting scope. Logging is local; camera timing and ownership settings belong on the server.";
+            if (server == Local(key)) return "Wrong setting scope. Logging and PUP compatibility are local; camera timing and ownership settings belong on the server.";
             if (args.Length == 1) return Display(entry) + "\n" + entry.Description.Description;
             object value;
             if (!Parse(entry.SettingType, args[1], out value) ||
@@ -93,6 +93,8 @@ namespace TooManyLags
         }
         private static string RestartNotice(string key)
         {
+            if (String.Equals(key, "EnablePupCompatibility", StringComparison.OrdinalIgnoreCase))
+                return " Takes effect after restarting this game/server; the current guards are unchanged.";
             return " Takes effect after server restart; the current session is unchanged.";
         }
         private bool InvalidGrid(string key, object value)

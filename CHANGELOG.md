@@ -2,6 +2,11 @@
 
 **Unreleased**
 ```
+- Includes the PUP FPS collision, building-stability, loading and FiresGhettoNetworking handoff safeguards from BotanicPupPatch 2.1.1. EnablePupCompatibility defaults to true locally and requires a restart; missing dependencies or a detected standalone PupPatch leave the embedded module completely inactive. Existing TML AI ownership is reused, without a second combat policy.
+```
+
+**1.0.44**
+```
 - Adds optional UseGridForStaticBuildings (default false): eligible non-interactive pieces share the existing grid's client ownership, server overlaps, delays and exit policy. PUP FPS remains optional; baked originals stay excluded. Requires Server-Side Simulation and updated clients.
 - Separates interactive and static server defaults at the top of the config; ServerOwnedStaticBuildings becomes ServerOwnedStaticBuildingsByDefault. Moves KeepOwnershipOnCellExit to General; false requires Server-Side Simulation and at least one interactive/static server default. Invalid startup combinations retain ownership and report a warning. Use the supplied new config and reapply custom values.
 - Makes interaction handoff protection mandatory with Server-Side Simulation and removes EnableExperimentalInteractionProtection. Refilling now protects ownership for 1 second instead of 10, renewed by each refill, in both simulation modes. Update server and clients.

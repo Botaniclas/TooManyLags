@@ -66,7 +66,7 @@ namespace TooManyLags
             string generated = File.ReadAllText(path);
             string[] sections = {
                 "00 - Simulation Settings - Interactive Objects", "00 - Simulation Settings - Static Objects",
-                "01 - General", "03 - Default Ownership and Overrides",
+                "01 - General", "02 - PUP FPS Compatibility", "03 - Default Ownership and Overrides",
                 "04 - Grid Settings", "05 - Directional Grid Mode", "06 - Full Grid Mode",
                 "08 - Camera Heading", "09 - AI Mob Ownership", "10 - Object Categories"
             };
@@ -75,7 +75,7 @@ namespace TooManyLags
                 if (found >= sections.Length || line != "[" + sections[found] + "]") throw new Exception("Unexpected section or order: " + line);
                 found++;
             }
-            if (found != 10) throw new Exception("Expected ten ordered English feature sections.");
+            if (found != 11) throw new Exception("Expected eleven ordered English feature sections.");
             ConfigProbe reloaded = new ConfigProbe { Config = new ConfigFile(path, false, metadata) };
             reloaded.Config.SaveOnConfigSet = false;
             reloaded.Bind(); VerifyDefaults(reloaded.Config); reloaded.Config.Save();
@@ -92,7 +92,7 @@ namespace TooManyLags
                     throw new Exception("Removed protection switch must not become an active config entry.");
             }
             finally { if (File.Exists(legacyPath)) File.Delete(legacyPath); }
-            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 52 settings in ten ordered English feature sections; interactive/static simulation first, general retention next; legacy protection=false is ignored.");
+            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 53 settings in eleven ordered English feature sections; optional local PUP compatibility enabled; object categories last; legacy protection=false is ignored.");
             Console.WriteLine("PASS: camera/movement defaults remain 0.05; angular overlap defaults to 30 degrees (0-45); prior settings are preserved; object categories stay last.");
             Console.WriteLine("PASS: actual BepInEx camera and server movement ranges accept 0.05 seconds and clamp to 0.05-5.");
         }
@@ -135,6 +135,7 @@ namespace TooManyLags
                 {"00 - Simulation Settings - Static Objects/ServerOwnedStaticBuildingsByDefault", "false"},
                 {"00 - Simulation Settings - Static Objects/UseGridForStaticBuildings", "false"},
                 {"01 - General/KeepOwnershipOnCellExit", "true"},
+                {"02 - PUP FPS Compatibility/EnablePupCompatibility", "true"},
                 {"03 - Default Ownership and Overrides/ServerOwnedMobsByDefault", "false"},
                 {"03 - Default Ownership and Overrides/ServerOwnedRefillStations", "false"},
                 {"04 - Grid Settings/GridCellSizeMeters", "4"}, {"04 - Grid Settings/GridCoveragePattern", "Rounded7x7"},
@@ -155,7 +156,7 @@ namespace TooManyLags
                 "SapCollectors", "Wards", "MapTables", "Wisplights", "TamedAnimals", "Containers", "ItemStands", "Signs",
                 "Portals", "Fermenters", "Incinerators", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables", "WorldMarkers"
             }) expected.Add("10 - Object Categories/" + category, "true");
-            if (config.Count != 52) throw new Exception("Expected 52 config entries; found " + config.Count + ".");
+            if (config.Count != 53) throw new Exception("Expected 53 config entries; found " + config.Count + ".");
             int categoryNotes = 0;
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> entry in config) {
                 string key = entry.Key.Section + "/" + entry.Key.Key, value = Convert.ToString(entry.Value.BoxedValue, CultureInfo.InvariantCulture), wanted;
@@ -165,7 +166,7 @@ namespace TooManyLags
                 if (entry.Value.DefaultValue is bool) defaultValue = defaultValue.ToLowerInvariant();
                 if (defaultValue != wanted) throw new Exception("Binding default differs: " + key);
                 if (String.IsNullOrEmpty(entry.Value.Description.Description)) throw new Exception("Missing setting description: " + key);
-                string scope = entry.Key.Key == "EnableLogs" ? "Local" : "Server only";
+                string scope = entry.Key.Key == "EnableLogs" || entry.Key.Key == "EnablePupCompatibility" ? "Local" : "Server only";
                 if (entry.Key.Section == "10 - Object Categories") {
                     if (entry.Value.Description.Description.StartsWith("All categories below:", StringComparison.Ordinal)) categoryNotes++;
                     else if (entry.Value.Description.Description.Contains("restart required") || entry.Value.Description.Description.Contains("true:")) throw new Exception("Repeated category instructions: " + key);

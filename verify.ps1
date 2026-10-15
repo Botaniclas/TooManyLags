@@ -8,10 +8,10 @@ $ErrorActionPreference='Stop'
 $authorityDll=Join-Path $PSScriptRoot 'bin\TooManyLags.dll'
 $authorityVerifiedHash=(Get-FileHash -LiteralPath $authorityDll -Algorithm SHA256).Hash
 $authorityResults=@()
-foreach($authorityTest in @('test-grid-size.ps1','test-config-console.ps1','test-camera-recovery.ps1','test-mob-precedence.ps1','test-fgn-settings.ps1','test-player-simulation.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-recipient-scope.ps1','test-integration.ps1','test-grid-load.ps1','test-directional.ps1','test-field-cache.ps1','test-regions.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1')){
+foreach($authorityTest in @('test-grid-size.ps1','test-config-console.ps1','test-camera-recovery.ps1','test-mob-precedence.ps1','test-fgn-settings.ps1','test-player-simulation.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-recipient-scope.ps1','test-integration.ps1','test-grid-load.ps1','test-directional.ps1','test-field-cache.ps1','test-regions.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1','test-pup-compatibility.ps1')){
     $authorityArguments=@{}
-    if($authorityTest -in @('test-mob-precedence.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-readiness.ps1')){$authorityArguments.ValheimDirectory=$ValheimDirectory}
-    if($authorityTest -in @('test-config-console.ps1','test-camera-recovery.ps1','test-mob-precedence.ps1','test-fgn-settings.ps1','test-player-simulation.ps1','test-fgn-handoff.ps1','test-integration.ps1','test-grid-load.ps1','test-native.ps1','test-combat.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1')){$authorityArguments.BepInExDirectory=$BepInExDirectory}
+    if($authorityTest -in @('test-mob-precedence.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-readiness.ps1','test-pup-compatibility.ps1')){$authorityArguments.ValheimDirectory=$ValheimDirectory}
+    if($authorityTest -in @('test-config-console.ps1','test-camera-recovery.ps1','test-mob-precedence.ps1','test-fgn-settings.ps1','test-player-simulation.ps1','test-fgn-handoff.ps1','test-integration.ps1','test-grid-load.ps1','test-native.ps1','test-combat.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1','test-pup-compatibility.ps1')){$authorityArguments.BepInExDirectory=$BepInExDirectory}
     $authorityLines=@(& (Join-Path $PSScriptRoot $authorityTest) @authorityArguments)
     $authorityLines | ForEach-Object {Write-Output $_}
     $authorityResults += [ordered]@{test=$authorityTest;passed=$true;output=($authorityLines -join [Environment]::NewLine)}
@@ -42,7 +42,7 @@ foreach($authoritySource in $authorityImport.files){
     if($authoritySource.import_sha256 -ne (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot ('src\'+$authoritySource.file)) -Algorithm SHA256).Hash){throw ('Imported source changed since equivalence review: '+$authoritySource.file)}
 }
 $authorityHashes=[ordered]@{}
-foreach($authorityItem in @('botanic.toomanylags.fgnaddon.cfg','README.md','README-Thunderstore.md','manifest.json','docs\grid-demo-1.gif','docs\grid-demo-2.gif','docs\wiki\README.md','docs\wiki\01-Configuration.md','docs\wiki\02-Ownership-and-compatibility.md','docs\wiki\03-Report-bugs-and-ideas.md','tests\combat-import-equivalence.json')){
+foreach($authorityItem in @('botanic.toomanylags.fgnaddon.cfg','README.md','README-Thunderstore.md','manifest.json','docs\grid-demo-1.gif','docs\grid-demo-2.gif','docs\wiki\README.md','docs\wiki\01-Configuration.md','docs\wiki\02-Compatibility.md','docs\wiki\03-Report-bugs-and-ideas.md','tests\combat-import-equivalence.json','tests\pup-import-equivalence.json')){
     $authorityHashes[$authorityItem]=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $authorityItem) -Algorithm SHA256).Hash
 }
 $authorityBenchmark=$null
@@ -63,7 +63,8 @@ if(Test-Path -LiteralPath $authorityRegionBenchmarkPath){
     }
 }
 [ordered]@{
-    version='1.0.44';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
+    version='1.0.45';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
+    pupCompatibility=(Get-Content -LiteralPath (Join-Path $PSScriptRoot 'bin/pup-compatibility-tests/native-verification.json') -Raw | ConvertFrom-Json)
     benchmark=$authorityBenchmark;regionBenchmark=$authorityRegionBenchmark;import=$authorityImport;artifactHashes=$authorityHashes;liveMultiplayerTested=$false
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Encoding UTF8
 Write-Output ('Verified release SHA256: '+$authorityVerifiedHash)

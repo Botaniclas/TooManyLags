@@ -68,13 +68,17 @@ Larger cells or a larger pattern prepare ownership farther ahead. This is useful
 
 **`DirectionalGridMode = true`** concentrates coverage towards your camera direction. **Leave this enabled.** Missing camera data uses character direction. With the default exit-retention setting, some rear cells make no new ownership requests.
 
-The three directional timers have different purposes:
+The three directional timers have different purposes. Their delays help avoid unnecessary ownership changes at the edge of the grid. With a poor connection, lowering the forward or outer delay can help ownership keep up during fast movement:
 
 | Setting | Default | What it does |
 |---|---|---|
 | `InnerTransitionDelaySeconds` | 0 seconds | Red: your nearby cells and the row directly ahead. Requests start without a deliberate wait. |
 | `ForwardTransitionDelaySeconds` | 0.2 seconds | Orange: one extra three-cell row ahead, active with 4-metre cells and either rounded pattern. Prepares objects you are approaching. |
 | `OuterTransitionDelaySeconds` | 3 seconds | Yellow: the remaining active cells. Waiting avoids taking objects that you merely pass. |
+
+**Default grid example:** 4-metre cells, `Rounded7x7`, `KeepOwnershipOnCellExit=true`. Camera direction points upwards. White rear cells make no new ownership requests.
+
+![Default directional grid: red inner cells use 0 seconds, orange forward cells 0.2 seconds, and yellow outer cells 3 seconds.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/grid-transition-timers.png)
 
 With `KeepOwnershipOnCellExit=false`, red covers a full 3x3 centre. The farthest row of the 7x7 pattern remains yellow.
 

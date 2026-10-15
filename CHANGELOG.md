@@ -1,8 +1,8 @@
 # Changelog
 
-**Unreleased**
+**1.0.45**
 ```
-- Includes the PUP FPS collision, building-stability, loading and FiresGhettoNetworking handoff safeguards from BotanicPupPatch 2.1.1. EnablePupCompatibility defaults to true locally and requires a restart; missing dependencies or a detected standalone PupPatch leave the embedded module completely inactive. Existing TML AI ownership is reused, without a second combat policy.
+- Adds optional PUP FPS collision, building-stability, loading and ownership-handoff safeguards from BotanicPupPatch 2.1.1. EnablePupCompatibility defaults to true locally and requires a restart; missing dependencies or an installed standalone BotanicPupPatch disable only the embedded safeguards.
 ```
 
 **1.0.44**

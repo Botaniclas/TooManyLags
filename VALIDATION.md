@@ -10,7 +10,7 @@ All 23 verification groups pass on the final DLL. New production-module fixtures
 
 The Wiki's former Ownership and compatibility page is replaced with Compatibility, explaining the three mods, the automatic optional guard module and the standalone-PupPatch exclusion. Existing concurrent documentation edits are preserved. Wiki files are prepared locally; no website or package publication is implied.
 
-Verified DLL SHA256: EF3C74903784F73FE4C49A1ACAA25B10744B8774E745EA19B6C8F5643B451D9E. These are managed/metadata checks, not a live Unity/PhysX/multiplayer test. Prepared locally; not published or pushed.
+Verified DLL SHA256: EF3C74903784F73FE4C49A1ACAA25B10744B8774E745EA19B6C8F5643B451D9E. These are managed/metadata checks, not a live Unity/PhysX/multiplayer test. Documentation hashes were refreshed after the final timer explanations and default-grid diagram embed; the DLL and runtime test results are unchanged. Publication and GitHub status are tracked separately from these checks.
 
 ---
 

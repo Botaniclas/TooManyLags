@@ -62,18 +62,18 @@ namespace TooManyLags
 
         internal static void Install(ConfigFile config, Assembly assembly, System.Version version, bool allowInstall = true)
         {
-            configured = config.Bind("09 - AI Mob Ownership", "EnableAIOwnership", true,
+            configured = config.Bind("03 - AI Mob Ownership", "EnableAIOwnership", true,
                 "Server only; restart required. Enable target-based Hostile Mob ownership. Clients follow the server; their local value is ignored. Attacks block transfers until attack end.");
-            bossAlwaysServerOwned = config.Bind("09 - AI Mob Ownership", "BossAlwaysServerOwned", true,
+            bossAlwaysServerOwned = config.Bind("03 - AI Mob Ownership", "BossAlwaysServerOwned", true,
                 "Server only; restart required. On a boss player-target change, use server ownership if at least two living players are within BossPlayerRadius. Otherwise bosses follow normal Hostile Mob target rules. Requires EnableAIOwnership and Server-Side Simulation for server ownership. No continuous radius checks; unchanged targets keep their last decision.");
-            bossPlayerRadius = config.Bind("09 - AI Mob Ownership", "BossPlayerRadius", 30f,
+            bossPlayerRadius = config.Bind("03 - AI Mob Ownership", "BossPlayerRadius", 30f,
                 new ConfigDescription("Server only; restart required. Player distance from the boss in metres for BossAlwaysServerOwned. Evaluated on player-target acquisition, change or loss, not movement.", new AcceptableValueRange<float>(1f, 100f)));
-            defaultMobs = config.Bind("03 - Default Ownership and Overrides", "ServerOwnedMobsByDefault", false,
+            defaultMobs = config.Bind("02 - Default Ownership and Overrides", "ServerOwnedMobsByDefault", false,
                 "Server only; restart required. Give idle tamed animals a server default outside player fields, even when the interactive default is off. Hostile Mobs without a player target use guarded server handoffs (requires EnableAIOwnership); player targets keep normal target ownership. Friendly magic summons, bosses and active riding/following stay excluded. Requires Server-Side Simulation; can increase server CPU usage.");
             serverDefaultsConfigured = defaultMobs.Value;
-            maximumPing = config.Bind("09 - AI Mob Ownership", "ServerFallbackPingMs", 200,
+            maximumPing = config.Bind("03 - AI Mob Ownership", "ServerFallbackPingMs", 200,
                 new ConfigDescription("Server only; live console supported. Target ping limit in milliseconds for server fallback with Server-Side Simulation, or a lower-latency nearby player with NoServerSideSimulation=true. Requires another eligible FiresGhettoNetworking player within ServerFallbackRadius. 0: target ping must exceed the best other candidate by 250 ms.", new AcceptableValueRange<int>(0, 2000)));
-            nearbyRadius = config.Bind("09 - AI Mob Ownership", "ServerFallbackRadius", 6f,
+            nearbyRadius = config.Bind("03 - AI Mob Ownership", "ServerFallbackRadius", 6f,
                 new ConfigDescription("Server only; live console supported. Distance in metres to another eligible FiresGhettoNetworking player for high-ping fallback. With Server-Side Simulation the server takes over; otherwise a lower-latency nearby player. The candidate must have the mob in its active area.", new AcceptableValueRange<float>(1f, 100f)));
             StartupError = null;
             detectedVersion = version;

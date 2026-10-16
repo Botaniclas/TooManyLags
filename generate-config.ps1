@@ -23,6 +23,7 @@ $taskCombat = Read-Source (Join-Path $PSScriptRoot 'src\FgnCombatOwnership.cs')
 $taskCatalog = Read-Source (Join-Path $PSScriptRoot 'src\ObjectCatalog.cs')
 $taskGrid = Read-Source (Join-Path $PSScriptRoot 'src\AuthorityGrid.cs')
 $taskPluginBindings = Extract-Region $taskPlugin "        private void Awake()`n        {`n" '            // Configuration ends here.'
+$taskPluginBindings = $taskPluginBindings.Replace("            PrepareConfiguration();`n", "")
 $taskCombatBindings = Extract-Region $taskCombat "        internal static void Install(ConfigFile config, Assembly assembly, System.Version version, bool allowInstall = true)`n        {`n" '            StartupError = null;'
 $taskDescription = '        private static string ObjectDescription' + (Extract-Region $taskPlugin '        private static string ObjectDescription' '        private void RuntimeFault')
 $taskKinds = [regex]::Match($taskCatalog, '(?s)\[Flags\]\s+internal enum Kinds\s*\{[^}]+\}').Value
@@ -46,7 +47,7 @@ $taskSource = Join-Path $taskOutput 'ConfigProbe.cs'
 $taskExecutable = Join-Path $taskOutput 'ConfigProbe.exe'
 [IO.File]::WriteAllText($taskSource, $taskProbe, (New-Object Text.UTF8Encoding($false)))
 Copy-Item -LiteralPath $taskBepInEx -Destination $taskOutput -Force
-& $taskCompiler '/nologo' '/target:exe' '/optimize+' '/langversion:5' '/warnaserror+' ('/reference:' + $taskBepInEx) ('/out:' + $taskExecutable) $taskSource (Join-Path $PSScriptRoot 'src\IntervalConfig.cs')
+& $taskCompiler '/nologo' '/target:exe' '/optimize+' '/langversion:5' '/warnaserror+' ('/reference:' + $taskBepInEx) ('/out:' + $taskExecutable) $taskSource (Join-Path $PSScriptRoot 'src\IntervalConfig.cs') (Join-Path $PSScriptRoot 'src\ConfigLayout.cs') (Join-Path $PSScriptRoot 'src\ConfigTemplate.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Actual BepInEx config generator compilation failed.' }
 $taskFreshConfig = Join-Path $taskOutput ('defaults-' + [Guid]::NewGuid().ToString('N') + '.cfg')
 & $taskExecutable $taskFreshConfig $taskCore

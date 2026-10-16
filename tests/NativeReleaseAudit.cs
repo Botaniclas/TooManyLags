@@ -166,7 +166,7 @@ internal static class NativeReleaseAudit
         TypeDefinition interval=authority.MainModule.GetType("TooManyLags.IntervalConfig");
         Check(interval!=null,"Movement interval constants missing");
         foreach(MethodDefinition method in interval.Methods)Check(method.Name!="LegacyDefault","Obsolete config migration retained");
-        foreach(string section in new[]{"00 - Simulation Settings - Interactive Objects","00 - Simulation Settings - Static Objects","01 - General","03 - Default Ownership and Overrides","04 - Grid Settings","05 - Directional Grid Mode","06 - Full Grid Mode","10 - Object Categories"})
+        foreach(string section in new[]{"00 - General","01 - Simulation Settings","02 - Default Ownership and Overrides","03 - AI Mob Ownership","04 - Grid Settings","05 - Directional Grid Mode","06 - Full Grid Mode","07 - Camera Heading","08 - PUP FPS Compatibility","09 - Logs","10 - Object Categories"})
         {
             bool configured=false;foreach(var instruction in awake.Body.Instructions)if(Object.Equals(instruction.Operand,section))configured=true;
             Check(configured,"Generated config section missing: "+section);
@@ -266,6 +266,14 @@ internal static class NativeReleaseAudit
                         bool configEndpoint = type.FullName == "TooManyLags.ConfigConsole" && method.Name == "Connect";
                         bool gridEndpoint = type.FullName == "TooManyLags.GridHandoffs.Protocol" && method.Name == "Connect";
                         bool sessionEndpoint = type.FullName == "TooManyLags.ServerSession" && method.Name == "Connect";
+                        bool textEndpoint = type.FullName == "TooManyLags.TextEditing.Protection" && method.Name == "Connected";
+                        if (called.DeclaringType.FullName == "ZRpc" && called.Name == "Register" && textEndpoint)
+                        {
+                            string endpoint = null;
+                            for (int i = method.Body.Instructions.IndexOf(instruction) - 1; i >= 0; i--)
+                                if (method.Body.Instructions[i].OpCode == Mono.Cecil.Cil.OpCodes.Ldstr) { endpoint = (string)method.Body.Instructions[i].Operand; break; }
+                            Check(endpoint == "TooManyLags_TextEditing_1", "Text editing must register only its private endpoint, never a native callback");
+                        }
                         if (called.DeclaringType.FullName == "ZRpc" && called.Name == "Register" && sessionEndpoint)
                         {
                             string endpoint = null;
@@ -300,11 +308,13 @@ internal static class NativeReleaseAudit
                             Check(executesAfterAuthorization, "Remote setting execution follows native admin identity check"); configAdminChecks++;
                         }
                         Check(!((called.DeclaringType.FullName == "ZRpc" || called.DeclaringType.FullName == "ZRoutedRpc") &&
-                            called.Name == "Register") || configEndpoint || gridEndpoint || sessionEndpoint || (type.FullName == "TooManyLags.PlayerSimulation.Network" && method.Name == "Register"), "Authority registers/replaces a native client RPC callback");
+                            called.Name == "Register") || configEndpoint || gridEndpoint || sessionEndpoint || textEndpoint || (type.FullName == "TooManyLags.PlayerSimulation.Network" && method.Name == "Register"), "Authority registers/replaces a native client RPC callback");
+                        bool cancelOwnText = type.FullName == "TooManyLags.TextEditing.Protection" && method.Name == "RemoveLocal" &&
+                            instruction.Previous != null && instruction.Previous.OpCode == Mono.Cecil.Cil.OpCodes.Ldnull;
                         Check(!(called.DeclaringType.FullName == "System.Reflection.FieldInfo" && called.Name == "SetValue") ||
                             (type.FullName == "TooManyLags.FgnSessionSettings" && (method.Name == "Apply" || method.Name == "CreatureBalancing")) ||
-                            (type.FullName == "TooManyLags.FgnSessionSettings/ClientOverrides" && method.Name == "Dispose"),
-                            "Reflection writes must be confined to approved FGN startup settings; native gameplay fields remain untouched");
+                            (type.FullName == "TooManyLags.FgnSessionSettings/ClientOverrides" && method.Name == "Dispose") || cancelOwnText,
+                            "Reflection writes must be confined to approved FGN startup settings or clearing this mod's queued native text receiver");
                     }
                     string text = instruction.Operand as string;
                     if (text != null)

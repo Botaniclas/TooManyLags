@@ -115,6 +115,7 @@ public sealed class ZDO
     public UnityEngine.Quaternion GetRotation() { RotationReads++; return UnityEngine.Quaternion.Euler(0, Yaw, 0); }
     public bool Persistent { [MethodImpl(MethodImplOptions.NoInlining)] get { if (ThrowPersistent) throw new InvalidOperationException("native persistent failure"); return PersistentValue; } }
     public bool IsValid() { return Valid; }
+    public float GetFloat(int key,float fallback=0) { return fallback; }
     public int GetPrefab() { return Hash; }
     public long GetOwner() { return owner; }
     public bool IsOwner() { return owner == ZDOMan.GetSessionID(); }
@@ -204,7 +205,7 @@ public sealed class Sadle : UnityEngine.MonoBehaviour
 }
 public class BaseAI : UnityEngine.MonoBehaviour { }
 public sealed class ZSyncTransform : UnityEngine.MonoBehaviour {public bool m_syncPosition=true;}
-public static class ZDOVars {public const int s_tamed=10001,s_user=10002,s_follow=10003,s_state=10004,s_inUse=10005;}
+public static class ZDOVars {public const int s_tamed=10001,s_user=10002,s_follow=10003,s_state=10004,s_inUse=10005,s_health=10006,s_attachJointHash=10007;}
 
 public sealed class UnknownModScript : UnityEngine.MonoBehaviour { }
 public class ZNetPeer
@@ -236,6 +237,7 @@ public sealed class ZNet : UnityEngine.Object
 }
 public sealed class ZoneSystem : UnityEngine.Object
 {
+    public struct SectorIndex { }
     public static ZoneSystem instance;
     public float m_zoneSize = 64f;
     public bool Loaded=true, TypeReady=true;
@@ -255,6 +257,7 @@ public sealed class ZNetScene : UnityEngine.Object
     public UnityEngine.GameObject GetPrefab(int hash) { UnityEngine.GameObject result; return Prefabs.TryGetValue(hash,out result) ? result : null; }
     public ZNetView FindInstance(ZDO zdo) { ZNetView result; return Views.TryGetValue(zdo,out result) ? result : null; }
     public bool IsAreaReady(UnityEngine.Vector3 point) { AreaQueries++; return Ready(point); }
+    public static bool InActiveArea(UnityEngine.Vector3 point, UnityEngine.Vector3 reference) { return InActiveArea(point,ZoneSystem.GetZone(reference)); }
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static bool InActiveArea(UnityEngine.Vector3 point, Vector2s center)
     {
@@ -269,6 +272,8 @@ public sealed class SimulationDistance
 }
 public sealed class ZDOMan
 {
+    public void FindObjects(Vector2s zone,List<ZDO> found,HashSet<ZoneSystem.SectorIndex> visited)
+    { foreach(var data in Objects) { Vector2s current=data.GetSector();if(current.x==zone.x&&current.y==zone.y)found.Add(data); } }
     public static ZDOMan instance;
     public readonly List<ZDO> Objects = new List<ZDO>();
     public static long SessionID=99;

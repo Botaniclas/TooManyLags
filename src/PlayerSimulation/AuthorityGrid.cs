@@ -96,6 +96,7 @@ namespace TooManyLags.PlayerSimulation
         private readonly Offset[][] footprints = new Offset[CoverageCount][];
         private readonly Dictionary<Cell, FieldTier>[] maskTypes = new Dictionary<Cell, FieldTier>[CoverageCount];
         internal readonly HashSet<Cell> Accelerations = new HashSet<Cell>();
+        internal Action<Cell> Renewed = null;
         private readonly bool directional;
         private readonly bool discardVacant;
         private float innerDelay, outerDelay, forwardDelay;
@@ -259,6 +260,7 @@ namespace TooManyLags.PlayerSimulation
             }
             else if (policy.Others != null) for (int i = 0; i < policy.Others.Count; i++) if (policy.Others[i].Uid == uid) { policy.Others.RemoveAt(i); break; }
             dirty.Add(cell);
+            if (add && Renewed != null) Renewed(cell);
         }
         private void Reclassify(long uid, Cell cell, FieldTier before, FieldTier after)
         {
@@ -282,6 +284,7 @@ namespace TooManyLags.PlayerSimulation
                 FieldTier tier;
                 if (maskTypes[heading].TryGetValue(new Cell(cell.X - next.X, cell.Z - next.Z), out tier))
                 {
+                    if (Renewed != null) Renewed(cell);
                     if (tier != offset.Tier) Reclassify(uid, cell, offset.Tier, tier);
                     // Only a real update of the remaining player releases a
                     // deferred field, including unchanged parts of its footprint.
@@ -564,6 +567,7 @@ namespace TooManyLags.PlayerSimulation
             }
             scratch.Clear();
         }
+        internal void Dismiss(AuthorityNode node) { Invalidate(node); pending.Remove(node); node.Managed = false; }
         private void Queue(AuthorityNode node, float at) { node.NotBefore = at; pending.Add(node); }
         private void Invalidate(AuthorityNode node)
         {

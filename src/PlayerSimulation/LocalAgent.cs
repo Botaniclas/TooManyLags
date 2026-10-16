@@ -9,6 +9,7 @@ namespace TooManyLags.PlayerSimulation
 {
     internal sealed class LocalAgent
     {
+        internal static Func<ZDO, bool> TextEditBusy = null;
         private sealed class Ticket
         {
             internal long Token, Source, Target;
@@ -133,6 +134,7 @@ namespace TooManyLags.PlayerSimulation
             until = Single.PositiveInfinity;
             if (data == null || !data.IsValid() || data.GetOwner() != ticket.Source || data.OwnerRevision != ticket.Revision ||
                 !view || !view.IsValid() || !ReferenceEquals(view.GetZDO(), data) || !view.gameObject.activeInHierarchy || data.OwnerRevision == UInt16.MaxValue) return 0;
+            if (TextEditBusy != null && TextEditBusy(data)) return 0;
             ViewState state = State(view);
             if (ticket.Kind == Kinds.None)
             {

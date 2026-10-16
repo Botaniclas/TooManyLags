@@ -10,7 +10,7 @@ TooManyLags applies required FiresGhettoNetworking settings at startup, includin
 
 ## Optional PUP FPS compatibility
 
-`EnablePupCompatibility=true` in section `02 - PUP FPS Compatibility` adds the built-in collision/stability guards when PUP FPS is present. No separate BotanicPupPatch is needed. Without the required mods, or when a separate PupPatch is detected, the embedded module stays completely inactive. Configure this switch locally on each installation and restart; see **Compatibility** for details.
+`EnablePupCompatibility=true` in section `08 - PUP FPS Compatibility` adds the built-in collision/stability guards when PUP FPS is present. No separate BotanicPupPatch is needed. Without the required mods, or when a separate PupPatch is detected, the embedded module stays completely inactive. Configure this switch locally on each installation and restart; see **Compatibility** for details.
 
 ## Server configuration
 
@@ -92,7 +92,7 @@ Set `DirectionalGridMode=false` if you want the full shape in every direction wi
 
 **`CameraRotationPredictionSeconds = 0.1`** looks ahead in your turning direction. Faster turns can add another direction; newly predicted cells use the inner/red delay. Set 0 to disable prediction.
 
-**`CameraHeadingCheckIntervalSeconds = 0.05`** checks camera coverage up to 20 times per second. **`MovementRotationCheckIntervalSeconds = 0.05`** checks cell changes and fallback heading. Both accept 0.05-5 seconds; larger values reduce checking frequency but react more slowly. Camera-coverage changes wake the next server pass without another movement-interval wait.
+**`CameraHeadingCheckIntervalSeconds = 0.05`** checks camera coverage up to 20 times per second. **`MovementRotationCheckIntervalSeconds = 0.1`** checks cell changes and fallback heading up to 10 times per second. Both accept 0.05-5 seconds; larger values reduce checking frequency but react more slowly. Camera-coverage changes wake the next server pass without another movement-interval wait. Existing config values are retained when updating.
 
 Unchanged coverage creates no new field requests. Standing players still count for overlaps, and pending timers and handoffs continue.
 
@@ -139,6 +139,6 @@ Use the optional client-side [BotanicOwnerDebug](https://thunderstore.io/c/valhe
 
 ## Updating from older versions
 
-Use the supplied current config and reapply your custom values. Interactive and static defaults now sit under Simulation Settings; `KeepOwnershipOnCellExit` sits under General. The former `ServerOwnedStaticBuildings` key is now `ServerOwnedStaticBuildingsByDefault`.
+Existing configs are automatically reorganized at startup, preserving supported setting values. Simulation settings and `KeepOwnershipOnCellExit` share one section; AI settings follow the ownership overrides; object categories stay last. The original file is kept once as `.cfg.pre-layout.bak`. The former `ServerOwnedStaticBuildings` key is migrated to `ServerOwnedStaticBuildingsByDefault`.
 
 Keep server and clients on the same version. Updated clients are needed for the optional static grid and the 1-second refill protection; older clients retain their previous local safeguards.

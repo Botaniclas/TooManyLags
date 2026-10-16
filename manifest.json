@@ -1,8 +1,8 @@
 {
   "name": "TooManyLags_FGN_Addon",
-  "version_number": "1.0.45",
+  "version_number": "1.0.46",
   "website_url": "https://github.com/Botaniclas/TooManyLags",
-  "description": "Built to avoid almost all connection-related lag. Go beyond Server-Side Simulation with this FiresGhettoNetworking addon: local interactions and smarter Hostile Mob ownership. Install, play, and never look back.",
+  "description": "Leave connection lag behind. Go beyond Server-Side Simulation with this FiresGhettoNetworking addon: local interactions and smarter Hostile Mob ownership. Install, play, and never look back.",
   "dependencies": [
     "denikson-BepInExPack_Valheim-5.4.2351",
     "VerdantsAscent-FiresGhettoNetworking-1.5.36"

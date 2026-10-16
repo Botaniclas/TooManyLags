@@ -62,13 +62,13 @@ namespace TooManyLags
             BepInPlugin metadata = new BepInPlugin("@@PLUGIN_ID@@", "@@PLUGIN_NAME@@", "@@PLUGIN_VERSION@@");
             ConfigProbe probe = new ConfigProbe { Config = new ConfigFile(path, false, metadata) };
             probe.Config.SaveOnConfigSet = false;
-            probe.Bind(); VerifyDefaults(probe.Config); probe.Config.Save();
+            ConfigLayout.Prepare(probe.Config, "@@PLUGIN_VERSION@@"); probe.Bind(); VerifyDefaults(probe.Config); ConfigLayout.Save(probe.Config);
             string generated = File.ReadAllText(path);
             string[] sections = {
-                "00 - Simulation Settings - Interactive Objects", "00 - Simulation Settings - Static Objects",
-                "01 - General", "02 - PUP FPS Compatibility", "03 - Default Ownership and Overrides",
+                "00 - General", "01 - Simulation Settings",
+                "02 - Default Ownership and Overrides", "03 - AI Mob Ownership",
                 "04 - Grid Settings", "05 - Directional Grid Mode", "06 - Full Grid Mode",
-                "08 - Camera Heading", "09 - AI Mob Ownership", "10 - Object Categories"
+                "07 - Camera Heading", "08 - PUP FPS Compatibility", "09 - Logs", "10 - Object Categories"
             };
             int found = 0;
             foreach (string line in File.ReadAllLines(path)) if (line.StartsWith("[", StringComparison.Ordinal)) {
@@ -78,7 +78,7 @@ namespace TooManyLags
             if (found != 11) throw new Exception("Expected eleven ordered English feature sections.");
             ConfigProbe reloaded = new ConfigProbe { Config = new ConfigFile(path, false, metadata) };
             reloaded.Config.SaveOnConfigSet = false;
-            reloaded.Bind(); VerifyDefaults(reloaded.Config); reloaded.Config.Save();
+            ConfigLayout.Prepare(reloaded.Config, "@@PLUGIN_VERSION@@"); reloaded.Bind(); VerifyDefaults(reloaded.Config); ConfigLayout.Save(reloaded.Config);
             if (File.ReadAllText(path) != generated) throw new Exception("Generated config changed during actual BepInEx reload/save.");
             string legacyPath = path + ".legacy.cfg";
             try
@@ -86,19 +86,19 @@ namespace TooManyLags
                 File.WriteAllText(legacyPath, generated + "\n[07 - Experimental Interaction Protection]\nEnableExperimentalInteractionProtection = false\n");
                 ConfigProbe legacy = new ConfigProbe { Config = new ConfigFile(legacyPath, false, metadata) };
                 legacy.Config.SaveOnConfigSet = false;
-                legacy.Bind(); VerifyDefaults(legacy.Config);
+                ConfigLayout.Prepare(legacy.Config, "@@PLUGIN_VERSION@@"); legacy.Bind(); VerifyDefaults(legacy.Config);
                 ConfigEntry<bool> removed;
                 if (legacy.Config.TryGetEntry<bool>(new ConfigDefinition("07 - Experimental Interaction Protection", "EnableExperimentalInteractionProtection"), out removed))
                     throw new Exception("Removed protection switch must not become an active config entry.");
             }
             finally { if (File.Exists(legacyPath)) File.Delete(legacyPath); }
             Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 53 settings in eleven ordered English feature sections; optional local PUP compatibility enabled; object categories last; legacy protection=false is ignored.");
-            Console.WriteLine("PASS: camera/movement defaults remain 0.05; angular overlap defaults to 30 degrees (0-45); prior settings are preserved; object categories stay last.");
+            Console.WriteLine("PASS: movement defaults to 0.1, camera to 0.05; angular overlap defaults to 30 degrees (0-45); object categories stay last.");
             Console.WriteLine("PASS: actual BepInEx camera and server movement ranges accept 0.05 seconds and clamp to 0.05-5.");
         }
         private static void VerifyDefaults(ConfigFile config)
         {
-            ConfigEntry<float> camera = (ConfigEntry<float>)config[new ConfigDefinition("08 - Camera Heading", "CameraHeadingCheckIntervalSeconds")];
+            ConfigEntry<float> camera = (ConfigEntry<float>)config[new ConfigDefinition("07 - Camera Heading", "CameraHeadingCheckIntervalSeconds")];
             AcceptableValueRange<float> cameraRange = camera.Description.AcceptableValues as AcceptableValueRange<float>;
             if (cameraRange == null || cameraRange.MinValue != .05f || cameraRange.MaxValue != 5f) throw new Exception("Unexpected camera interval bounds.");
             camera.Value = .05f;
@@ -109,13 +109,13 @@ namespace TooManyLags
             if (camera.Value != 5f) throw new Exception("Camera interval upper bound was not enforced.");
             camera.Value = (float)camera.DefaultValue;
             ConfigEntry<float> movement = (ConfigEntry<float>)config[new ConfigDefinition("04 - Grid Settings", "MovementRotationCheckIntervalSeconds")];
-            ConfigEntry<float> angle = (ConfigEntry<float>)config[new ConfigDefinition("08 - Camera Heading", "CameraDirectionOverlapDegrees")];
+            ConfigEntry<float> angle = (ConfigEntry<float>)config[new ConfigDefinition("07 - Camera Heading", "CameraDirectionOverlapDegrees")];
             var angleRange = angle.Description.AcceptableValues as AcceptableValueRange<float>;
             if (angleRange == null || angleRange.MinValue != 0f || angleRange.MaxValue != 45f) throw new Exception("Unexpected angular overlap bounds.");
             angle.Value = -1f; if (angle.Value != 0f) throw new Exception("Angular overlap minimum did not clamp.");
             angle.Value = 90f; if (angle.Value != 45f) throw new Exception("Angular overlap maximum did not clamp.");
             angle.Value = (float)angle.DefaultValue;
-            ConfigEntry<float> prediction = (ConfigEntry<float>)config[new ConfigDefinition("08 - Camera Heading", "CameraRotationPredictionSeconds")];
+            ConfigEntry<float> prediction = (ConfigEntry<float>)config[new ConfigDefinition("07 - Camera Heading", "CameraRotationPredictionSeconds")];
             var predictionRange = prediction.Description.AcceptableValues as AcceptableValueRange<float>;
             if (predictionRange == null || predictionRange.MinValue != 0f || predictionRange.MaxValue != .5f) throw new Exception("Unexpected prediction bounds.");
             prediction.Value = -1f; if (prediction.Value != 0f) throw new Exception("Prediction cannot be disabled.");
@@ -130,26 +130,26 @@ namespace TooManyLags
             if (overlap.Value != 0f) throw new Exception("Actual config rejected disabled overlap buffer.");
             overlap.Value = (float)overlap.DefaultValue;
             Dictionary<string, string> expected = new Dictionary<string, string> {
-                {"01 - General/Enabled", "true"}, {"01 - General/NoServerSideSimulation", "false"}, {"01 - General/EnableLogs", "false"},
-                {"00 - Simulation Settings - Interactive Objects/ServerOwnedInteractivesByDefault", "false"},
-                {"00 - Simulation Settings - Static Objects/ServerOwnedStaticBuildingsByDefault", "false"},
-                {"00 - Simulation Settings - Static Objects/UseGridForStaticBuildings", "false"},
-                {"01 - General/KeepOwnershipOnCellExit", "true"},
-                {"02 - PUP FPS Compatibility/EnablePupCompatibility", "true"},
-                {"03 - Default Ownership and Overrides/ServerOwnedMobsByDefault", "false"},
-                {"03 - Default Ownership and Overrides/ServerOwnedRefillStations", "false"},
+                {"00 - General/Enabled", "true"}, {"01 - Simulation Settings/NoServerSideSimulation", "false"}, {"09 - Logs/EnableLogs", "false"},
+                {"01 - Simulation Settings/ServerOwnedInteractivesByDefault", "false"},
+                {"01 - Simulation Settings/ServerOwnedStaticBuildingsByDefault", "false"},
+                {"01 - Simulation Settings/UseGridForStaticBuildings", "false"},
+                {"01 - Simulation Settings/KeepOwnershipOnCellExit", "true"},
+                {"08 - PUP FPS Compatibility/EnablePupCompatibility", "true"},
+                {"02 - Default Ownership and Overrides/ServerOwnedMobsByDefault", "false"},
+                {"02 - Default Ownership and Overrides/ServerOwnedRefillStations", "false"},
                 {"04 - Grid Settings/GridCellSizeMeters", "4"}, {"04 - Grid Settings/GridCoveragePattern", "Rounded7x7"},
-                {"04 - Grid Settings/MovementRotationCheckIntervalSeconds", "0.05"},
+                {"04 - Grid Settings/MovementRotationCheckIntervalSeconds", "0.1"},
                 {"05 - Directional Grid Mode/DirectionalGridMode", "true"}, {"05 - Directional Grid Mode/InnerTransitionDelaySeconds", "0"},
                 {"05 - Directional Grid Mode/ForwardTransitionDelaySeconds", "0.2"}, {"05 - Directional Grid Mode/OuterTransitionDelaySeconds", "3"},
                 {"05 - Directional Grid Mode/ServerOverlapCooldownSeconds", "1"},
                 {"06 - Full Grid Mode/TransitionDelaySeconds", "2"},
-                {"08 - Camera Heading/CameraHeadingCheckIntervalSeconds", "0.05"},
-                {"08 - Camera Heading/CameraDirectionOverlapDegrees", "30"},
-                {"08 - Camera Heading/CameraRotationPredictionSeconds", "0.1"},
-                {"09 - AI Mob Ownership/EnableAIOwnership", "true"}, {"09 - AI Mob Ownership/BossAlwaysServerOwned", "true"},
-                {"09 - AI Mob Ownership/BossPlayerRadius", "30"}, {"09 - AI Mob Ownership/ServerFallbackPingMs", "200"},
-                {"09 - AI Mob Ownership/ServerFallbackRadius", "6"}
+                {"07 - Camera Heading/CameraHeadingCheckIntervalSeconds", "0.05"},
+                {"07 - Camera Heading/CameraDirectionOverlapDegrees", "30"},
+                {"07 - Camera Heading/CameraRotationPredictionSeconds", "0.1"},
+                {"03 - AI Mob Ownership/EnableAIOwnership", "true"}, {"03 - AI Mob Ownership/BossAlwaysServerOwned", "true"},
+                {"03 - AI Mob Ownership/BossPlayerRadius", "30"}, {"03 - AI Mob Ownership/ServerFallbackPingMs", "200"},
+                {"03 - AI Mob Ownership/ServerFallbackRadius", "6"}
             };
             foreach (string category in new[] {
                 "Doors", "Seats", "Beds", "Workstations", "Smelters", "CookingStations", "Fireplaces", "Beehives",

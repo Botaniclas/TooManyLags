@@ -6,7 +6,7 @@
     {
       "file": "FgnCombatOwnership.cs",
       "source_sha256": "1EEEA58FF57EBBB0E8CC3A271A45D2D43C82BE94D97AEE1B579C6C87CBD70C14",
-      "import_sha256": "A3376EF23BCDE86F85A0DA73566D93984298AF66881EB316C2203846B6498058",
+      "import_sha256": "F4200F708A7D03AEE0918BE9CE7617F8E61543719E67D42516B656C5EED3A18E",
       "namespace_branding_protocol_only": false,
       "additional_changes": [
         "Config section/descriptions/default adapted for required FGN and 09 - AI Mob Ownership.",
@@ -20,7 +20,8 @@
         "1.0.23 makes the config description server-only and adds ConnectCurrentServer for one-time registration/query after authenticated lazy client startup. AI selection, attacks, leases, collision guards and transfer algorithms are unchanged.",
         "1.0.26 adds optional server-owned idle Hostile Mobs through existing target reports and guarded FGN handoffs; loaded-only lifecycle tracking supports solo sessions. Existing player targets, readiness, attacks, consent, caps, possession/friendly/boss exclusions and vanilla region release remain protected. Stable server defaults skip collider readiness work; disabled mode retains its previous behavior.",
         "1.0.27 identifies managed target handoffs, revalidates the target on the source owner, serializes pending commits across target changes and owner replication, and removes the six-second rejection lock only for authenticated managed replies. Existing attack-end revalidation, native vetoes, high-ping decision, caps, exclusions and readiness remain active. Protocol 4 requires matching client/server support; legacy peers retain native FiresGhettoNetworking.",
-        "1.0.28 enables bosses in the existing FiresGhettoNetworking scan. The optional two-player server rule evaluates only authoritative player-target changes; weak decisions survive same-target handoffs. Identified source commits bypass only the native boss veto. All other vetoes, readiness, caps and target validation remain. Protocol 5 requires matching clients and server."
+        "1.0.28 enables bosses in the existing FiresGhettoNetworking scan. The optional two-player server rule evaluates only authoritative player-target changes; weak decisions survive same-target handoffs. Identified source commits bypass only the native boss veto. All other vetoes, readiness, caps and target validation remain. Protocol 5 requires matching clients and server.",
+        "Unreleased config layout migration moves AI entries to 03 - AI Mob Ownership and default ownership overrides to 02 - Default Ownership and Overrides. No executable combat or handoff behavior changes."
       ]
     },
     {

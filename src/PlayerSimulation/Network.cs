@@ -19,7 +19,7 @@ namespace TooManyLags.PlayerSimulation
         private sealed class Connection
         {
             internal ZNetPeer Peer;
-            internal bool Capable, SupportsMobs, ModeKnown; internal bool? MobWatch;
+            internal bool Capable, SupportsMobs, ModeKnown, TextEditing; internal bool? MobWatch;
             internal float HelloAt, NextPing, MeasuredAt, Rtt = Single.PositiveInfinity;
             internal readonly Queue<ZPackage> Out = new Queue<ZPackage>();
         }
@@ -27,6 +27,9 @@ namespace TooManyLags.PlayerSimulation
         private readonly List<ZRpc> gone = new List<ZRpc>();
         internal int RankVersion;
         internal bool Confirmed;
+        internal static bool TextEditingAvailable = false;
+        internal bool SupportsTextEditing(ZNetPeer peer)
+        { Connection c; return peer != null && peer.IsReady() && peer.m_rpc != null && connections.TryGetValue(peer.m_rpc, out c) && ReferenceEquals(c.Peer, peer) && c.Capable && c.TextEditing; }
         internal bool NeedsPoll
         {
             get
@@ -57,7 +60,7 @@ namespace TooManyLags.PlayerSimulation
                 if (net.IsServer() && !Single.IsInfinity(c.Rtt) && now - c.MeasuredAt >= Math.Max(10f, Plugin.Options.PingInterval * 3f))
                 { c.Rtt = Single.PositiveInfinity; RankVersion++; }
                 if (!net.IsServer() && !c.ModeKnown && now >= c.HelloAt)
-                { c.HelloAt = now + 3f; Send(c.Peer.m_uid, Message.Hello, delegate(ZPackage p) { p.Write(Protocol); p.Write(Plugin.Options.Mobs); }); }
+                { c.HelloAt = now + 3f; Send(c.Peer.m_uid, Message.Hello, delegate(ZPackage p) { p.Write(Protocol); p.Write(Plugin.Options.Mobs); p.Write(TextEditingAvailable); }); }
                 // Reuse FGN's connection measurements; no second ping protocol.
                 if (net.IsServer() && now >= c.NextPing)
                 {
@@ -173,14 +176,16 @@ namespace TooManyLags.PlayerSimulation
                 bool newCapability = !c.Capable;
                 if (newCapability) { c.Rtt = Single.PositiveInfinity; c.NextPing = Time.unscaledTime; }
                 c.SupportsMobs = packet.ReadBool(); c.Capable = true; RankVersion++;
+                c.TextEditing = packet.GetPos() < packet.Size() && packet.ReadBool();
                 if (newCapability && Plugin.Controller != null) Plugin.Controller.CapabilityChanged(uid);
-                Send(uid, Message.Welcome, delegate(ZPackage p) { p.Write(Protocol); p.Write(Plugin.Options.Mobs); p.Write(Plugin.ServerMode); }); return;
+                Send(uid, Message.Welcome, delegate(ZPackage p) { p.Write(Protocol); p.Write(Plugin.Options.Mobs); p.Write(Plugin.ServerMode); p.Write(TextEditingAvailable); }); return;
             }
             if (!server && (c == null || ZNet.instance.GetServerPeer() != c.Peer)) return;
             if (message == Message.Welcome && !server && c != null)
             {
                 if (packet.ReadInt() != Protocol) return;
                 bool mobs = packet.ReadBool(), mode = packet.ReadBool(); c.ModeKnown = true;
+                c.TextEditing = packet.GetPos() < packet.Size() && packet.ReadBool();
                 c.Capable = true;
                 if (mode) { Plugin.Activate(); Plugin.Local.MobsEnabled = Plugin.Options.Mobs && mobs; }
                 else Plugin.Deactivate();

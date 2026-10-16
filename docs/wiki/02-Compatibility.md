@@ -16,7 +16,7 @@ For weak dedicated-server CPUs, `NoServerSideSimulation=true` keeps simulation o
 
 ## Built-in PUP safeguards
 
-`[02 - PUP FPS Compatibility] EnablePupCompatibility = true` enables the integrated guards automatically when their required mods and interfaces are available. Install PUP FPS on the server and clients that use it; use matching versions.
+`[08 - PUP FPS Compatibility] EnablePupCompatibility = true` enables the integrated guards automatically when their required mods and interfaces are available. Install PUP FPS on the server and clients that use it; use matching versions.
 
 - Protects building stability while required cluster collisions load.
 - Keeps required collision protection for carts, items, animals and other native PUP-guarded physics objects, including dedicated-server loading.
@@ -27,3 +27,9 @@ The switch is **local on each server/client** and requires a restart. With it of
 **A separate BotanicPupPatch installation is no longer needed.** If one is detected, the entire embedded guard module stays off and the separate patch remains responsible for collision/stability protection. There are no duplicate embedded guards. The existing TooManyLags AI ownership feature remains controlled by `EnableAIOwnership`.
 
 Required interfaces are checked at startup rather than locked to a PUP version. PUP FPS 1.0.34 and 1.0.36 are covered by the native contract checks. An incompatible interface disables the affected supplement and reports a startup warning. Real-world testing remains limited; this is not a guarantee for every future update or mod combination.
+
+## Signs and portal names
+
+TooManyLags prepares the editor's ownership before opening a managed sign or portal's native text window. Only that object's ownership is protected until the player moves, even after confirming or closing the window. Camera turns do not release it. Rejected grid takeovers are discarded; ending the protection does not replay them.
+
+Update both server and clients for this protection. Disabled object categories and unrelated text interfaces retain their native behavior. The same protection works without Server-Side Simulation.

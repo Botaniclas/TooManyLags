@@ -1,6 +1,6 @@
 # TooManyLags - FiresGhettoNetworking Addon
 
-Leave connection lag behind. TooManyLags brings nearby interactions to your own client and gives Hostile Mobs smarter ownership, aiming to avoid almost all connection-related lag. Go beyond Server-Side Simulation: install, play, and never look back.
+Built to avoid almost all connection-related lag. TooManyLags is a multiplayer optimisation addon that brings nearby interactions to your own client and gives Hostile Mobs smarter ownership. Go beyond Server-Side Simulation: install, play, and never look back.
 
 ## Choose your version
 

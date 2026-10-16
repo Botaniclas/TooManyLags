@@ -17,21 +17,21 @@ namespace TooManyLags.PlayerSimulation
         internal readonly Kinds Categories;
         internal Settings(ConfigFile config, bool mobs)
         {
-            Logs = Read(config, "01 - General", "EnableLogs", false);
+            Logs = Read(config, "09 - Logs", "EnableLogs", false);
             CellSize = Read(config, "04 - Grid Settings", "GridCellSizeMeters", 4f);
             string shape = Read(config, "04 - Grid Settings", "GridCoveragePattern", "Rounded7x7");
             Pattern = shape == "Rounded7x7" ? GridCoveragePattern.Rounded7x7 : shape == "Rounded5x5" ? GridCoveragePattern.Rounded5x5 : GridCoveragePattern.Square3x3;
             if (CellSize == 4 && Pattern == GridCoveragePattern.Square3x3) throw new ArgumentException("4-metre cells require a rounded grid.");
-            Interval = Number(config, "04 - Grid Settings", "MovementRotationCheckIntervalSeconds", .05f);
-            Keep = Read(config, "01 - General", "KeepOwnershipOnCellExit", true);
+            Interval = Number(config, "04 - Grid Settings", "MovementRotationCheckIntervalSeconds", .1f);
+            Keep = Read(config, "01 - Simulation Settings", "KeepOwnershipOnCellExit", true);
             Directional = Read(config, "05 - Directional Grid Mode", "DirectionalGridMode", true);
             Inner = Number(config, "05 - Directional Grid Mode", "InnerTransitionDelaySeconds", 0);
             Forward = Number(config, "05 - Directional Grid Mode", "ForwardTransitionDelaySeconds", .2f);
             Outer = Number(config, "05 - Directional Grid Mode", "OuterTransitionDelaySeconds", 3);
             Full = Number(config, "06 - Full Grid Mode", "TransitionDelaySeconds", 2);
             PingInterval = 2f; Margin = 30f; Mobs = mobs;
-            HighPing = Read(config, "09 - AI Mob Ownership", "ServerFallbackPingMs", 200);
-            MobRadius = Number(config, "09 - AI Mob Ownership", "ServerFallbackRadius", 6);
+            HighPing = Read(config, "03 - AI Mob Ownership", "ServerFallbackPingMs", 200);
+            MobRadius = Number(config, "03 - AI Mob Ownership", "ServerFallbackRadius", 6);
             Kinds kinds = Kinds.None;
             foreach (Kinds kind in Enum.GetValues(typeof(Kinds)))
                 if (kind != Kinds.None && kind != Kinds.Incinerators && Read(config, "10 - Object Categories", kind.ToString(), true)) kinds |= kind;

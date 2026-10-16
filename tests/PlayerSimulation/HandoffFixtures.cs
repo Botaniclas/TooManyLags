@@ -36,7 +36,7 @@ public sealed class ZPackage
     public void Write(long n) { write.Write(n); } public void Write(int n) { write.Write(n); } public void Write(ushort n) { write.Write(n); } public void Write(bool n) { write.Write(n); } public void Write(ZDOID n) { Write(n.Value); }
     public void Write(ZPackage p) { byte[] bytes=p.GetArray(); Write(bytes.Length); write.Write(bytes); }
     public long ReadLong() { return read.ReadInt64(); } public int ReadInt() { return read.ReadInt32(); } public ushort ReadUShort() { return read.ReadUInt16(); } public bool ReadBool() { return read.ReadBoolean(); } public ZDOID ReadZDOID() { return new ZDOID(ReadLong()); }
-    public void ReadPackage(ref ZPackage p) { p = new ZPackage(read.ReadBytes(ReadInt())); } public byte[] GetArray() { return data.ToArray(); } public void SetPos(int n) { data.Position=n; } public int Size() { return (int)data.Length; }
+    public void ReadPackage(ref ZPackage p) { p = new ZPackage(read.ReadBytes(ReadInt())); } public byte[] GetArray() { return data.ToArray(); } public void SetPos(int n) { data.Position=n; } public int GetPos() { return (int)data.Position; } public int Size() { return (int)data.Length; }
 }
 public static class HashFixture { public static int GetStableHashCode(this string text) { unchecked { int h=17; foreach(char c in text) h=h*31+c; return h; } } }
 public static class ZDOVars { public const int s_user=1,s_inUse=2,s_follow=3,s_health=8,s_attachJointHash=9; }

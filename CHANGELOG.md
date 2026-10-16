@@ -1,5 +1,11 @@
 # Changelog
 
+**1.0.46**
+```
+- Protects sign and portal-name editing: the edited object's ownership stays with its editor until actual movement, including after confirming the text. Discarded grid takeovers are not replayed. Update server and clients.
+- Reorganizes config sections automatically while preserving saved values and keeping an original backup. New configs use a 0.1-second movement check; existing intervals and the 0.05-second camera default are unchanged.
+```
+
 **1.0.45**
 ```
 - Adds optional PUP FPS collision, building-stability, loading and ownership-handoff safeguards from BotanicPupPatch 2.1.1. EnablePupCompatibility defaults to true locally and requires a restart; missing dependencies or an installed standalone BotanicPupPatch disable only the embedded safeguards.

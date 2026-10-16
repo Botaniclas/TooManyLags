@@ -7,6 +7,57 @@ namespace TooManyLags.PlayerSimulation
 {
     internal sealed class AuthorityController
     {
+        internal static Func<ZDO, long> TextEditTarget = null;
+        internal static Func<ZDO, bool> TextEditLocked = null;
+        internal static Action<ZDO> TextEditOwnerObserved = null;
+        internal static Action<ZDOID> TextEditDestroyed = null;
+        private readonly Dictionary<Cell, HashSet<Node>> textWaiting = new Dictionary<Cell, HashSet<Node>>();
+        internal bool ManagesText(ZDO data)
+        { if (!Active || data == null) return false; Kinds kind = catalog.Prefab(data.GetPrefab()); return kind == Kinds.Signs || kind == Kinds.Portals; }
+        internal bool PrepareTextEdit(ZDO data)
+        {
+            if (!Active || data == null || !data.IsValid()) return false;
+            Node node;
+            if (!nodes.TryGetValue(data.m_uid, out node))
+            {
+                Kinds kind = catalog.Prefab(data.GetPrefab()); Cell cell;
+                Vector3 point = data.GetPosition(); Vector2s sector = data.GetSector();
+                if ((kind != Kinds.Signs && kind != Kinds.Portals) || !Cell.At(point.x, point.z, settings.CellSize, out cell)) return false;
+                node = new Node(this, data, kind, cell, new Cell(sector.x, sector.y));
+                nodes.Add(data.m_uid, node); AddSector(node); index.Add(node, Time.unscaledTime);
+            }
+            if (!ReferenceEquals(node.Data, data) || (node.Kind != Kinds.Signs && node.Kind != Kinds.Portals)) return false;
+            node.TextOwner = TextEditTarget == null ? 0 : TextEditTarget(data); node.TextHeld = false;
+            ForgetTextWait(node); node.RejectedOwner = 0; node.NotBefore = Time.unscaledTime;
+            index.Received(node, Time.unscaledTime); cadence.Request(); return true;
+        }
+        internal void EndTextEdit(ZDO data)
+        {
+            Node node;
+            if (data == null || !nodes.TryGetValue(data.m_uid, out node) || !ReferenceEquals(node.Data, data)) return;
+            node.TextOwner = 0; node.TextHeld = TextEditLocked != null && TextEditLocked(data);
+            Handoffs.Cancel(data.m_uid); index.Dismiss(node);
+            if (!node.TextHeld && !interest.Contains(node.Sector)) { Remove(node); return; }
+            if (node.TextWait) return;
+            node.TextWait = true; node.TextCell = node.Cell; HashSet<Node> waiting;
+            if (!textWaiting.TryGetValue(node.Cell, out waiting)) { waiting = new HashSet<Node>(); textWaiting.Add(node.Cell, waiting); }
+            waiting.Add(node); index.Grid.Renewed = RenewTextWait;
+        }
+        private void ForgetTextWait(Node node)
+        {
+            if (!node.TextWait) return;
+            node.TextWait = false; HashSet<Node> waiting;
+            if (textWaiting.TryGetValue(node.TextCell, out waiting)) { waiting.Remove(node); if (waiting.Count == 0) textWaiting.Remove(node.TextCell); }
+            if (textWaiting.Count == 0) index.Grid.Renewed = null;
+        }
+        private void RenewTextWait(Cell cell)
+        {
+            HashSet<Node> waiting;
+            if (!textWaiting.TryGetValue(cell, out waiting)) return;
+            textWaiting.Remove(cell);
+            foreach (Node node in waiting) { node.TextWait = false; index.Received(node, Time.unscaledTime); }
+            if (textWaiting.Count == 0) index.Grid.Renewed = null;
+        }
         private readonly Settings settings;
         private readonly OwnershipCadence cadence;
         private readonly TooManyLags.CameraWake cameras = new TooManyLags.CameraWake();
@@ -88,7 +139,7 @@ namespace TooManyLags.PlayerSimulation
             foreach (Cell cell in retiring)
             {
                 interest.Remove(cell); HashSet<Node> bucket;
-                if (sectors.TryGetValue(cell, out bucket)) { var copy = new List<Node>(bucket); foreach (Node node in copy) Remove(node); }
+                if (sectors.TryGetValue(cell, out bucket)) { var copy = new List<Node>(bucket); foreach (Node node in copy) if (!node.TextHeld && node.TextOwner == 0) Remove(node); }
             }
             foreach (Cell cell in regions.ZoneKeys) if (interest.Add(cell))
             {
@@ -117,7 +168,7 @@ namespace TooManyLags.PlayerSimulation
             if (cameras.Changed(data)) cadence.Request();
             Handoffs.Observe(data); Mobs.Changed(data);
             Node node; Vector2s zone = data.GetSector(); Cell sector = new Cell(zone.x, zone.y);
-            if (!interest.Contains(sector)) { if (nodes.TryGetValue(data.m_uid, out node)) Remove(node); return; }
+            if (!interest.Contains(sector) && (!nodes.TryGetValue(data.m_uid, out node) || (node.TextOwner == 0 && !node.TextHeld))) { if (nodes.TryGetValue(data.m_uid, out node)) Remove(node); return; }
             Kinds kind = catalog.Prefab(data.GetPrefab());
             if (kind == Kinds.None || kind == Kinds.Incinerators || (kind == Kinds.TamedAnimals && (!data.GetBool(ZDOVars.s_tamed) || MobPolicy.FriendlyPrefab(data.GetPrefab()))))
             { if (nodes.TryGetValue(data.m_uid, out node)) Remove(node); return; }
@@ -134,22 +185,23 @@ namespace TooManyLags.PlayerSimulation
             if (!node.Cell.Equals(cell)) index.Move(node, cell, Time.unscaledTime);
             long owner = data.GetOwner(); ushort revision = data.OwnerRevision;
             if (owner != node.SeenOwner || revision != node.SeenRevision)
-            { node.SeenOwner = owner; node.SeenRevision = revision; index.Received(node, Time.unscaledTime); }
+            { if (node.TextHeld && TextEditOwnerObserved != null) TextEditOwnerObserved(data); node.SeenOwner = owner; node.SeenRevision = revision; index.Received(node, Time.unscaledTime); }
             bool used = data.GetLong(ZDOVars.s_user, 0) != 0 || data.GetBool(ZDOVars.s_attachJointHash) || (kind == Kinds.TamedAnimals && !String.IsNullOrEmpty(data.GetString(ZDOVars.s_follow)));
             if (used != node.SeenUse) { node.SeenUse = used; index.Received(node, Time.unscaledTime); }
         }
         internal void Destroyed(ZDOID id)
-        { Node node; if (nodes.TryGetValue(id, out node)) Remove(node); Handoffs.Forget(id); Mobs.Forget(id); }
+        { if (TextEditDestroyed != null) TextEditDestroyed(id); Node node; if (nodes.TryGetValue(id, out node)) Remove(node); Handoffs.Forget(id); Mobs.Forget(id); }
         private void AddSector(Node node)
         { HashSet<Node> bucket; if (!sectors.TryGetValue(node.Sector, out bucket)) { bucket = new HashSet<Node>(); sectors.Add(node.Sector, bucket); } bucket.Add(node); }
         private void RemoveSector(Node node)
         { HashSet<Node> bucket; if (sectors.TryGetValue(node.Sector, out bucket)) { bucket.Remove(node); if (bucket.Count == 0) sectors.Remove(node.Sector); } }
-        private void Remove(Node node) { index.Remove(node); nodes.Remove(node.Data.m_uid); RemoveSector(node); Handoffs.Cancel(node.Data.m_uid); }
+        private void Remove(Node node) { if ((node.TextHeld || node.TextOwner != 0) && TextEditDestroyed != null) TextEditDestroyed(node.Id); ForgetTextWait(node); index.Remove(node); nodes.Remove(node.Id); RemoveSector(node); Handoffs.Cancel(node.Id); }
         internal long Desired(ZDO data, Kinds kind, ZDOID target)
         {
             if (!Active || data == null || !data.IsValid()) return 0;
             if (kind == Kinds.None) return Mobs.Desired(data, target);
-            Node node; return nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data) ? index.Grid.Owner(node.Cell) : 0;
+            Node node; return nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data) ?
+                node.TextOwner != 0 ? node.TextOwner : node.TextHeld ? data.GetOwner() : index.Grid.Owner(node.Cell) : 0;
         }
         internal bool IsManaged(ZDO data, int method)
         {
@@ -161,12 +213,13 @@ namespace TooManyLags.PlayerSimulation
         internal void Rejected(ZDOID id)
         { Node node; if (nodes.TryGetValue(id, out node)) { node.RejectedOwner = node.Data.GetOwner(); node.RejectedRevision = node.Data.OwnerRevision; } Mobs.Forget(id); }
         internal void Stop()
-        { failed = true; Handoffs.Clear(); Mobs.Clear(); nodes.Clear(); sectors.Clear(); interest.Clear(); regions.Clear(); cameras.Clear(); Players.Clear(); gridPeers.Clear(); regionPeers.Clear(); }
+        { failed = true; Handoffs.Clear(); Mobs.Clear(); nodes.Clear(); textWaiting.Clear(); index.Grid.Renewed = null; sectors.Clear(); interest.Clear(); regions.Clear(); cameras.Clear(); Players.Clear(); gridPeers.Clear(); regionPeers.Clear(); }
         internal static bool Finite(Vector3 value) { return !(Single.IsNaN(value.x) || Single.IsNaN(value.y) || Single.IsNaN(value.z) || Single.IsInfinity(value.x) || Single.IsInfinity(value.y) || Single.IsInfinity(value.z)); }
         private sealed class Node : AuthorityNode
         {
             private readonly AuthorityController owner;
             internal readonly ZDO Data;
+            internal readonly ZDOID Id;
             internal readonly Kinds Kind;
             internal Cell Sector;
             internal long SeenOwner;
@@ -174,12 +227,20 @@ namespace TooManyLags.PlayerSimulation
             internal bool SeenUse;
             internal long RejectedOwner;
             internal ushort RejectedRevision;
+            internal bool TextWait;
+            internal long TextOwner;
+            internal bool TextHeld;
+            internal Cell TextCell;
             internal Node(AuthorityController owner, ZDO data, Kinds kind, Cell cell, Cell sector)
-            { this.owner = owner; Data = data; Kind = kind; Cell = cell; Sector = sector; SeenOwner = data.GetOwner(); SeenRevision = data.OwnerRevision; }
+            { this.owner = owner; Data = data; Id = data.m_uid; Kind = kind; Cell = cell; Sector = sector; SeenOwner = data.GetOwner(); SeenRevision = data.OwnerRevision;
+                TextOwner = TextEditTarget == null ? 0 : TextEditTarget(data); TextHeld = TextEditLocked != null && TextEditLocked(data); }
             internal override long CurrentOwner { get { return Data.GetOwner(); } }
             internal override ApplyResult Apply(long target)
             {
                 if (!Data.IsValid() || !ReferenceEquals(ZDOMan.instance.GetZDO(Data.m_uid), Data)) return ApplyResult.Dropped;
+                if (TextWait) { Managed = false; return ApplyResult.Done; }
+                if (TextHeld) { Managed = false; return ApplyResult.Done; }
+                if (TextOwner != 0) target = TextOwner;
                 if (target == 0) return ApplyResult.Done;
                 if (Data.OwnerRevision == UInt16.MaxValue || (RejectedOwner == Data.GetOwner() && RejectedRevision == Data.OwnerRevision)) return ApplyResult.Dropped;
                 if (!owner.Available(target, Data.GetPosition())) return ApplyResult.Done;

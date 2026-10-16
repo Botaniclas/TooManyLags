@@ -231,6 +231,7 @@ namespace TooManyLags
         }
         private void Remove(NativeNode node)
         {
+            if ((node.TextHeld || node.TextOwner != 0) && TextEditNodeRemoved != null) TextEditNodeRemoved(node.Id);
             ForgetFieldWait(node);
             Inventory.Forget(node.Data); Cooperative.Forget(node.Data);
             if (ReadinessRemoved != null) ReadinessRemoved(node.Data);
@@ -273,6 +274,7 @@ namespace TooManyLags
             if (indexed == null || data == null) return;
             try
             {
+                if (TextEditDestroyed != null) TextEditDestroyed(data);
                 NativeNode node;
                 if (nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data) && node.AwaitingInstance) Remove(node);
             }
@@ -333,6 +335,7 @@ namespace TooManyLags
                 }
                 // Native packets assign owner and revision separately, in
                 // either order. Only the complete tuple proves a handoff.
+                if (node.TextHeld && TextEditOwnerObserved != null) TextEditOwnerObserved(data);
                 if (Inventory.Transitioning(data) || Cooperative.Transitioning(data)) return;
                 long recipientOwner = data.GetOwner(); uint revision = data.OwnerRevision;
                 if (node.ObservedOwner == recipientOwner && node.Revision == revision) return;
@@ -589,6 +592,46 @@ namespace TooManyLags
             return output.ToString();
         }
         internal static Action<ZDO> ReadinessRemoved { get; set; }
+        internal static Func<ZDO, long> TextEditTarget = null;
+        internal static Func<ZDO, bool> TextEditLocked = null;
+        internal static Action<ZDO> TextEditOwnerObserved = null, TextEditDestroyed = null;
+        internal static Action<ZDOID> TextEditNodeRemoved = null;
+        internal bool ManagesText(ZDO data)
+        {
+            if (!IsActive || data == null) return false;
+            GameObject prefab = scene.GetPrefab(data.GetPrefab());
+            if (!prefab) return true; // Missing metadata is not permission to bypass protection.
+            Kinds kind = ObjectCatalog.Classify(prefab);
+            return (kind == Kinds.Signs || kind == Kinds.Portals) && (kind & kinds) != 0;
+        }
+        internal bool PrepareTextEdit(ZDO data)
+        {
+            if (!IsActive || data == null || !data.IsValid()) return false;
+            NativeNode node;
+            if (!nodes.TryGetValue(data.m_uid, out node))
+            {
+                ZNetView view = scene.FindInstance(data);
+                if (view) Register(data, view);
+                if (!nodes.TryGetValue(data.m_uid, out node))
+                {
+                    Kinds kind = catalog.NativeDefaultKind(data.GetPrefab(), scene); Cell cell;
+                    Vector3 point = data.GetPosition();
+                    if ((kind != Kinds.Signs && kind != Kinds.Portals) || !data.Persistent ||
+                        BakedObjects.IsBaked(data) || !Cell.At(point.x, point.z, cellSize, out cell) || !DefaultArea(point)) return false;
+                    node = new NativeNode(this, data, null, kind, cell, null, null);
+                    nodes.Add(node.Id, node); loadingObjects.Add(node); indexed.Add(node, Time.unscaledTime);
+                }
+            }
+            if (!ReferenceEquals(node.Data, data) || (node.Kind != Kinds.Signs && node.Kind != Kinds.Portals)) return false;
+            node.TextOwner = TextEditTarget == null ? 0 : TextEditTarget(data); node.TextHeld = false;
+            ForgetFieldWait(node); indexed.RenewRequest(node, Time.unscaledTime); cadence.Request(); return true;
+        }
+        internal void EndTextEdit(ZDO data)
+        {
+            NativeNode node;
+            if (data != null && nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data))
+            { node.TextOwner = 0; node.TextHeld = TextEditLocked != null && TextEditLocked(data); node.RejectAutomaticRequest(); indexed.Dismiss(node); }
+        }
         internal static Action ReadinessReset { get; set; }
         internal static Func<ZDO, long, bool> DestinationLoaded { get; set; }
         internal static Func<ZNetPeer, bool> InitialClient { get; set; }
@@ -648,7 +691,7 @@ namespace TooManyLags
             Kinds kind = catalog.NativeDefaultKind(data.GetPrefab(), scene);
             return kind != Kinds.None && (kind == Kinds.StaticBuildings ? staticEnabled : defaultInteractives);
         }
-        private bool NeedsGrid(NativeNode node) { return (staticEnabled && node.Kind == Kinds.StaticBuildings) || (defaultMobs && node.Kind == Kinds.TamedAnimals) || !coarseEnabled || regions.ContainsZone(node.NativeZone); }
+        private bool NeedsGrid(NativeNode node) { return node.TextOwner != 0 || (staticEnabled && node.Kind == Kinds.StaticBuildings) || (defaultMobs && node.Kind == Kinds.TamedAnimals) || !coarseEnabled || regions.ContainsZone(node.NativeZone); }
         private bool ProtectedTransfer(ZDO data)
         { return Inventory.Transitioning(data) || Cooperative.Transitioning(data) || TransferPending(data) || Cooperative.Reserved(data); }
         private bool NeedsPolicy(NativeNode node)
@@ -681,6 +724,8 @@ namespace TooManyLags
         private static bool Finite(Vector3 v) { return !(Single.IsNaN(v.x) || Single.IsNaN(v.y) || Single.IsNaN(v.z) || Single.IsInfinity(v.x) || Single.IsInfinity(v.y) || Single.IsInfinity(v.z)); }
         internal sealed class NativeNode : AuthorityNode
         {
+            internal long TextOwner;
+            internal bool TextHeld;
             private readonly AuthorityController owner;
             internal readonly ZDO Data;
             internal readonly ZDOID Id;
@@ -728,6 +773,7 @@ namespace TooManyLags
             internal NativeNode(AuthorityController owner, ZDO data, ZNetView view, Kinds kind, Cell cell, Tameable animal, Character character)
             {
                 this.owner = owner; Data = data; Id = data.m_uid; View = view; Kind = kind; Cell = cell;
+                TextOwner = TextEditTarget == null ? 0 : TextEditTarget(data); TextHeld = TextEditLocked != null && TextEditLocked(data);
                 CacheCellGeometry(cell);
                 coveredBefore = owner.indexed.Grid.Candidate(cell) != 0;
                 ObservedOwner = data.GetOwner(); Revision = data.OwnerRevision;
@@ -781,6 +827,7 @@ namespace TooManyLags
             }
             internal bool UseProtected()
             {
+                if (TextHeld) return true;
                 float now = Time.unscaledTime;
                 // No server instance means no server-side interaction has run.
                 // Queued requests must not delay the first client acquisition.
@@ -817,6 +864,7 @@ namespace TooManyLags
             }
             private long DesiredOwner(long fieldOwner)
             {
+                if (TextOwner != 0) return TextOwner;
                 if (owner.refillStations && serverStation) return owner.server;
                 if (!owner.NeedsGrid(this)) return 0;
                 // Remember coverage only for this loaded instance. An unrelated
@@ -858,6 +906,8 @@ namespace TooManyLags
             internal override ApplyResult Apply(long target)
             {
                 if (!Identity() || Summoned) { owner.Remove(this); return ApplyResult.Dropped; }
+                if (TextHeld)
+                { RejectAutomaticRequest(); return ApplyResult.Done; }
                 if (WaitingForRequest)
                 {
                     // Discarded server acquisition must not block a different
@@ -895,7 +945,7 @@ namespace TooManyLags
                 // objects to the fallback server and immediately back to the
                 // player two seconds later. Permanent refill ownership wins.
                 if (!(owner.refillStations && serverStation) && target == 0 &&
-                    HasServerDefault && owner.indexed.Grid.Candidate(Cell) != 0)
+                    HasServerDefault && owner.indexed.Grid.Candidate(Cell) != 0 && TextOwner == 0)
                     return ApplyResult.Pending;
                 target = DesiredOwner(target);
                 if (loadTarget != 0 && target != loadTarget) CancelDestinationLoad();

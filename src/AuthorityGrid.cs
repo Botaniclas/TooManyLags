@@ -578,6 +578,7 @@ namespace TooManyLags
             }
             scratch.Clear();
         }
+        internal void Dismiss(AuthorityNode node) { Invalidate(node); pending.Remove(node); node.Managed = false; }
         private void Queue(AuthorityNode node, float at) { node.NotBefore = at; pending.Add(node); }
         private void Invalidate(AuthorityNode node)
         {

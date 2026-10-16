@@ -7,11 +7,11 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.45.0")]
+[assembly: AssemblyVersion("1.0.46.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.45")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.46")]
     [BepInDependency(FgnId)]
     [BepInDependency(PupId, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("botanic.pup.patch", BepInDependency.DependencyFlags.SoftDependency)]
@@ -19,13 +19,14 @@ namespace TooManyLags
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.45", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.46", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
         private static Plugin instance;
         private Harmony harmony;
         private Harmony configHarmony;
+        private Harmony layoutHarmony;
         private ConfigCommands commands;
         private bool logs;
         private bool enabledMod;
@@ -38,27 +39,35 @@ namespace TooManyLags
         private IDisposable clientOverrides;
         private MobPolicyHandoff clientTakeover;
         private PupCompatibility.Plugin pupCompatibility;
+        private void PrepareConfiguration()
+        {
+            ConfigLayout.Prepare(Config, Version);
+            layoutHarmony = new Harmony(Id + ".configlayout");
+            layoutHarmony.Patch(AccessTools.Method(typeof(ConfigFile), "Save"),
+                prefix: new HarmonyMethod(typeof(ConfigLayout), "BeforeSave"));
+        }
         private void Awake()
         {
+            PrepareConfiguration();
             instance = this;
-            bool defaultInteractives = Config.Bind("00 - Simulation Settings - Interactive Objects", "ServerOwnedInteractivesByDefault", false,
+            bool defaultInteractives = Config.Bind("01 - Simulation Settings", "ServerOwnedInteractivesByDefault", false,
                 "Server only; restart required. Simulation settings and exit retention only distribute CPU load between server and clients. They do not affect perceived latency. true: server default for managed interactions/idle tamed animals; false: vanilla default. Requires Server-Side Simulation.").Value;
-            bool buildings = Config.Bind("00 - Simulation Settings - Static Objects", "ServerOwnedStaticBuildingsByDefault", false,
+            bool buildings = Config.Bind("01 - Simulation Settings", "ServerOwnedStaticBuildingsByDefault", false,
                 "Server only; restart required. true: server default for eligible non-interactive building pieces; false: vanilla default. UseGridForStaticBuildings lets nearby clients share their simulation. Requires Server-Side Simulation.").Value;
-            bool staticGrid = Config.Bind("00 - Simulation Settings - Static Objects", "UseGridForStaticBuildings", false,
+            bool staticGrid = Config.Bind("01 - Simulation Settings", "UseGridForStaticBuildings", false,
                 "Server only; restart required. Include eligible static building pieces in the existing grid. Overlaps use the server; empty fields follow KeepOwnershipOnCellExit. PUP FPS is optional; baked clusters are excluded. Requires Server-Side Simulation.").Value;
-            bool enabled = Config.Bind("01 - General", "Enabled", true, "Server only; restart required. Enable TooManyLags for this server session. Clients follow the server; their local value is ignored. Handoff safeguards are always active with Server-Side Simulation. Later sections contain tuned defaults; adjust only when needed.").Value;
-            bool enableAI = Config.Bind("09 - AI Mob Ownership", "EnableAIOwnership", true,
+            bool enabled = Config.Bind("00 - General", "Enabled", true, "Server only; restart required. Enable TooManyLags for this server session. Clients follow the server; their local value is ignored. Handoff safeguards are always active with Server-Side Simulation. Later sections contain tuned defaults; adjust only when needed.").Value;
+            bool enableAI = Config.Bind("03 - AI Mob Ownership", "EnableAIOwnership", true,
                 "Server only; restart required. Enable target-based Hostile Mob ownership. Clients follow the server; their local value is ignored. Attacks block transfers until attack end.").Value;
-            bool noSimulation = Config.Bind("01 - General", "NoServerSideSimulation", false,
+            bool noSimulation = Config.Bind("01 - Simulation Settings", "NoServerSideSimulation", false,
                 "Server only; restart required. Recommended for dedicated servers with a weak or already overloaded CPU. true: disable FiresGhettoNetworking Server-Side Simulation and keep simulation on players; shared fields prefer the player with lower latency. Functionality is limited: no server ownership, and server-owned building/default/refill options are ignored. false: full Server-Side Simulation mode.").Value;
-            logs = Config.Bind("01 - General", "EnableLogs", false, "Local to this server/client. Live console: tml_config EnableLogs true/false. Enable extra diagnostic messages. Startup failures are always reported.").Value;
+            logs = Config.Bind("09 - Logs", "EnableLogs", false, "Local to this server/client. Live console: tml_config EnableLogs true/false. Enable extra diagnostic messages. Startup failures are always reported.").Value;
             Diagnostics = logs;
-            bool pupCompatibilityEnabled = Config.Bind("02 - PUP FPS Compatibility", "EnablePupCompatibility", true,
-                "Local to this server/client; restart required. Built-in PUP FPS collision, building-stability and FiresGhettoNetworking handoff safeguards. Automatically inactive without the required mods or when a separate BotanicPupPatch supplies the guards. Inactive mode installs no guard hooks and does no runtime work. AI ownership remains controlled by section 09.").Value;
-            bool refillStations = Config.Bind("03 - Default Ownership and Overrides", "ServerOwnedRefillStations", false,
+            bool pupCompatibilityEnabled = Config.Bind("08 - PUP FPS Compatibility", "EnablePupCompatibility", true,
+                "Local to this server/client; restart required. Built-in PUP FPS collision, building-stability and FiresGhettoNetworking handoff safeguards. Automatically inactive without the required mods or when a separate BotanicPupPatch supplies the guards. Inactive mode installs no guard hooks and does no runtime work. AI ownership remains controlled by section 03.").Value;
+            bool refillStations = Config.Bind("02 - Default Ownership and Overrides", "ServerOwnedRefillStations", false,
                 "Server only; restart required. Keep enabled refill stations server-owned, even inside player fields: smelters, cooking/fire stations, fermenters, shield generators and turrets. false: grid rules with 1 second of protection, renewed by each observed refill. Ignored with NoServerSideSimulation=true.").Value;
-            bool defaultMobs = Config.Bind("03 - Default Ownership and Overrides", "ServerOwnedMobsByDefault", false,
+            bool defaultMobs = Config.Bind("02 - Default Ownership and Overrides", "ServerOwnedMobsByDefault", false,
                 "Server only; restart required. Give idle tamed animals a server default outside player fields, even when the interactive default is off. Hostile Mobs without a player target use guarded server handoffs (requires EnableAIOwnership); player targets keep normal target ownership. Friendly magic summons, bosses and active riding/following stay excluded. Requires Server-Side Simulation; can increase server CPU usage.").Value;
             float cellSize = Config.Bind("04 - Grid Settings", "GridCellSizeMeters", 4f, new ConfigDescription(
                 "Server only; restart required. Defaults should work well. Larger grids are recommended for poor connections: they give handoffs more lead time, covering more objects. Cell size in metres: 4, 6.4, 8 or 16; 4 requires a rounded grid. Does not change vanilla/PUP loading distances.",
@@ -74,7 +83,7 @@ namespace TooManyLags
             }
             GridCoveragePattern pattern = patternName == "Rounded7x7" ? GridCoveragePattern.Rounded7x7 : patternName == "Rounded5x5" ? GridCoveragePattern.Rounded5x5 : GridCoveragePattern.Square3x3;
             bool directional = Config.Bind("05 - Directional Grid Mode", "DirectionalGridMode", true,
-                "Server only; restart required. true: camera-directed grid with the timers below and the overlap angle in section 08. false: full grid from section 06. Missing camera data uses character heading. Stationary players still count.").Value;
+                "Server only; restart required. true: camera-directed grid with the timers below and the overlap angle in section 07. false: full grid from section 06. Missing camera data uses character heading. Stationary players still count.").Value;
             float innerDelay = Config.Bind("05 - Directional Grid Mode", "InnerTransitionDelaySeconds", 0f, new ConfigDescription(
                 "Server only; live console supported. Red: six inner fields with KeepOwnershipOnCellExit=true; a full 3x3 centre with false. Delay in seconds for new requests; 0 allowed. Handoff protection remains active.", new AcceptableValueRange<float>(0f, 30f))).Value;
             float forwardDelay = Config.Bind("05 - Directional Grid Mode", "ForwardTransitionDelaySeconds", .2f, new ConfigDescription(
@@ -86,23 +95,24 @@ namespace TooManyLags
             float delay = Config.Bind("06 - Full Grid Mode", "TransitionDelaySeconds", 2f, new ConfigDescription(
                 "Server only; live console supported. Only with DirectionalGridMode=false: one delay in seconds for new full-grid requests. Active use and safe handoffs may require more time.", new AcceptableValueRange<float>(1f, 30f))).Value;
             if (Single.IsNaN(delay) || Single.IsInfinity(delay)) delay = 2f;
-            float interval = Config.Bind("04 - Grid Settings", IntervalConfig.Key, IntervalConfig.Default, new ConfigDescription(
+            float interval = Config.Bind("04 - Grid Settings", IntervalConfig.Key, .1f, new ConfigDescription(
                 "Server only; live console supported. Check interval in seconds for movement and fallback heading. Received camera-coverage changes request an immediate pass. Only changed coverage requests fields; existing timers/handoffs also progress while standing.", new AcceptableValueRange<float>(.05f, 5f))).Value;
-            if (Single.IsNaN(interval) || Single.IsInfinity(interval)) interval = IntervalConfig.Default;
-            ConfigEntry<bool> retention = Config.Bind("01 - General", "KeepOwnershipOnCellExit", true,
+            if (Single.IsNaN(interval) || Single.IsInfinity(interval)) interval = .1f;
+            ConfigEntry<bool> retention = Config.Bind("01 - Simulation Settings", "KeepOwnershipOnCellExit", true,
                 "Server only; restart required. true: keep vacated fields, gradually sharing CPU load between clients/server. false: return to server defaults; requires Server-Side Simulation and an interactive/static server default. false also keeps the full directional footprint. Native region release still applies.");
             bool keepOnExit = retention.Value;
             Kinds kinds = Kinds.None;
             foreach (Kinds kind in Enum.GetValues(typeof(Kinds)))
                 if (kind != Kinds.None && kind != Kinds.StaticBuildings && Config.Bind("10 - Object Categories", kind.ToString(), true,
                     ObjectDescription(kind)).Value) kinds |= kind;
-            float cameraInterval = Config.Bind("08 - Camera Heading", "CameraHeadingCheckIntervalSeconds", .05f, new ConfigDescription(
+            float cameraInterval = Config.Bind("07 - Camera Heading", "CameraHeadingCheckIntervalSeconds", .05f, new ConfigDescription(
                 "Server only; live console supported. Camera check interval in seconds, sent to all clients. Client value is ignored. 0.05 allows up to 20 checks per second; only coverage changes are sent. Server grid timing is in section 04.", new AcceptableValueRange<float>(.05f, 5f))).Value;
-            float cameraOverlap = Config.Bind("08 - Camera Heading", "CameraDirectionOverlapDegrees", 30f, new ConfigDescription(
+            float cameraOverlap = Config.Bind("07 - Camera Heading", "CameraDirectionOverlapDegrees", 30f, new ConfigDescription(
                 "Server only; live console supported. Base angular overlap of adjacent directions, sent to clients. 0: one base direction; 30: default; 45: two. Rotation prediction can add one direction. Character-heading fallback uses the same angle.", new AcceptableValueRange<float>(0f, 45f))).Value;
-            float cameraPrediction = Config.Bind("08 - Camera Heading", "CameraRotationPredictionSeconds", .1f, new ConfigDescription(
+            float cameraPrediction = Config.Bind("07 - Camera Heading", "CameraRotationPredictionSeconds", .1f, new ConfigDescription(
                 "Server only; live console supported. Predict camera rotation this many seconds ahead. Adds at most one adjacent direction; new fields use the inner/red delay. Keeps current coverage and handoff protection. 0 disables. Requires updated clients; character fallback is unchanged.", new AcceptableValueRange<float>(0f, .5f))).Value;
             CameraHeading.Configure(cameraOverlap, cameraPrediction);
+            ConfigLayout.Finish(Config);
             // Configuration ends here.
             PluginInfo pupGuard, pupPlugin, pupNetwork;
             bool externalPupGuard = (Chainloader.PluginInfos.TryGetValue("botanic.pup.patch", out pupGuard) && pupGuard.Instance) ||
@@ -187,6 +197,8 @@ namespace TooManyLags
         }
         private void InitializeOwnership(ConfigFile runtimeConfig, bool requested, bool client)
         {
+            try { TextEditing.Protection.Start(); }
+            catch (Exception error) { Report("Text editing protection unavailable: " + error.GetBaseException().Message); }
             // All plugin Awakes have completed: the optional combat module can
             // release its hooks before ours are installed, independent of load order.
             try
@@ -248,6 +260,7 @@ namespace TooManyLags
             if (!enabledMod) return;
             if (camera != null && gridProtocol) GridHandoffs.Protocol.ClientHello();
             PlayerSimulation.Plugin.Poll();
+            TextEditing.Protection.Poll();
         }
         private void LateUpdate()
         { if (gridProtocol) GridHandoffs.Protocol.FlushDeferred(); }
@@ -266,7 +279,7 @@ namespace TooManyLags
             instance.clientOverrides = FgnSessionSettings.ApplyClient(fgn, instance.networkPlugin.Instance.Config, mobs);
             // A disposable runtime copy changes no saved client values.
             ConfigFile runtimeConfig = new ConfigFile(instance.Config.ConfigFilePath, false) { SaveOnConfigSet = false };
-            runtimeConfig.Bind("09 - AI Mob Ownership", "EnableAIOwnership", true, "").Value = mobs;
+            runtimeConfig.Bind("03 - AI Mob Ownership", "EnableAIOwnership", true, "").Value = mobs;
             instance.enabledMod = true;
             try { GridHandoffs.Protocol.Start(fgn); instance.gridProtocol = true; }
             catch (Exception error)
@@ -288,6 +301,7 @@ namespace TooManyLags
         {
             if (!instance || Application.isBatchMode || (!instance.sessionStarted && !instance.enabledMod)) return;
             instance.enabledMod = instance.sessionStarted = false;
+            TextEditing.Protection.Stop();
             GridHandoffs.Protocol.Stop(); instance.gridProtocol = false;
             FgnCombatOwnership.Stop(); PlayerSimulation.Plugin.Stop();
             if (instance.camera != null) instance.camera.Reset(true); instance.camera = null;
@@ -305,17 +319,17 @@ namespace TooManyLags
         { CameraHeading.Configure(overlap, prediction); ApplyCameraInterval(interval); }
         internal static float CameraPredictionSeconds()
         {
-            float seconds = instance ? instance.ConfigValue<float>("08 - Camera Heading", "CameraRotationPredictionSeconds") : .1f;
+            float seconds = instance ? instance.ConfigValue<float>("07 - Camera Heading", "CameraRotationPredictionSeconds") : .1f;
             return Single.IsNaN(seconds) || Single.IsInfinity(seconds) ? .1f : Math.Max(0f, Math.Min(.5f, seconds));
         }
         internal static float CameraOverlap()
         {
-            float overlap = instance ? instance.ConfigValue<float>("08 - Camera Heading", "CameraDirectionOverlapDegrees") : 30f;
+            float overlap = instance ? instance.ConfigValue<float>("07 - Camera Heading", "CameraDirectionOverlapDegrees") : 30f;
             return Single.IsNaN(overlap) || Single.IsInfinity(overlap) ? 30f : Math.Max(0f, Math.Min(45f, overlap));
         }
         internal static float CameraInterval()
         {
-            float interval = instance ? instance.ConfigValue<float>("08 - Camera Heading", "CameraHeadingCheckIntervalSeconds") : .05f;
+            float interval = instance ? instance.ConfigValue<float>("07 - Camera Heading", "CameraHeadingCheckIntervalSeconds") : .05f;
             return Single.IsNaN(interval) || Single.IsInfinity(interval) ? .05f : Math.Max(.05f, Math.Min(5f, interval));
         }
         internal static void InvalidateCamera() { if (instance && instance.camera != null) instance.camera.Reset(true); }
@@ -350,9 +364,9 @@ namespace TooManyLags
         {
             PlayerSimulation.Settings options = PlayerSimulation.Plugin.Options;
             if (key == "EnableLogs")
-            { logs = Diagnostics = ConfigValue<bool>("01 - General", key); if (options != null) options.Logs = logs; }
+            { logs = Diagnostics = ConfigValue<bool>("09 - Logs", key); if (options != null) options.Logs = logs; }
             else if (key == "CameraHeadingCheckIntervalSeconds")
-            { ConfigConsole.BroadcastCamera(ConfigValue<float>("08 - Camera Heading", key)); }
+            { ConfigConsole.BroadcastCamera(ConfigValue<float>("07 - Camera Heading", key)); }
             else if (key == "CameraDirectionOverlapDegrees" || key == "CameraRotationPredictionSeconds")
             { CameraHeading.Configure(CameraOverlap(), CameraPredictionSeconds()); ConfigConsole.BroadcastCamera(CameraInterval()); }
             else if (key == IntervalConfig.Key)
@@ -363,9 +377,9 @@ namespace TooManyLags
                 if (PlayerSimulation.Plugin.Controller != null) PlayerSimulation.Plugin.Controller.ConfigureInterval(interval);
             }
             else if (key == "ServerFallbackPingMs")
-            { if (options != null) options.HighPing = ConfigValue<int>("09 - AI Mob Ownership", key); }
+            { if (options != null) options.HighPing = ConfigValue<int>("03 - AI Mob Ownership", key); }
             else if (key == "ServerFallbackRadius")
-            { if (options != null) options.MobRadius = ConfigValue<float>("09 - AI Mob Ownership", key); }
+            { if (options != null) options.MobRadius = ConfigValue<float>("03 - AI Mob Ownership", key); }
             else if (key == "ServerOverlapCooldownSeconds")
             { if (Controller != null) Controller.ConfigureOverlapCooldown(ConfigValue<float>("05 - Directional Grid Mode", key)); }
             else
@@ -418,9 +432,11 @@ namespace TooManyLags
         private void Cleanup() { if (harmony != null) harmony.UnpatchSelf(); }
         private void OnDestroy()
         {
+            TextEditing.Protection.Stop();
             if (pupCompatibility != null) { pupCompatibility.Dispose(); pupCompatibility = null; }
             GridHandoffs.Protocol.Stop();
             ConfigConsole.Reset(); if (configHarmony != null) configHarmony.UnpatchSelf(); commands = null;
+            if (layoutHarmony != null) layoutHarmony.UnpatchSelf(); ConfigLayout.Reset();
             FgnCombatOwnership.Stop(); FgnCombatStatus.Reset();
             PlayerSimulation.Plugin.Stop();
             if (Controller != null) Controller.Reset(); Controller = null;

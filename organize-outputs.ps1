@@ -45,7 +45,7 @@ foreach ($layoutItem in $layoutItems) {
         $layoutVersion = [Version]$layoutVersion.ToString(3)
     } elseif (-not $layoutItem.PSIsContainer -and $layoutConfigProjects.ContainsKey($layoutItem.Name)) {
         $layoutName = $layoutConfigProjects[$layoutItem.Name]
-        $layoutHeader = Get-Content -LiteralPath $layoutItem.FullName -TotalCount 1
+        $layoutHeader = Get-Content -LiteralPath $layoutItem.FullName -TotalCount 4 | Where-Object { $_ -match '^## Settings file was created by plugin ' } | Select-Object -First 1
         if ($layoutHeader -match ' v(?<version>\d+\.\d+\.\d+)$') { $layoutVersion = [Version]$Matches.version }
     } elseif (-not $layoutItem.PSIsContainer -and $layoutItem.Name -match '^(?<project>.+)-(?:README|Anleitung)\.md$' -and $layoutLatest.ContainsKey($Matches.project)) {
         $layoutName = $Matches.project

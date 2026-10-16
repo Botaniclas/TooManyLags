@@ -421,7 +421,7 @@ namespace TooManyLags
                 case Kinds.Defenses: name = "Traps and turrets"; break;
                 case Kinds.ShieldGenerators: name = "Shield generators"; break;
                 case Kinds.Pickables: name = "Pickable objects and feasts; excludes loose item drops"; break;
-                case Kinds.LooseItems: name = "Loose item drops; native pickup takes priority over automatic grid transfers"; break;
+                case Kinds.LooseItems: name = "Loose item drops. Leave enabled; disabling is normally not useful. false keeps native ownership. Native pickup takes priority over automatic grid transfers"; break;
                 case Kinds.Offerings: name = "Offering altars"; break;
                 case Kinds.Vehicles: name = "Idle carts and vehicle controls; FiresGhettoNetworking-simulated ships excluded"; break;
                 default: name = "Other compatible modded interactables"; break;

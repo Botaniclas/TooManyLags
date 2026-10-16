@@ -119,7 +119,7 @@ A lower ping limit or larger radius makes fallback apply more often and can incr
 
 **`ServerOwnedMobsByDefault = false`** can independently give idle tamed animals a server default outside player fields and put Hostile Mobs without a player target on the server. Hostile Mobs require `EnableAIOwnership`; friendly magic summons, bosses and active riding/following remain excluded. These overrides require Server-Side Simulation and can add server CPU work.
 
-The **Object Categories** section at the bottom enables or disables broad groups such as doors, containers and tamed animals. `LooseItems=true` includes dropped items in the same grid; false leaves their ownership native. Native pickup takes priority over automatic grid transfers. Update server and clients for item management; older clients keep native item ownership. Disabled groups keep native vanilla/FiresGhettoNetworking handling. Static building pieces use their separate Simulation Settings switches.
+The **Object Categories** section at the bottom enables or disables broad groups such as doors, containers and tamed animals. `LooseItems=true` includes dropped items in the same grid. **Leave this enabled; disabling it is normally not useful.** false leaves item ownership native. Native pickup takes priority over automatic grid transfers. Update server and clients for item management; older clients keep native item ownership. Disabled groups keep native vanilla/FiresGhettoNetworking handling. Static building pieces use their separate Simulation Settings switches.
 
 Automatic handoffs retain inventory, refilling and active-use protection. There is no experimental-protection toggle in the current version.
 

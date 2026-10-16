@@ -1,6 +1,6 @@
 # Changelog
 
-**Unreleased**
+**1.0.47**
 ```
 - Adds loose item drops to the existing ownership grid, including shared server fields. LooseItems defaults to true; set false to retain native ownership. Native pickup has priority. Update server and clients; older clients keep native item ownership.
 ```

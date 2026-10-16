@@ -247,7 +247,7 @@ ShieldGenerators = true
 ## Pickable objects and feasts; excludes loose item drops.
 Pickables = true
 
-## Loose item drops; native pickup takes priority over automatic grid transfers.
+## Loose item drops. Leave enabled; disabling is normally not useful. false keeps native ownership. Native pickup takes priority over automatic grid transfers.
 LooseItems = true
 
 ## Offering altars.

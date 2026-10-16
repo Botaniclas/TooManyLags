@@ -1,0 +1,101 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
+using BepInEx.Configuration;
+
+namespace TooManyLagsStandalone
+{
+    // Console requests only. Restart settings never tear down a live handoff.
+    internal sealed class ConfigCommands
+    {
+        private readonly ConfigFile config;
+        private readonly Action<string> apply;
+        private readonly Dictionary<string, object> active = new Dictionary<string, object>(StringComparer.Ordinal);
+        internal ConfigCommands(ConfigFile config, Action<string> apply)
+        {
+            this.config = config; this.apply = apply;
+            foreach (var pair in config) if (!Live(pair.Key.Key)) active.Add(pair.Key.Key, pair.Value.BoxedValue);
+        }
+        internal static bool Local(string key) { return String.Equals(key, "EnableLogs", StringComparison.OrdinalIgnoreCase); }
+        internal static bool Live(string key)
+        {
+            switch (key)
+            {
+                case "EnableLogs": case "CameraHeadingCheckIntervalSeconds": case "CameraDirectionOverlapDegrees": case "CameraRotationPredictionSeconds":
+                case "MovementRotationCheckIntervalSeconds": case "InnerTransitionDelaySeconds": case "ForwardTransitionDelaySeconds":
+                case "OuterTransitionDelaySeconds": case "TransitionDelaySeconds": case "OverlapOwnershipCooldownSeconds":
+                case "HighTargetPingMs": case "NearbyAlternativeOwnerRadiusMeters": return true;
+                default: return false;
+            }
+        }
+        internal string Execute(string command, bool server)
+        {
+            if (command == null || command.Length > 256) return "Invalid config command.";
+            string[] args = command.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (args.Length == 1 && String.Equals(args[0], "list", StringComparison.OrdinalIgnoreCase))
+            {
+                StringBuilder output = new StringBuilder(server ? "HOST/SERVER settings (live/restart):" : "LOCAL settings (live/restart):");
+                foreach (var pair in config) if (server != Local(pair.Key.Key)) output.Append('\n').Append(Display(pair.Value));
+                return output.ToString();
+            }
+            if (args.Length < 1 || args.Length > 2) return "Usage: tml_config list | <Key> [value].";
+            ConfigEntryBase entry = null;
+            foreach (var pair in config) if (String.Equals(pair.Key.Key, args[0], StringComparison.OrdinalIgnoreCase)) { entry = pair.Value; break; }
+            if (entry == null) return "Unknown setting. Use tml_config list.";
+            string key = entry.Definition.Key;
+            if (server == Local(key)) return "Wrong setting scope. Only EnableLogs is local; all gameplay and camera settings belong on the host/server.";
+            if (args.Length == 1) return Display(entry) + "\n" + entry.Description.Description;
+            object value;
+            if (!Parse(entry.SettingType, args[1], out value) || (entry.Description.AcceptableValues != null && !entry.Description.AcceptableValues.IsValid(value)))
+                return "Invalid value for " + key + ".\n" + entry.Description.Description + "\n" + (entry.Description.AcceptableValues == null ? "" : entry.Description.AcceptableValues.ToDescriptionString());
+            if (InvalidGrid(key, value)) return "Invalid grid combination: 4-metre cells require Rounded5x5 or Rounded7x7. Change the other setting first.";
+            bool live = Live(key);
+            if (Equals(entry.BoxedValue, value)) return key + " is already " + Value(value) + "." + (Pending(entry) ? RestartNotice : "");
+            object before = entry.BoxedValue; bool autoSave = config.SaveOnConfigSet;
+            config.SaveOnConfigSet = false;
+            try
+            {
+                entry.BoxedValue = value; config.Save();
+                if (live) apply(key);
+                string result = (server ? "HOST/SERVER: " : "LOCAL: ") + key + " = " + Value(value);
+                return live ? result + " (saved and applied; existing handoffs remain protected)." :
+                    result + (Pending(entry) ? " (saved)." + RestartNotice : " (saved; matches the current session, no restart pending).");
+            }
+            catch (Exception error)
+            {
+                entry.BoxedValue = before;
+                try { if (live) apply(key); config.Save(); } catch (Exception) { }
+                return "Change failed: " + error.GetBaseException().Message;
+            }
+            finally { config.SaveOnConfigSet = autoSave; }
+        }
+        private const string RestartNotice = " Takes effect after restarting the host/server; the current session is unchanged. Clients receive the new mode when reconnecting.";
+        private bool Pending(ConfigEntryBase entry)
+        { object current; return active.TryGetValue(entry.Definition.Key, out current) && !Equals(current, entry.BoxedValue); }
+        private string Display(ConfigEntryBase entry)
+        {
+            string key = entry.Definition.Key, result = key + " = " + Value(entry.BoxedValue);
+            return Pending(entry) ? result + " [restart pending; active: " + Value(active[key]) + "]" : result + (Live(key) ? " [live]" : " [restart]");
+        }
+        private bool InvalidGrid(string key, object value)
+        {
+            if (key != "GridCellSizeMeters" && key != "GridCoveragePattern") return false;
+            float size = 0; string pattern = null;
+            foreach (var pair in config)
+                if (pair.Key.Key == "GridCellSizeMeters") size = Convert.ToSingle(key == pair.Key.Key ? value : pair.Value.BoxedValue, CultureInfo.InvariantCulture);
+                else if (pair.Key.Key == "GridCoveragePattern") pattern = (string)(key == pair.Key.Key ? value : pair.Value.BoxedValue);
+            return size == 4 && pattern == "Square3x3";
+        }
+        private static string Value(object value) { return Convert.ToString(value, CultureInfo.InvariantCulture); }
+        private static bool Parse(Type type, string text, out object value)
+        {
+            value = null; bool boolean; int integer; float number;
+            if (type == typeof(bool) && Boolean.TryParse(text, out boolean)) value = boolean;
+            else if (type == typeof(string)) value = text;
+            else if (type == typeof(int) && Int32.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out integer)) value = integer;
+            else if (type == typeof(float) && Single.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out number) && !Single.IsNaN(number) && !Single.IsInfinity(number)) value = number;
+            return value != null;
+        }
+    }
+}

@@ -1,0 +1,33 @@
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "Botaniclas"
+name = "TooManyLags_Standalone"
+versionNumber = "1.1.0"
+description = "Leave avoidable connection lag behind: local interactions, smarter Hostile Mob ownership and better-connected owners in shared areas. Lightweight multiplayer without FiresGhettoNetworking. Clients optional; full features with matching clients."
+websiteUrl = "https://github.com/Botaniclas/TooManyLags"
+containsNsfwContent = false
+
+[package.dependencies]
+denikson-BepInExPack_Valheim = "5.4.2351"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "./outputs"
+
+[[build.copy]]
+source = "./bin/TooManyLagsStandalone.dll"
+target = "TooManyLagsStandalone.dll"
+
+[[build.copy]]
+source = "./CHANGELOG.md"
+target = "CHANGELOG.md"
+
+[publish]
+repository = "https://thunderstore.io"
+communities = ["valheim"]
+
+[publish.categories]
+valheim = ["mods", "tweaks", "utility", "server-side", "client-side", "ai-generated"]

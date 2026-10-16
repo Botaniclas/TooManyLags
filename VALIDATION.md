@@ -1,3 +1,13 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.47 loose item candidate
+
+LooseItems defaults to true and uses the existing field owner, overlap, timer, retention and moving-object index in both simulation modes. Disabling the category retains native item ownership. Source and destination capability checks exclude old clients without an exact-version lock. Item drops keep the existing physics/readiness path; they cannot use the stationary early-loading bypass. Native ItemDrop placement components may have disabled WearNTear, so only loose items bypass that building-specific check.
+
+Native manual pickup, automatic collection, eating, stack merging and explicit ownership requests remain native. Only actual automatic handoffs consult local pickup state and the native enabled collection range. A pickup veto discards automatic work until new covering player activity, using the existing sparse field-request gates. There is no new scanning loop, physics callback, Harmony target or item-distance ownership selector. Cleanup uses the existing loaded-node lifecycle.
+
+All 25 verification groups pass against DLL SHA256 0E7EBBE247DB5B5755DD7796D8405EF6E0565C9C5AEF98F578D1B47306244DBA. The full controller/grid fixture passes 29,816 assertions, including loose-item movement, retention, overlap, disabled categories, legacy peers, disabled placement components and native pickup priority. Player-only handoff fixtures pass 4,198 assertions; the new native audit checks 57 pickup/merging and compiled source-guard contracts. Real BepInEx config generation verifies 54 settings. These are managed fixtures and native metadata checks; live multiplayer validation remains outstanding. This is a local unpublished candidate.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.46 text editing candidate
 
 Object-specific sign/portal editing protection uses the existing source-consenting ownership protocols in both simulation modes. Ownership and the latest state must arrive before native text input opens. Actual local movement releases the hold; confirmation, closing the UI and camera turns do not. Automatic takeovers rejected during editing are discarded rather than replayed. Active server holds require no polling; ordinary object decisions use cached node flags. No new global ownership hook, physics loop or direct ownership write is introduced.

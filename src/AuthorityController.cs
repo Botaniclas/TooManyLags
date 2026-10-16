@@ -11,6 +11,7 @@ namespace TooManyLags
 {
     internal sealed class AuthorityController
     {
+        internal static Func<ZNetPeer, bool> LooseItemClient = null;
         private struct Receipt { internal int Epoch; internal bool Ready; }
         private struct OwnerCell : IEquatable<OwnerCell>
         {
@@ -406,6 +407,13 @@ namespace TooManyLags
             waiting.Add(node); Inventory.Forget(node.Data);
             indexed.Changed(node, Time.unscaledTime, false);
             indexed.Grid.Renewed = RenewFieldRequests;
+        }
+        internal void PickupBlocked(ZDO data, long source, uint revision)
+        {
+            NativeNode node;
+            if (data == null || data.GetOwner() != source || data.OwnerRevision != revision ||
+                !nodes.TryGetValue(data.m_uid, out node) || !ReferenceEquals(node.Data, data) || node.Kind != Kinds.LooseItems) return;
+            Cooperative.Forget(data); node.RejectAutomaticRequest(); indexed.Dismiss(node);
         }
         private void ForgetFieldWait(NativeNode node)
         {
@@ -828,6 +836,7 @@ namespace TooManyLags
             internal bool UseProtected()
             {
                 if (TextHeld) return true;
+                if (Kind == Kinds.LooseItems && View && View.IsOwner() && LooseItemGuard.Busy(View)) return true;
                 float now = Time.unscaledTime;
                 // No server instance means no server-side interaction has run.
                 // Queued requests must not delay the first client acquisition.
@@ -856,7 +865,7 @@ namespace TooManyLags
                 if (Kind == Kinds.Incinerators && (!IncineratorProtection.Active || !IncineratorProtection.Supported ||
                     !incinerator || !container || incinerator.m_container != container)) return false;
                 if (multipleInventories || (container && container.m_privacy != Container.PrivacySetting.Public)) return false;
-                if (Kind != Kinds.TamedAnimals) return View.m_persistent && (!wear || wear.isActiveAndEnabled) && (!ship || !owner.compatibility.ShipsOwnedExternally) &&
+                if (Kind != Kinds.TamedAnimals) return View.m_persistent && (Kind == Kinds.LooseItems || !wear || wear.isActiveAndEnabled) && (!ship || !owner.compatibility.ShipsOwnedExternally) &&
                     Data.GetLong(ZDOVars.s_user, 0) == 0 && (!cart || !cart.InUse());
                 return !Summoned && actor && !(actor is Player) && actor.isActiveAndEnabled && Data.GetBool(ZDOVars.s_tamed) && Data.GetLong(ZDOVars.s_user, 0) == 0 &&
                     !actor.IsDead() && !actor.IsAttached() && !actor.IsRiding() && (!tameable || !tameable.HaveRider()) &&
@@ -963,6 +972,12 @@ namespace TooManyLags
                      !FgnOwnerHandoff.CooperativeClient(owner.network.GetPeer(Data.GetOwner())))))
                 { if (loadPending) CancelDestinationLoad(); Managed = false; return ApplyResult.Done; }
                 long old = Data.GetOwner(); uint revision = Data.OwnerRevision;
+                // Older sources/destinations cannot protect native pickup.
+                if (Kind == Kinds.LooseItems &&
+                    ((old != 0 && old != owner.server && owner.AvailableOwner(old, position) &&
+                      (LooseItemClient == null || !LooseItemClient(owner.network.GetPeer(old)))) ||
+                     (target != owner.server && (LooseItemClient == null || !LooseItemClient(owner.network.GetPeer(target))))))
+                { Managed = false; return ApplyResult.Done; }
                 if (AwaitingInstance && old != owner.server && old != 0 && owner.AvailableOwner(old, position) &&
                     (InitialClient == null || !InitialClient(owner.network.GetPeer(old))))
                 { if (loadPending) CancelDestinationLoad(); Managed = false; return ApplyResult.Done; }
@@ -978,7 +993,7 @@ namespace TooManyLags
                 { if (loadTarget != 0) CancelDestinationLoad(); Managed = true; ManagedOwner = target; owner.Inventory.Forget(Data); owner.Cooperative.Forget(Data); return ApplyResult.Done; }
                 if (UseProtected() && owner.AvailableOwner(old, position))
                 {
-                    if (Kind == Kinds.Incinerators) { RejectAutomaticRequest(); return ApplyResult.Done; }
+                    if (Kind == Kinds.Incinerators || Kind == Kinds.LooseItems) { RejectAutomaticRequest(); return ApplyResult.Done; }
                     if (loadPending) CancelDestinationLoad(); return ApplyResult.Pending;
                 }
                 // An unrelated missing instance in the server's broad native
@@ -1005,7 +1020,7 @@ namespace TooManyLags
                     loadPending = false; loadNext = 0;
                 }
                 else if (loadPending) CancelDestinationLoad();
-                if (!AwaitingInstance && Kind != Kinds.TamedAnimals && (ObjectCatalog.Classify(View.gameObject) != Kind || (wear && wear.m_staticPosition && (View.transform.position - position).sqrMagnitude > .0025f))) return ApplyResult.Dropped;
+                if (!AwaitingInstance && Kind != Kinds.TamedAnimals && (ObjectCatalog.Classify(View.gameObject) != Kind || (Kind != Kinds.LooseItems && wear && wear.m_staticPosition && (View.transform.position - position).sqrMagnitude > .0025f))) return ApplyResult.Dropped;
                 if (!Identity() || !Controllable() || Data.GetOwner() != old || Data.OwnerRevision != revision || Data.GetPosition() != position || !owner.AvailableOwner(target, position)) return ApplyResult.Pending;
                 if (revision == UInt16.MaxValue) { Managed = false; return ApplyResult.Dropped; }
                 bool completingCooperative = container && (owner.Cooperative.Pending(Data) || owner.Cooperative.Received(Data));

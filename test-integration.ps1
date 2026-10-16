@@ -14,6 +14,7 @@ if($LASTEXITCODE -ne 0){throw 'Grid tests failed.'}
 $authoritySources=Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' | Where-Object { $_.Name -notin @('Plugin.cs','GridHandoffProtocol.cs','ConfigCommands.cs','ConfigConsole.cs','ServerSession.cs','FgnSessionSettings.cs','MobPolicyHandoff.cs','FgnCombatOwnership.cs','FgnMobHandoff.cs','FgnBossPolicy.cs','FgnCombatBridge.cs','FgnCombatStatus.cs','FgnTargetEvents.cs','FgnAttackRetry.cs','NativePup.cs','CellReadiness.cs') } | Select-Object -ExpandProperty FullName
 $authorityFixtures=@('RuntimeFixtures.cs','ExtraFixtures.cs','InteractionFixtures.cs','FgnRpcFixtures.cs','IntegrationTests.cs','WorldInteractionTests.cs','StaticGridTests.cs') | ForEach-Object {Join-Path $PSScriptRoot ('tests\'+$_)}
 $authorityFixtures+=Join-Path $PSScriptRoot 'tests\TextEditingGridTests.cs'
+$authorityFixtures+=Join-Path $PSScriptRoot 'tests\LooseItemTests.cs'
 $authoritySources=@($authoritySources | Where-Object { [IO.Path]::GetFileName($_) -notin @('ConfigLayout.cs','ConfigTemplate.cs') })
 $authoritySources+=@('AuthorityController.cs','AuthorityGrid.cs','RegionContentionGate.cs','OwnershipCadence.cs','CameraHeading.cs') | ForEach-Object { Join-Path $PSScriptRoot ('src/PlayerSimulation/'+$_) }
 $authorityFixtures+=Join-Path $PSScriptRoot 'tests/TextEditingPlayerGridTests.cs'

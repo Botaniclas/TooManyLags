@@ -19,7 +19,7 @@ namespace TooManyLags.PlayerSimulation
         private sealed class Connection
         {
             internal ZNetPeer Peer;
-            internal bool Capable, SupportsMobs, ModeKnown, TextEditing; internal bool? MobWatch;
+            internal bool Capable, SupportsMobs, ModeKnown, TextEditing, LooseItems; internal bool? MobWatch;
             internal float HelloAt, NextPing, MeasuredAt, Rtt = Single.PositiveInfinity;
             internal readonly Queue<ZPackage> Out = new Queue<ZPackage>();
         }
@@ -30,6 +30,12 @@ namespace TooManyLags.PlayerSimulation
         internal static bool TextEditingAvailable = false;
         internal bool SupportsTextEditing(ZNetPeer peer)
         { Connection c; return peer != null && peer.IsReady() && peer.m_rpc != null && connections.TryGetValue(peer.m_rpc, out c) && ReferenceEquals(c.Peer, peer) && c.Capable && c.TextEditing; }
+        internal bool SupportsLooseItems(long uid)
+        {
+            if (ZNet.instance && uid == ZDOMan.GetSessionID()) return true;
+            ZNetPeer peer = ZNet.instance ? ZNet.instance.GetPeer(uid) : null; Connection c;
+            return peer != null && peer.IsReady() && peer.m_rpc != null && connections.TryGetValue(peer.m_rpc, out c) && ReferenceEquals(c.Peer, peer) && c.Capable && c.LooseItems;
+        }
         internal bool NeedsPoll
         {
             get
@@ -60,7 +66,7 @@ namespace TooManyLags.PlayerSimulation
                 if (net.IsServer() && !Single.IsInfinity(c.Rtt) && now - c.MeasuredAt >= Math.Max(10f, Plugin.Options.PingInterval * 3f))
                 { c.Rtt = Single.PositiveInfinity; RankVersion++; }
                 if (!net.IsServer() && !c.ModeKnown && now >= c.HelloAt)
-                { c.HelloAt = now + 3f; Send(c.Peer.m_uid, Message.Hello, delegate(ZPackage p) { p.Write(Protocol); p.Write(Plugin.Options.Mobs); p.Write(TextEditingAvailable); }); }
+                { c.HelloAt = now + 3f; Send(c.Peer.m_uid, Message.Hello, delegate(ZPackage p) { p.Write(Protocol); p.Write(Plugin.Options.Mobs); p.Write(TextEditingAvailable); p.Write(true); }); }
                 // Reuse FGN's connection measurements; no second ping protocol.
                 if (net.IsServer() && now >= c.NextPing)
                 {
@@ -177,8 +183,9 @@ namespace TooManyLags.PlayerSimulation
                 if (newCapability) { c.Rtt = Single.PositiveInfinity; c.NextPing = Time.unscaledTime; }
                 c.SupportsMobs = packet.ReadBool(); c.Capable = true; RankVersion++;
                 c.TextEditing = packet.GetPos() < packet.Size() && packet.ReadBool();
+                c.LooseItems = packet.GetPos() < packet.Size() && packet.ReadBool();
                 if (newCapability && Plugin.Controller != null) Plugin.Controller.CapabilityChanged(uid);
-                Send(uid, Message.Welcome, delegate(ZPackage p) { p.Write(Protocol); p.Write(Plugin.Options.Mobs); p.Write(Plugin.ServerMode); p.Write(TextEditingAvailable); }); return;
+                Send(uid, Message.Welcome, delegate(ZPackage p) { p.Write(Protocol); p.Write(Plugin.Options.Mobs); p.Write(Plugin.ServerMode); p.Write(TextEditingAvailable); p.Write(true); }); return;
             }
             if (!server && (c == null || ZNet.instance.GetServerPeer() != c.Peer)) return;
             if (message == Message.Welcome && !server && c != null)
@@ -186,6 +193,7 @@ namespace TooManyLags.PlayerSimulation
                 if (packet.ReadInt() != Protocol) return;
                 bool mobs = packet.ReadBool(), mode = packet.ReadBool(); c.ModeKnown = true;
                 c.TextEditing = packet.GetPos() < packet.Size() && packet.ReadBool();
+                c.LooseItems = packet.GetPos() < packet.Size() && packet.ReadBool();
                 c.Capable = true;
                 if (mode) { Plugin.Activate(); Plugin.Local.MobsEnabled = Plugin.Options.Mobs && mobs; }
                 else Plugin.Deactivate();

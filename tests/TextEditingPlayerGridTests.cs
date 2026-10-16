@@ -9,7 +9,7 @@ using Mode=TooManyLags.PlayerSimulation;
 // fixture. Here its source-consenting completion is deterministic.
 namespace TooManyLags.PlayerSimulation
 {
-    internal enum Kinds { None=0,Signs=1,Portals=2,Incinerators=4,TamedAnimals=8 }
+    internal enum Kinds { None=0,Signs=1,Portals=2,Incinerators=4,TamedAnimals=8,LooseItems=134217728 }
     internal sealed class Settings
     {
         internal float Interval=.05f,Full=2,Inner=0,Forward=.2f,Outer=3,CellSize=8,Margin=30;
@@ -29,6 +29,7 @@ namespace TooManyLags.PlayerSimulation
         internal int RankVersion=0;
         internal bool Present(long uid) { return ZNet.instance.GetPeer(uid)!=null; }
         internal bool Capable(long uid) { return Present(uid); }
+        internal bool SupportsLooseItems(long uid) { return Present(uid); }
         internal bool MobCapable(long uid) { return false; }
         internal float Latency(long uid) { return 25; }
         internal void FlushAll() { }

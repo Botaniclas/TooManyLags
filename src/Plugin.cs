@@ -7,11 +7,11 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.46.0")]
+[assembly: AssemblyVersion("1.0.47.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.46")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.47")]
     [BepInDependency(FgnId)]
     [BepInDependency(PupId, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("botanic.pup.patch", BepInDependency.DependencyFlags.SoftDependency)]
@@ -19,7 +19,7 @@ namespace TooManyLags
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.46", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.47", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -421,6 +421,7 @@ namespace TooManyLags
                 case Kinds.Defenses: name = "Traps and turrets"; break;
                 case Kinds.ShieldGenerators: name = "Shield generators"; break;
                 case Kinds.Pickables: name = "Pickable objects and feasts; excludes loose item drops"; break;
+                case Kinds.LooseItems: name = "Loose item drops; native pickup takes priority over automatic grid transfers"; break;
                 case Kinds.Offerings: name = "Offering altars"; break;
                 case Kinds.Vehicles: name = "Idle carts and vehicle controls; FiresGhettoNetworking-simulated ships excluded"; break;
                 default: name = "Other compatible modded interactables"; break;

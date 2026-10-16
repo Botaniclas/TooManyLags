@@ -1,5 +1,10 @@
 # Changelog
 
+**Unreleased**
+```
+- Adds loose item drops to the existing ownership grid, including shared server fields. LooseItems defaults to true; set false to retain native ownership. Native pickup has priority. Update server and clients; older clients keep native item ownership.
+```
+
 **1.0.46**
 ```
 - Protects sign and portal-name editing: the edited object's ownership stays with its editor until actual movement, including after confirming the text. Discarded grid takeovers are not replayed. Update server and clients.

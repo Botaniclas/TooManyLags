@@ -26,6 +26,7 @@ public sealed class PickableItem : UnityEngine.MonoBehaviour, Interactable { }
 public sealed class Plant : UnityEngine.MonoBehaviour { }
 public sealed class ItemDrop : UnityEngine.MonoBehaviour, Interactable
 {
+    public bool m_autoPickup=true, Placed; public bool IsPiece(){return Placed;}
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private void RPC_RequestOwn(long sender) { var view=GetComponent<ZNetView>(); if(view.GetZDO().GetOwner()==ZDOMan.GetSessionID())view.GetZDO().SetOwner(sender); }
     public void RequestOwn(long sender) { RPC_RequestOwn(sender); }

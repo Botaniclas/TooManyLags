@@ -143,7 +143,7 @@ namespace TooManyLags.PlayerSimulation
             int result = packet.ReadInt();
             if (result == 1) { s.Next = now + 2f; Observe(job.Data); }
             else if (result == 2) s.Block(now);
-            else { Cancel(id, true); if (result == 3) controller.Rejected(id); controller.Wake(id); }
+            else { Cancel(id, true); if (result == 4 && job.Kind == Kinds.LooseItems) { controller.PickupBlocked(id); return; } if (result == 3) controller.Rejected(id); controller.Wake(id); }
         }
         internal void Observe(ZDO data)
         { Job job; if (data != null && jobs.TryGetValue(data.m_uid, out job) && job.State.Observe(data.GetOwner(), data.OwnerRevision)) Finish(job); }

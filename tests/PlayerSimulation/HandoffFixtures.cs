@@ -122,7 +122,8 @@ public class Character : UnityEngine.Component
     public bool IsDead() { return Dead; } public bool IsBoss() { return Boss; } public bool IsTamed() { return Tamed; } public bool InAttack() { return Attack; } public bool IsStaggering() { return Stagger; } public bool IsAttached() { return Attached; } public bool IsRiding() { return Riding; }
     public bool IsPlayer() { return this is Player; } public Faction GetFaction() { return Side; } public ZDOID GetZDOID() { return GetComponent<ZNetView>().Data.m_uid; }
 }
-public class Player : Character { public static Player m_localPlayer; }
+public class Player : Character { public static Player m_localPlayer; public static bool m_enableAutoPickup=true; public float m_autoPickupRange=2f; public bool Teleporting; public bool IsTeleporting(){return Teleporting;} }
+public class ItemDrop : UnityEngine.MonoBehaviour { public bool m_autoPickup=true, Placed; public bool IsPiece(){return Placed;} public readonly HashSet<string> Invoking=new HashSet<string>(); public bool IsInvoking(string name){return Invoking.Contains(name);} }
 public class BaseAI : UnityEngine.Component
 {
     private ZNetView m_nview; public void Init() { m_nview=GetComponent<ZNetView>(); } public bool Alerted;
@@ -160,7 +161,7 @@ public sealed class ZRoutedRpc
 }
 namespace TooManyLags.PlayerSimulation
 {
-    internal enum Kinds { None, Containers, Incinerators, TamedAnimals, Smelters, Doors, Seats, Beds, Workstations, Wards, Signs, Portals, OtherInteractables }
+    internal enum Kinds { None, Containers, Incinerators, TamedAnimals, Smelters, Doors, Seats, Beds, Workstations, Wards, Signs, Portals, OtherInteractables, LooseItems }
     internal static class Plugin { internal const string Id="botanic.toomanylags.standalone";internal static LocalAgent Local; internal static Network Network=new Network(); internal static AuthorityController Controller; internal static readonly Settings Options=new Settings();internal static bool ServerMode=true; internal static int Activations; internal static void Activate() { Activations++; if(Local==null)Local=new LocalAgent(); } internal static void Deactivate() { Local=null; } internal static void Warn(string m) { } }
     internal sealed class Settings { internal float PingInterval=2;internal bool Mobs=true; }
 #if !NETWORK_AUDIT
@@ -179,6 +180,7 @@ namespace TooManyLags.PlayerSimulation
     internal sealed class AuthorityController
     {
         internal bool Active=true; internal long DesiredOwner=22; internal readonly Handoffs Handoffs; internal int Wakes, Rejections;
+        internal int PickupBlocks; internal void PickupBlocked(ZDOID id) { PickupBlocks++; }
         internal readonly MobSink Mobs=new MobSink();internal bool Shared(long uid) { return true; }
         internal bool MobPair=true;internal bool WatchMobs(long uid) { return MobPair; }
         internal AuthorityController() { Handoffs=new Handoffs(this); }

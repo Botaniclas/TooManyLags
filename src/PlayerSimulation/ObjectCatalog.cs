@@ -13,7 +13,7 @@ namespace TooManyLags.PlayerSimulation
         Containers = 8192, ItemStands = 16384, Signs = 32768, Portals = 65536,
         Fermenters = 131072, Incinerators = 262144, Defenses = 524288,
         ShieldGenerators = 1048576, Pickables = 2097152, Offerings = 4194304,
-        Vehicles = 8388608, OtherInteractables = 16777216
+        Vehicles = 8388608, OtherInteractables = 16777216, LooseItems = 134217728
     }
 
     internal sealed class ObjectCatalog
@@ -85,10 +85,7 @@ namespace TooManyLags.PlayerSimulation
         {
             ZNetView view = root.GetComponent<ZNetView>();
             if (!view || !view.m_persistent || view.m_distant) return Kinds.None;
-            // Loose drops must obtain requester ownership to finish native
-            // PickupUpdate/EatUpdate. They are not stationary field resources.
-            // Leave that ownership and its retries entirely to vanilla.
-            if (root.GetComponent<ItemDrop>()) return Kinds.None;
+            if (root.GetComponent<ItemDrop>()) return Kinds.LooseItems;
             Character actor = root.GetComponent<Character>();
             if (actor)
                 // Candidate only. The actual instance's s_tamed flag is checked
@@ -156,6 +153,7 @@ namespace TooManyLags.PlayerSimulation
             Add(result, Kinds.Defenses, "RPC_RequestStateChange", "RPC_AddAmmo", "RPC_SetTarget");
             Add(result, Kinds.ShieldGenerators, "RPC_AddFuel", "RPC_SetFuel", "RPC_Attack", "RPC_HitNow");
             Add(result, Kinds.Pickables, "RPC_Pick", "Pick", "RPC_RequestOwn", "RPC_TryEat");
+            Add(result, Kinds.LooseItems, "RPC_RequestOwn");
             Add(result, Kinds.Offerings, "RPC_SpawnBoss");
             Add(result, Kinds.Vehicles, "RequestControl", "ReleaseControl", "Controls", "RPC_RequestOwn", "RPC_RequestOpen", "RPC_RequestStack", "RPC_RequestTakeAll");
             Add(result, Kinds.TamedAnimals, "Command", "SetName", "AddSaddle", "RequestControl", "ReleaseControl", "RemoveSaddle", "Controls",

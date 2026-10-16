@@ -178,7 +178,7 @@ public class Character : UnityEngine.MonoBehaviour
     public virtual bool IsAttached(){return Attached;}
     public virtual bool IsRiding(){return Riding;}
 }
-public sealed class Player : Character { public static Player m_localPlayer; }
+public sealed class Player : Character { public static Player m_localPlayer; public static bool m_enableAutoPickup=true; public float m_autoPickupRange=2f; public bool Teleporting; public bool IsTeleporting(){return Teleporting;} }
 public sealed class GameCamera : UnityEngine.MonoBehaviour
 {
     public static GameCamera instance; public static bool FreeFly;

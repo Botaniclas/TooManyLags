@@ -130,7 +130,14 @@ internal static class HandoffRuntimeTests
         controller.Handoffs.Tick(0);Check(controller.Handoffs.Request(deferred.Data,34,Kinds.Doors,ZDOID.None),"Deferred native work can start as soon as capacity is released");controller.Handoffs.Tick(.1f);Check(deferred.Data.Owner==34,"Dense native batch completes its deferred transfer");
     }
     public static void Main()
-    { try { TextEditingSource();InventoryProtection();RefillAndUse();ReceiptAndRouter();MobAndUnload();OptionalClients();Console.WriteLine("PASS: "+checks+" production handoff/runtime assertions: inventory opening race, refill leases, active use, text editing, cancel/replay, receiver activation, optional-client native fallback, routed payloads and cache expiry."); } catch(Exception error) { Console.Error.WriteLine(error);Environment.ExitCode=1; } }
+    { try { LooseItemSource();TextEditingSource();InventoryProtection();RefillAndUse();ReceiptAndRouter();MobAndUnload();OptionalClients();Console.WriteLine("PASS: "+checks+" production handoff/runtime assertions: inventory opening race, refill leases, active use, text editing, cancel/replay, receiver activation, optional-client native fallback, routed payloads and cache expiry."); } catch(Exception error) { Console.Error.WriteLine(error);Environment.ExitCode=1; } }
+    private static void LooseItemSource()
+    {
+        Reset();var view=Object(Kinds.LooseItems);var drop=view.gameObject.Add<ItemDrop>();drop.Invoking.Add("PickupUpdate");
+        Commit(Plugin.Local,view.Data,Kinds.LooseItems,++token);Check(Result()==4&&view.Data.Owner==11,"Native item pickup veto discards automatic transfer");
+        drop.Invoking.Clear();Time.unscaledTime=100;Plugin.Local.Tick(100);Check(view.Data.Owner==11,"Pickup completion does not replay rejected transfer");
+        Commit(Plugin.Local,view.Data,Kinds.LooseItems,++token);Check(Result()==1&&view.Data.Owner==22,"Fresh idle loose item transaction uses ordinary handoff");
+    }
     private static void TextEditingSource()
     {
         Reset(); var view=Object(Kinds.Signs); var data=view.Data;

@@ -5,7 +5,7 @@ $authorityConfigRelease=Join-Path $PSScriptRoot 'release-config\BepInEx\config'
 $authorityDll=Join-Path $PSScriptRoot 'bin\TooManyLags.dll'
 $authorityVerification=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Raw | ConvertFrom-Json
 $authorityManifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'manifest.json') -Raw | ConvertFrom-Json
-$authorityVersion='1.0.46'
+$authorityVersion='1.0.47'
 $authorityStem='TooManyLags-FGNAddon-'+$authorityVersion
 $authorityHash=(Get-FileHash -LiteralPath $authorityDll -Algorithm SHA256).Hash
 if($authorityVerification.version -ne $authorityVersion -or $authorityVerification.dllSha256 -ne $authorityHash){throw 'DLL differs from verified build.'}
@@ -26,6 +26,7 @@ $authoritySources+=Join-Path $PSScriptRoot 'test-pup-compatibility.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'audit-pup-native.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-config-console.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-text-editing.ps1'
+$authoritySources+=Join-Path $PSScriptRoot 'test-loose-items.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-config-layout.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-camera-recovery.ps1'
 $authoritySources+=Join-Path $PSScriptRoot 'test-recipient-scope.ps1'

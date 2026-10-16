@@ -38,6 +38,12 @@ namespace TooManyLags.PlayerSimulation
             node.TextOwner = 0; node.TextHeld = TextEditLocked != null && TextEditLocked(data);
             Handoffs.Cancel(data.m_uid); index.Dismiss(node);
             if (!node.TextHeld && !interest.Contains(node.Sector)) { Remove(node); return; }
+            WaitForCoverage(node);
+        }
+        internal void PickupBlocked(ZDOID id)
+        { Node node; if (nodes.TryGetValue(id, out node) && node.Kind == Kinds.LooseItems) { index.Dismiss(node); WaitForCoverage(node); } }
+        private void WaitForCoverage(Node node)
+        {
             if (node.TextWait) return;
             node.TextWait = true; node.TextCell = node.Cell; HashSet<Node> waiting;
             if (!textWaiting.TryGetValue(node.Cell, out waiting)) { waiting = new HashSet<Node>(); textWaiting.Add(node.Cell, waiting); }
@@ -182,7 +188,7 @@ namespace TooManyLags.PlayerSimulation
             }
             if (!ReferenceEquals(node.Data, data) || node.Kind != kind) { Remove(node); Changed(data); return; }
             if (!node.Sector.Equals(sector)) { RemoveSector(node); node.Sector = sector; AddSector(node); }
-            if (!node.Cell.Equals(cell)) index.Move(node, cell, Time.unscaledTime);
+            if (!node.Cell.Equals(cell)) { ForgetTextWait(node); index.Move(node, cell, Time.unscaledTime); }
             long owner = data.GetOwner(); ushort revision = data.OwnerRevision;
             if (owner != node.SeenOwner || revision != node.SeenRevision)
             { if (node.TextHeld && TextEditOwnerObserved != null) TextEditOwnerObserved(data); node.SeenOwner = owner; node.SeenRevision = revision; index.Received(node, Time.unscaledTime); }
@@ -249,6 +255,7 @@ namespace TooManyLags.PlayerSimulation
                 if (Data.GetLong(ZDOVars.s_user, 0) != 0 || Data.GetBool(ZDOVars.s_attachJointHash) ||
                     (Kind == Kinds.TamedAnimals && (!Data.GetBool(ZDOVars.s_tamed) || !String.IsNullOrEmpty(Data.GetString(ZDOVars.s_follow))))) return ApplyResult.Done;
                 if ((!Plugin.Network.Capable(Data.GetOwner()) || !Plugin.Network.Capable(target)) && !owner.NativeTransferSafe(Data)) return ApplyResult.Done;
+                if (Kind == Kinds.LooseItems && (!Plugin.Network.SupportsLooseItems(Data.GetOwner()) || !Plugin.Network.SupportsLooseItems(target))) return ApplyResult.Done;
                 // Queue/transport saturation is temporary. Preserve the node's
                 // pending job until the requested handoff can actually start.
                 owner.Handoffs.Request(Data, target, Kind, ZDOID.None); return ApplyResult.Pending;

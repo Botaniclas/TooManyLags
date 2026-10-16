@@ -14,7 +14,9 @@ foreach($suite in @('GridTests','DirectionalGridTests','FieldCacheTests','Region
     if($LASTEXITCODE -ne 0){throw ('Player-simulation policy test failed: '+$suite)}
 }
 foreach($suite in @('HandoffRuntimeTests','NetworkModeTests')) {
+    $itemSources=@('src/LooseItemGuard.cs','src/FieldReader.cs') | ForEach-Object {Join-Path $PSScriptRoot $_}
     $sources=@('src/PlayerSimulation/LocalAgent.cs','src/PlayerSimulation/Handoffs.cs','src/PlayerSimulation/NativeOwnership.cs','src/PlayerSimulation/HandoffTransaction.cs','src/PlayerSimulation/RequestRouter.cs','src/PlayerSimulation/FieldReader.cs','src/PlayerSimulation/FriendlyCreatures.cs','tests/PlayerSimulation/HandoffFixtures.cs',('tests/PlayerSimulation/'+$suite+'.cs')) | ForEach-Object { Join-Path $PSScriptRoot $_ }
+    $sources += $itemSources
     $define='/define:HANDOFF_AUDIT'
     if($suite -eq 'NetworkModeTests') {
         $define='/define:NETWORK_AUDIT'

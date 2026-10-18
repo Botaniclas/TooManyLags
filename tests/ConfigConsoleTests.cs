@@ -71,7 +71,7 @@ namespace TooManyLags
         internal static string ConfigCommand(string text, bool server) { Calls++; Server = server; return "reply"; }
         internal static string OwnerStatus(long peer, string filter = null) { OwnerCalls++; OwnerPeer=peer; OwnerFilter=filter; return "SERVER owner status"; }
         internal static int SessionFlags() { return 3; }
-        internal static void ApplyServerSession(bool enabled, bool mobs) { }
+        internal static void ApplyServerSession(bool enabled, bool mobs, bool automaticFgn = true) { }
         internal static void ClearClientSession() { }
         internal static void Report(string message) { }
     }
@@ -133,6 +133,7 @@ internal static class ConfigConsoleTests
         ConfigEntry<string> shape = config.Bind("04", "GridCoveragePattern", "Rounded7x7", new ConfigDescription("Server only; restart required", new AcceptableValueList<string>("Rounded5x5", "Square3x3", "Rounded7x7")));
         ConfigEntry<bool> ai = config.Bind("09", "EnableAIOwnership", true, "Server only; restart required");
         ConfigEntry<bool> enabled = config.Bind("01", "Enabled", true, "Server only; restart required");
+        ConfigEntry<bool> automaticFgn = config.Bind("00", "AutoConfigureFiresGhettoNetworking", true, "Server only; restart required");
         ConfigEntry<bool> doors = config.Bind("07", "Doors", true, "Server only; restart required");
         ConfigEntry<bool> keep = config.Bind("01", "KeepOwnershipOnCellExit", true, "Server only; restart required");
         ConfigEntry<bool> staticDefault = config.Bind("00 - Static", "ServerOwnedStaticBuildingsByDefault", false, "Server only; restart required");
@@ -151,6 +152,11 @@ internal static class ConfigConsoleTests
             "PUP compatibility appears only in local configuration");
         Check(commands.Execute("EnablePupCompatibility true", false).Contains("no restart pending") && pupCompatibility.Value && applies == 0,
             "restoring the local guard switch clears the pending restart without runtime work");
+        Check(commands.Execute("AutoConfigureFiresGhettoNetworking false", true).Contains("restart") && !automaticFgn.Value && applies == 0,
+            "automatic FGN setup changes only after server restart");
+        Check(commands.Execute("AutoConfigureFiresGhettoNetworking false", false).Contains("Wrong setting scope"), "clients cannot override automatic FGN setup");
+        Check(commands.Execute("AutoConfigureFiresGhettoNetworking true", true).Contains("no restart pending") && automaticFgn.Value && applies == 0,
+            "restoring automatic setup clears the pending restart without repatching FGN");
         Check(commands.Execute("outertransitiondelayseconds 0,2", true).Contains("applied") && outer.Value == .2f && changed == outer.Definition.Key && applies == 1, "canonical key, invariant/comma input and runtime callback");
         ConfigFile saved = new ConfigFile(path, false);
         Check(saved.Bind("05", outer.Definition.Key, 9f, "").Value == .2f, "persists to config file");

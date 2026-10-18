@@ -184,6 +184,7 @@ public class ZRpc
     public void ReceiveAttackReady(ZDOID id,long revision){((Action<ZRpc,ZDOID,long>)handlers["TooManyLags_AI_AttackReady"])(this,id,revision);}
     public void ReceiveCommit(ZDOID id,long token,ZPackage payload){((Action<ZRpc,ZDOID,long,ZPackage>)handlers["TooManyLags_AI_Commit"])(this,id,token,payload.Rewind());}
     public void ReceiveCommitResult(ZDOID id,long token,ZPackage payload){((Action<ZRpc,ZDOID,long,ZPackage>)handlers["TooManyLags_AI_CommitResult"])(this,id,token,payload.Rewind());}
+    public bool HasHandler(string name){return handlers.ContainsKey(name);}
     public void ReceiveStatus(ZDOID id,int ticket){((Action<ZRpc,ZDOID,int>)handlers["TooManyLags_AI_Status"])(this,id,ticket);}
     public void ReceiveStatusReply(int ticket,string line){((Action<ZRpc,int,string>)handlers["TooManyLags_AI_StatusReply"])(this,ticket,line);}
     public void Invoke(string name,params object[] data)

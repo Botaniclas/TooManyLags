@@ -7,11 +7,11 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.47.0")]
+[assembly: AssemblyVersion("1.0.48.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.47")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.48")]
     [BepInDependency(FgnId)]
     [BepInDependency(PupId, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("botanic.pup.patch", BepInDependency.DependencyFlags.SoftDependency)]
@@ -19,7 +19,7 @@ namespace TooManyLags
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.47", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.48", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -33,6 +33,7 @@ namespace TooManyLags
         private CameraPublisher camera;
         private PluginInfo networkPlugin;
         private bool playerSimulation;
+        private bool autoConfigureFgn;
         private bool gridProtocol;
         private bool configuredAI;
         private bool sessionStarted;
@@ -50,6 +51,8 @@ namespace TooManyLags
         {
             PrepareConfiguration();
             instance = this;
+            bool automaticFgn = Config.Bind("00 - General", "AutoConfigureFiresGhettoNetworking", true,
+                "Server only; restart required. true (default): automatically apply the required FiresGhettoNetworking session settings and start/stop its Server-Side Simulation for an easy quick start. false: no automatic setup; configure FiresGhettoNetworking on the server and clients yourself for the TML features you use. TML ownership patches and handoff safeguards remain active. Clients follow this server setting.").Value;
             bool defaultInteractives = Config.Bind("01 - Simulation Settings", "ServerOwnedInteractivesByDefault", false,
                 "Server only; restart required. Simulation settings and exit retention only distribute CPU load between server and clients. They do not affect perceived latency. true: server default for managed interactions/idle tamed animals; false: vanilla default. Requires Server-Side Simulation.").Value;
             bool buildings = Config.Bind("01 - Simulation Settings", "ServerOwnedStaticBuildingsByDefault", false,
@@ -61,7 +64,7 @@ namespace TooManyLags
                 "Server only; restart required. Enable target-based Hostile Mob ownership. Clients follow the server; their local value is ignored. Attacks block transfers until attack end.").Value;
             bool noSimulation = Config.Bind("01 - Simulation Settings", "NoServerSideSimulation", false,
                 "Server only; restart required. Recommended for dedicated servers with a weak or already overloaded CPU. true: disable FiresGhettoNetworking Server-Side Simulation and keep simulation on players; shared fields prefer the player with lower latency. Functionality is limited: no server ownership, and server-owned building/default/refill options are ignored. false: full Server-Side Simulation mode.").Value;
-            logs = Config.Bind("09 - Logs", "EnableLogs", false, "Local to this server/client. Live console: tml_config EnableLogs true/false. Enable extra diagnostic messages. Startup failures are always reported.").Value;
+            logs = Config.Bind("09 - Logs", "EnableLogs", false, "Local to this server/client. Live console: tml_config EnableLogs true/false. Enable diagnostic messages and status commands. Off skips diagnostic work; startup failures are always reported.").Value;
             Diagnostics = logs;
             bool pupCompatibilityEnabled = Config.Bind("08 - PUP FPS Compatibility", "EnablePupCompatibility", true,
                 "Local to this server/client; restart required. Built-in PUP FPS collision, building-stability and FiresGhettoNetworking handoff safeguards. Automatically inactive without the required mods or when a separate BotanicPupPatch supplies the guards. Inactive mode installs no guard hooks and does no runtime work. AI ownership remains controlled by section 03.").Value;
@@ -114,6 +117,7 @@ namespace TooManyLags
             CameraHeading.Configure(cameraOverlap, cameraPrediction);
             ConfigLayout.Finish(Config);
             // Configuration ends here.
+            autoConfigureFgn = automaticFgn;
             PluginInfo pupGuard, pupPlugin, pupNetwork;
             bool externalPupGuard = (Chainloader.PluginInfos.TryGetValue("botanic.pup.patch", out pupGuard) && pupGuard.Instance) ||
                 (Chainloader.PluginInfos.TryGetValue("niclas.pup.cartguard", out pupGuard) && pupGuard.Instance);
@@ -137,7 +141,7 @@ namespace TooManyLags
             try
             {
                 bool activated = FgnSessionSettings.Apply(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config,
-                    Application.isBatchMode, enableAI, Chainloader.PluginInfos.ContainsKey("dev.ontrigger.vpo"), playerSimulation);
+                    Application.isBatchMode, enableAI, Chainloader.PluginInfos.ContainsKey("dev.ontrigger.vpo"), playerSimulation, autoConfigureFgn);
                 if (activated) Logger.LogWarning("TooManyLags enabled FiresGhettoNetworking Server-Side Simulation for this session. This can increase server CPU usage; its saved config is unchanged.");
             }
             catch (Exception error)
@@ -227,7 +231,7 @@ namespace TooManyLags
                 if (!String.IsNullOrEmpty(FgnCombatOwnership.StartupError)) Logger.LogWarning("TooManyLags AI ownership inactive: " + FgnCombatOwnership.StartupError);
                 bool useMobs = allowed && (playerSimulation || FgnCombatOwnership.Enabled);
                 bool playerMobsReady = false;
-                if (playerSimulation && useMobs) FgnSessionSettings.CreatureBalancing(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config, false);
+                if (playerSimulation && useMobs) FgnSessionSettings.CreatureBalancing(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config, false, autoConfigureFgn);
                 try
                 {
                     PlayerSimulation.Plugin.Initialize(runtimeConfig, networkPlugin.Instance.GetType().Assembly, playerSimulation, useMobs);
@@ -236,7 +240,7 @@ namespace TooManyLags
                 catch (Exception error)
                 {
                     PlayerSimulation.Plugin.Stop();
-                    if (playerSimulation && useMobs) FgnSessionSettings.CreatureBalancing(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config, true);
+                    if (playerSimulation && useMobs) FgnSessionSettings.CreatureBalancing(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config, true, autoConfigureFgn);
                     Logger.LogWarning("Player-simulation ownership mode inactive; native ownership retained. " + error.GetBaseException());
                 }
                 if (takeover != null && (FgnCombatOwnership.Enabled || playerMobsReady))
@@ -268,15 +272,16 @@ namespace TooManyLags
         {
             if (!instance || !instance.enabledMod) return 0;
             bool mobs = FgnCombatOwnership.Enabled || (instance.playerSimulation && PlayerSimulation.Plugin.Local != null && PlayerSimulation.Plugin.Local.MobsEnabled);
-            return mobs ? 3 : 1;
+            return (mobs ? 3 : 1) | (instance.autoConfigureFgn ? 0 : 4);
         }
-        internal static void ApplyServerSession(bool enabled, bool mobs)
+        internal static void ApplyServerSession(bool enabled, bool mobs, bool automaticFgn = true)
         {
             if (!instance || Application.isBatchMode || instance.sessionStarted) return;
             instance.sessionStarted = true;
             if (!enabled) return;
+            instance.autoConfigureFgn = automaticFgn;
             Assembly fgn = instance.networkPlugin.Instance.GetType().Assembly;
-            instance.clientOverrides = FgnSessionSettings.ApplyClient(fgn, instance.networkPlugin.Instance.Config, mobs);
+            instance.clientOverrides = FgnSessionSettings.ApplyClient(fgn, instance.networkPlugin.Instance.Config, mobs, automaticFgn);
             // A disposable runtime copy changes no saved client values.
             ConfigFile runtimeConfig = new ConfigFile(instance.Config.ConfigFilePath, false) { SaveOnConfigSet = false };
             runtimeConfig.Bind("03 - AI Mob Ownership", "EnableAIOwnership", true, "").Value = mobs;
@@ -343,6 +348,7 @@ namespace TooManyLags
         }
         internal static string OwnerStatus(long peer, string prefabFilter = null)
         {
+            if (!Diagnostics) return "EnableLogs must be enabled on the server before requesting owner diagnostics.";
             string status;
             if (Controller == null) status = "SERVER owner status: object grid unavailable; check Enabled and NoServerSideSimulation.";
             else
@@ -350,7 +356,7 @@ namespace TooManyLags
                 try { status = Controller.OwnerStatus(peer, prefabFilter); }
                 catch (Exception error) { status = "SERVER owner status unavailable: " + error.GetBaseException().Message; }
             }
-            // Explicit admin diagnostics remain available with ordinary logging disabled.
+            // No diagnostic collection or formatting before the explicit log opt-in.
             if (instance) instance.Logger.LogInfo(status);
             return status;
         }
@@ -364,7 +370,15 @@ namespace TooManyLags
         {
             PlayerSimulation.Settings options = PlayerSimulation.Plugin.Options;
             if (key == "EnableLogs")
-            { logs = Diagnostics = ConfigValue<bool>("09 - Logs", key); if (options != null) options.Logs = logs; }
+            {
+                logs = Diagnostics = ConfigValue<bool>("09 - Logs", key);
+                if (options != null) options.Logs = logs;
+                if (logs)
+                {
+                    FgnCombatStatus.Register();
+                    if (ZNet.instance) foreach (ZNetPeer peer in ZNet.instance.GetPeers()) FgnCombatStatus.Connect(peer);
+                }
+            }
             else if (key == "CameraHeadingCheckIntervalSeconds")
             { ConfigConsole.BroadcastCamera(ConfigValue<float>("07 - Camera Heading", key)); }
             else if (key == "CameraDirectionOverlapDegrees" || key == "CameraRotationPredictionSeconds")

@@ -42,12 +42,20 @@ namespace TooManyLags
                 offset += size;
                 if (code == OpCodes.Ldtoken && (token & 0xff000000) == 0x02000000) pending = initialize.Module.ResolveType(token);
                 if (code != OpCodes.Call || token != patchAll.MetadataToken) continue;
-                if (pending == null || pending.Assembly != initialize.DeclaringType.Assembly || !groups.Contains(pending.Name))
+                if (pending == null || pending.Assembly != initialize.DeclaringType.Assembly || !IsSimulationGroup(pending))
                     throw new NotSupportedException("FiresGhettoNetworking's simulation patch groups changed; no hooks were removed.");
-                found.Add(pending.Name); pending = null;
+                if (groups.Contains(pending.Name)) found.Add(pending.Name);
+                pending = null;
             }
             if (!found.SetEquals(groups))
                 throw new NotSupportedException("FiresGhettoNetworking's simulation startup contract changed; no hooks were removed.");
+        }
+        private static bool IsSimulationGroup(Type type)
+        {
+            // FGN 1.5.65 adds optional simulation-only sector bookkeeping.
+            // Older installers still require exactly the original seven groups.
+            return type.Namespace == "FiresGhettoNetworkMod" &&
+                (groups.Contains(type.Name) || type.Name == "SssQuietPass");
         }
         private static int OperandSize(OperandType type, byte[] il, int offset)
         {
@@ -75,8 +83,7 @@ namespace TooManyLags
                 {
                     Type root = patch.PatchMethod.DeclaringType;
                     while (root != null && root.DeclaringType != null) root = root.DeclaringType;
-                    if (patch.owner == owner.Id && root != null && root.Assembly == assembly &&
-                        root.Namespace == "FiresGhettoNetworkMod" && groups.Contains(root.Name))
+                    if (patch.owner == owner.Id && root != null && root.Assembly == assembly && IsSimulationGroup(root))
                         removals.Add(new KeyValuePair<MethodBase, MethodInfo>(original, patch.PatchMethod));
                 }
             }

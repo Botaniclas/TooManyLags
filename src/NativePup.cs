@@ -60,7 +60,7 @@ namespace TooManyLags
         internal bool ReadyPoint(Vector3 point, float radius)
         {
             try { return ReadyPointCore(point, radius); }
-            catch (Exception error) { Plugin.Warn("PUP collision readiness pending: " + error.Message); return false; }
+            catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("PUP collision readiness pending: " + error.Message); return false; }
         }
         private bool ReadyPointCore(Vector3 point, float radius)
         {

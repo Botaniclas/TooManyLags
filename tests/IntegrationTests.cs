@@ -21,6 +21,7 @@ namespace TooManyLags
     internal static class ConfigConsole { internal static void RequestCamera() { } }
     internal static class Plugin
     {
+        internal static bool Diagnostics = false;
         internal const string Id="botanic.toomanylags.fgnaddon",FgnId="com.Fire.FiresGhettoNetworkMod";
         internal static AuthorityController Controller;
         internal static void SampleCamera() { }

@@ -40,7 +40,11 @@ internal static class ServerSessionTests
             peer.m_rpc.Pair(Rpc, 1, 1, peer.m_rpc);
             Check(Plugin.SessionEnabled && !Plugin.SessionMobs, "server enables grid with AI disabled independently");
             peer = Client(9); peer.m_rpc.Pair(Rpc, 1, 3, peer.m_rpc);
-            Check(Plugin.SessionEnabled && Plugin.SessionMobs, "new server can enable both modules after prior OFF");
+            Check(Plugin.SessionEnabled && Plugin.SessionMobs && Plugin.SessionAutoFgn, "new and legacy auto-setup server flags enable both modules after prior OFF");
+            peer = Client(12); peer.m_rpc.Pair(Rpc, 1, 7, peer.m_rpc);
+            Check(Plugin.SessionEnabled && Plugin.SessionMobs && !Plugin.SessionAutoFgn, "server disables automatic FGN setup without disabling grid or AI");
+            peer = Client(13); peer.m_rpc.Pair(Rpc, 1, 5, peer.m_rpc);
+            Check(Plugin.SessionEnabled && !Plugin.SessionMobs && !Plugin.SessionAutoFgn, "manual FGN setup also supports grid-only mode");
             int clears = Plugin.SessionClears; ServerSession.Reset();
             Check(Plugin.SessionClears == clears + 1 && !Plugin.SessionEnabled && !Plugin.SessionMobs, "shutdown removes the old runtime decision");
 
@@ -61,6 +65,8 @@ internal static class ServerSessionTests
             Check(peer.m_rpc.Sends == 1, "server rejects an unrelated request socket");
             Plugin.Flags = 0; ServerSession.Ready(peer);
             Check((int)peer.m_rpc.Values[1] == 0, "disabled server still communicates OFF at join");
+            Plugin.Flags = 7; ServerSession.Ready(peer);
+            Check((int)peer.m_rpc.Values[1] == 7, "server transmits the manual-setup bit in its startup snapshot");
             ServerSession.Reset();
             Console.WriteLine("PASS: " + checks + " server-controlled startup, authentication, retries, OFF/AI modes, idle and reconnect assertions. Simulated transport; no Unity session."); return 0;
         }

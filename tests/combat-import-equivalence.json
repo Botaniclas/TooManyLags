@@ -50,9 +50,12 @@
     {
       "file": "FgnCombatStatus.cs",
       "source_sha256": "28389E5C7B741C0B5E23A4075D02E687C38340F88CE62A4DD16EFF3C46FABF7E",
-      "import_sha256": "B5AF4CB1C9A227A75B758B43EB5D4F76039A45381CA9D841980B2102A26D2794",
-      "namespace_branding_protocol_only": true,
-      "additional_changes": null
+      "import_sha256": "3571606F6C26687EE428A4533642406CA9542DAC68C00F7AD94EB481CC5F5250",
+      "namespace_branding_protocol_only": false,
+      "previous_import_sha256": "B5AF4CB1C9A227A75B758B43EB5D4F76039A45381CA9D841980B2102A26D2794",
+      "additional_changes": [
+        "1.0.48 gates diagnostic endpoint/command setup, callbacks and status output on EnableLogs. Separating ConnectEnabled avoids compiler-hoisted closure allocation while disabled. Reviewed against tracked import: no ownership, combat, readiness or transfer logic changed."
+      ]
     },
     {
       "file": "FieldReader.cs",
@@ -74,13 +77,15 @@
     {
       "file": "NativePup.cs",
       "source_sha256": "14558BAEF190889E7C99C8443418065CE2C3D1AF8A603E76D6B16BBE647D8389",
-      "import_sha256": "D037AA7625AB1BC73F913B9C1A84041DF840289AB82F9B82A1005DF914C43108",
+      "import_sha256": "D60ED98F95ECC0354A8F9FB7BC0280F3FB33188AF34ECF4162B403CE619794CF",
+      "previous_import_sha256": "D037AA7625AB1BC73F913B9C1A84041DF840289AB82F9B82A1005DF914C43108",
       "namespace_branding_protocol_only": false,
       "additional_changes": [
         "Trimmed to readiness fields/delegates/helpers and full CellReadiness proof.",
         "Removed body/support/retention APIs, physics hooks, bounds helper and unrelated counters.",
         "Initial import: explicit null constructor means PUP absent; present adapter validated the original verified hash; present inactive PUP denied readiness.",
-        "1.0.35 removes the binary version/hash lock and validates legacy versus newer dedicated readiness through startup-only native IL inspection. Optional and absent-PUP behavior, Exact preparation, recipe/restore/transition proof and fail-closed server fallback remain; no body/support/retention hooks are imported."
+        "1.0.35 removes the binary version/hash lock and validates legacy versus newer dedicated readiness through startup-only native IL inspection. Optional and absent-PUP behavior, Exact preparation, recipe/restore/transition proof and fail-closed server fallback remain; no body/support/retention hooks are imported.",
+        "1.0.48 checks EnableLogs before formatting the readiness exception message. Reviewed against tracked import: removing only that added log guard restores identical source; failure still denies readiness."
       ]
     },
     {

@@ -36,6 +36,8 @@ White objects belong to the server; purple objects belong to the player in these
 
 Defaults should work well. Find configuration, admin commands and compatibility details in the **[Thunderstore Wiki](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_FGN_Addon/wiki)**. Gameplay settings are configured on the server.
 
+`AutoConfigureFiresGhettoNetworking=true` provides automatic quick-start setup. Set false on the server only if you will configure the required FiresGhettoNetworking settings on server and clients yourself; TML ownership patches and safeguards remain active. Restart required.
+
 ## How it works and what to expect
 
 With the default Server-Side Simulation mode, nearby objects run locally before you interact with them. Shared fields use the server, and Hostile Mobs normally follow their player target's ownership.

@@ -106,6 +106,12 @@ namespace TooManyLags.PlayerSimulation
         private readonly Func<long, float> latency; private readonly float margin; private bool ranksDirty;
         internal int Rebuilds, NeighborReads, PlayerUpdates, TimerVisits;
         internal int PolicyAllocations;
+        // Test instrumentation is compiled out of the production DLL, including argument evaluation.
+#if TML_RELEASE
+        [System.Diagnostics.Conditional("TML_TEST_METRICS")]
+#endif
+        private static void Count(ref int counter, int amount) { counter += amount; }
+
         internal AuthorityGrid(long server, float delay, GridCoveragePattern pattern = GridCoveragePattern.Square3x3,
             bool directional = false, float innerDelay = 0f, float outerDelay = 3f, bool discardVacant = false,
             bool forward = false, float forwardDelay = .2f, Func<long, float> latency = null, float margin = 30f, bool fullRear = false)
@@ -235,11 +241,11 @@ namespace TooManyLags.PlayerSimulation
         }
         private void Contribution(long uid, Cell cell, FieldTier tier, bool add, float now)
         {
-            Policy policy; NeighborReads++;
+            Policy policy; Count(ref NeighborReads, 1);
             if (!policies.TryGetValue(cell, out policy))
             {
                 if (reusable.Count != 0) policy = reusable.Pop();
-                else { policy = new Policy(); PolicyAllocations++; }
+                else { policy = new Policy(); Count(ref PolicyAllocations, 1); }
                 policies.Add(cell, policy);
             }
             policy.Count += add ? 1 : -1; policy.Uids ^= uid;
@@ -264,7 +270,7 @@ namespace TooManyLags.PlayerSimulation
         }
         private void Reclassify(long uid, Cell cell, FieldTier before, FieldTier after)
         {
-            Policy policy = policies[cell]; NeighborReads += 2;
+            Policy policy = policies[cell]; Count(ref NeighborReads, 2);
             if (before == FieldTier.Inner) policy.FastCount--;
             else if (before == FieldTier.Forward) policy.ForwardCount--;
             if (after == FieldTier.Inner) policy.FastCount++;
@@ -422,20 +428,20 @@ namespace TooManyLags.PlayerSimulation
                     state.Heading = heading;
                     state.Refreshed = true;
                     if (!exists) Contribute(peer.Uid, state, true, now);
-                    changed = true; PlayerUpdates++;
+                    changed = true; Count(ref PlayerUpdates, 1);
                 }
             }
             foreach (KeyValuePair<long, PeerState> peer in previous) if (!seen.Contains(peer.Key)) departed.Add(peer.Key);
             foreach (long uid in departed) { Contribute(uid, previous[uid], false, now); previous.Remove(uid); changed = true; }
             if (ranksDirty) { foreach (KeyValuePair<Cell, Policy> item in policies) if (item.Value.Count > 1) dirty.Add(item.Key); ranksDirty = false; }
-            if (changed) Rebuilds++; foreach (Cell cell in dirty) Evaluate(cell, now);
+            if (changed) Count(ref Rebuilds, 1); foreach (Cell cell in dirty) Evaluate(cell, now);
             if (pending.Count == 0) { nextDue = Single.PositiveInfinity; return; }
             if (now < nextDue) return;
             due.Clear(); foreach (Cell cell in pending) due.Add(cell);
             nextDue = Single.PositiveInfinity;
             foreach (Cell cell in due)
             {
-                Policy policy; TimerVisits++;
+                Policy policy; Count(ref TimerVisits, 1);
                 if (!policies.TryGetValue(cell, out policy)) continue;
                 if (now >= policy.Deadline) Commit(cell, policy);
                 else nextDue = Math.Min(nextDue, policy.Deadline);
@@ -484,6 +490,12 @@ namespace TooManyLags.PlayerSimulation
         internal Action AfterGridUpdate;
         internal int Attempts;
         internal int SkippedCells;
+        // Test instrumentation is compiled out of the production DLL, including argument evaluation.
+#if TML_RELEASE
+        [System.Diagnostics.Conditional("TML_TEST_METRICS")]
+#endif
+        private static void Count(ref int counter, int amount) { counter += amount; }
+
         internal AuthorityWorld(long server, float delay, GridCoveragePattern pattern = GridCoveragePattern.Square3x3, bool keepOnExit = true,
             bool directional = false, float innerDelay = 0f, float outerDelay = 3f, bool forward = false, float forwardDelay = .2f, Func<long, float> latency = null, float margin = 30f)
         { Grid = new AuthorityGrid(server, delay, pattern, directional, innerDelay, outerDelay, keepOnExit, forward, forwardDelay, latency, margin, !keepOnExit); this.keepOnExit = keepOnExit; this.server = server; }
@@ -542,7 +554,7 @@ namespace TooManyLags.PlayerSimulation
                 if (!buckets.TryGetValue(cell, out bucket)) continue;
                 long target = Grid.Owner(cell);
                 if (keepOnExit && Grid.IsRemembered(cell, target) && bucket.Target == target && bucket.Unconfirmed == 0)
-                { SkippedCells++; continue; }
+                { Count(ref SkippedCells, 1); continue; }
                 bucket.Target = keepOnExit && target != server ? target : 0;
                 bucket.Unconfirmed = bucket.Target == 0 ? 0 : bucket.Nodes.Count;
                 foreach (AuthorityNode node in bucket.Nodes)
@@ -559,7 +571,7 @@ namespace TooManyLags.PlayerSimulation
                 if (Grid.Accelerations.Count != 0 && Grid.Accelerations.Contains(node.Cell))
                     node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(node.Cell));
                 if (now < node.NotBefore) continue;
-                Attempts++;
+                Count(ref Attempts, 1);
                 ApplyResult result = node.Apply(Grid.Owner(node.Cell));
                 if (result != ApplyResult.Pending) pending.Remove(node);
                 if (result == ApplyResult.Dropped) node.Managed = false;

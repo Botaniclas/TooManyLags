@@ -14,6 +14,13 @@ namespace TooManyLags
         internal static void Reset() { responseTerminal = null; responseNetwork = null; responseUntil = 0; }
         internal static void Connect(ZNetPeer peer)
         {
+            if (!Plugin.Diagnostics || peer == null || peer.m_rpc == null) return;
+            ConnectEnabled(peer);
+        }
+        private static void ConnectEnabled(ZNetPeer peer)
+        {
+            // Separate method keeps compiler-generated callback closures behind
+            // the log gate; C# otherwise allocates them before an early return.
             // Idle sessions do no diagnostic work. Requests are bounded to the
             // command's six mobs; a remote peer cannot trigger an unbounded scan.
             double window = -100; int replies = 0;
@@ -21,7 +28,7 @@ namespace TooManyLags
             {
                 peer.m_rpc.Register<ZDOID, int>("TooManyLags_AI_Status", delegate(ZRpc rpc, ZDOID id, int ticket)
                 {
-                    if (!ZNet.instance || !ZNet.instance.IsDedicated() || !peer.IsReady() || ticket <= 0 || id.IsNone()) return;
+                    if (!Plugin.Diagnostics || !ZNet.instance || !ZNet.instance.IsDedicated() || !peer.IsReady() || ticket <= 0 || id.IsNone()) return;
                     double now = Time.realtimeSinceStartupAsDouble;
                     if (now - window >= 2) { window = now; replies = 0; }
                     if (replies >= 6) return;
@@ -34,7 +41,7 @@ namespace TooManyLags
                 });
                 peer.m_rpc.Register<int, string>("TooManyLags_AI_StatusReply", delegate(ZRpc rpc, int ticket, string line)
                 {
-                    if (!ZNet.instance || ZNet.instance.IsDedicated() || !peer.m_server ||
+                    if (!Plugin.Diagnostics || !ZNet.instance || ZNet.instance.IsDedicated() || !peer.m_server ||
                         !ReferenceEquals(ZNet.instance.GetServerPeer(), peer) || !ReferenceEquals(responseNetwork, ZNet.instance) ||
                         ticket != request || responseTerminal == null || Time.realtimeSinceStartupAsDouble > responseUntil) return;
                     Terminal terminal = responseTerminal.Target as Terminal;
@@ -56,13 +63,14 @@ namespace TooManyLags
         }
         internal static void Register()
         {
-            if (registered) return;
+            if (!Plugin.Diagnostics || registered) return;
             new Terminal.ConsoleCommand("toomanylags_ai_status", "Show local and dedicated-server FGN AI ownership status for up to six mobs within 30 metres. Read-only; no continuous logging.", new Terminal.ConsoleEvent(Print));
             registered = true;
         }
         private static void Print(Terminal.ConsoleEventArgs args)
         {
             if (args == null || !args.Context) return;
+            if (!Plugin.Diagnostics) { args.Context.AddString("EnableLogs must be enabled locally and on the server before requesting AI diagnostics."); return; }
             try
             {
                 foreach (string line in FgnCombatOwnership.DescribeStatus()) args.Context.AddString(line);

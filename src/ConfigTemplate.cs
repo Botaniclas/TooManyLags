@@ -8,6 +8,11 @@ namespace TooManyLags
 
 [00 - General]
 
+## Server only; restart required. true (default): automatically apply the required FiresGhettoNetworking session settings and start/stop its Server-Side Simulation for an easy quick start.
+## false: configure FiresGhettoNetworking on the server and clients yourself for the TML features you use. TML ownership patches and handoff safeguards remain active. Clients follow this server setting.
+AutoConfigureFiresGhettoNetworking = true
+
+
 ## Enable TooManyLags for this server session. Clients follow the server; their local value is ignored.
 Enabled = true
 
@@ -172,7 +177,7 @@ EnablePupCompatibility = true
 
 [09 - Logs]
 
-## Local to this server/client. Live console: tml_config EnableLogs true/false. Enable extra diagnostic messages. Startup failures are always reported.
+## Local to this server/client. Live console: tml_config EnableLogs true/false. Enable diagnostic messages and status commands. Off skips diagnostic work; startup failures are always reported.
 EnableLogs = false
 
 

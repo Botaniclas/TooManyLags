@@ -273,14 +273,14 @@ namespace TooManyLags.GridHandoffs
                             (initial == Kinds.None || InitialCommit(view, initial)))
                         {
                             try { nativeCommit(rpc, objectId, target); }
-                            catch (Exception error) { Plugin.Warn("Native grid handoff failed: " + error.GetBaseException().Message); }
+                            catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Native grid handoff failed: " + error.GetBaseException().Message); }
                         }
                     }
                 }
                 else c.Fence.Settle(commitToken);
                 Report(c, objectId, commitToken);
             }
-            catch (Exception error) { Plugin.Warn("Grid handoff packet rejected: " + error.GetBaseException().Message); }
+            catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Grid handoff packet rejected: " + error.GetBaseException().Message); }
         }
         private static void Report(Connection c, ZDOID id, long token)
         {
@@ -332,7 +332,7 @@ namespace TooManyLags.GridHandoffs
                     if (available)
                     { advertised.Remove(view); advertised.Add(view, new Advertisement { Peer = c.Peer, Id = q.Id, Token = q.Token }); }
                     try { Send(c.Peer, Message.ReadyResult, delegate(ZPackage p) { p.Write(q.Id); p.Write(q.Token); p.Write(available); p.Write(replica); }); }
-                    catch (Exception error) { Plugin.Warn("Deferred destination proof failed: " + error.GetBaseException().Message); }
+                    catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Deferred destination proof failed: " + error.GetBaseException().Message); }
                 }
             }
             finally { localWork.Clear(); }
@@ -394,7 +394,7 @@ namespace TooManyLags.GridHandoffs
             {
                 world.ForceSendZDO(owner, data.m_uid);
                 try { Send(peer, Message.Ready, delegate(ZPackage p) { p.Write(data.m_uid); p.Write(r.Probe.Token); p.Write(owner); p.Write(r.Revision); p.Write(r.MinimumState); }); }
-                catch (Exception error) { Plugin.Warn("Recipient readiness query failed: " + error.GetBaseException().Message); }
+                catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Recipient readiness query failed: " + error.GetBaseException().Message); }
             }
             return false;
         }
@@ -418,7 +418,7 @@ namespace TooManyLags.GridHandoffs
             {
                 if (!r.ReplicaPresent) ZDOMan.instance.ForceSendZDO(target, data.m_uid);
                 try { Send(peer, Message.Loaded, delegate(ZPackage p) { p.Write(data.m_uid); p.Write(r.Probe.Token); p.Write(r.Owner); p.Write(r.Revision); p.Write(r.MinimumState); p.Write(r.Position); if (r.InitialKind != Kinds.None) { p.Write(true); p.Write((int)r.InitialKind); } }); }
-                catch (Exception error) { Plugin.Warn("Destination load query failed: " + error.GetBaseException().Message); }
+                catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Destination load query failed: " + error.GetBaseException().Message); }
             }
             if (Plugin.Controller != null) Plugin.Controller.WaitForDestination(data, target, r.Probe.Next);
             return false;
@@ -497,7 +497,7 @@ namespace TooManyLags.GridHandoffs
             {
                 if (!__runOriginal) return false;
                 try { return ReceiveRequest(__0); }
-                catch (Exception error) { Plugin.Warn("Receiver handoff safeguard failed: " + error.GetBaseException().Message); return false; }
+                catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Receiver handoff safeguard failed: " + error.GetBaseException().Message); return false; }
             }
         }
         [HarmonyPatch]

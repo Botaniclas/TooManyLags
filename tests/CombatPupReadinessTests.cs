@@ -20,7 +20,7 @@ public class ZNet:UnityEngine.Object
     public static ZNet instance; public static bool IsSinglePlayer; public bool Server,Dedicated;
     public bool IsServer(){return Server;} public bool IsDedicated(){return Dedicated;}
 }
-namespace TooManyLags { internal static class Plugin { internal static int Warnings; internal static void Warn(string value){Warnings++;} } }
+namespace TooManyLags { internal static class Plugin { internal static bool Diagnostics = false; internal static int Warnings; internal static void Warn(string value){Warnings++;} } }
 
 internal class PupReadinessFixture:MonoBehaviour
 {
@@ -148,7 +148,11 @@ internal static class CombatPupReadinessTests
         modern.Recipe("a");modern.Restore(true);
         Check(!bridge.ReadyPoint(point,16)&&modern.PreparedCalls==before,"modern restore gaps still block server handoff");
         modern.Restore(false);modern.ThrowPrepared=true;int warnings=Plugin.Warnings;
-        Check(!bridge.ReadyPoint(point,16)&&Plugin.Warnings==warnings+1,"proxy-query failure denies handoff safely");
+        Plugin.Diagnostics=false;
+        Check(!bridge.ReadyPoint(point,16)&&Plugin.Warnings==warnings,"proxy-query failure still denies handoff without disabled diagnostic output");
+        Plugin.Diagnostics=true;
+        Check(!bridge.ReadyPoint(point,16)&&Plugin.Warnings==warnings+1,"enabled diagnostics report the same denied proxy query");
+        Plugin.Diagnostics=false;
         modern.ThrowPrepared=false;Check(bridge.ReadyPoint(point,16),"proxy query recovers without a permanent lock");
         modern.isActiveAndEnabled=false;before=modern.PreparedCalls;
         Check(!bridge.ReadyPoint(point,16)&&modern.PreparedCalls==before,"inactive modern PUP performs no proxy query");

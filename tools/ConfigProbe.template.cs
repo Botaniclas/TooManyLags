@@ -92,7 +92,7 @@ namespace TooManyLags
                     throw new Exception("Removed protection switch must not become an active config entry.");
             }
             finally { if (File.Exists(legacyPath)) File.Delete(legacyPath); }
-            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 54 settings in eleven ordered English feature sections; optional local PUP compatibility enabled; object categories last; legacy protection=false is ignored.");
+            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 55 settings in eleven ordered English feature sections; automatic FGN setup enabled; object categories last; legacy protection=false is ignored.");
             Console.WriteLine("PASS: movement defaults to 0.1, camera to 0.05; angular overlap defaults to 30 degrees (0-45); object categories stay last.");
             Console.WriteLine("PASS: actual BepInEx camera and server movement ranges accept 0.05 seconds and clamp to 0.05-5.");
         }
@@ -130,6 +130,7 @@ namespace TooManyLags
             if (overlap.Value != 0f) throw new Exception("Actual config rejected disabled overlap buffer.");
             overlap.Value = (float)overlap.DefaultValue;
             Dictionary<string, string> expected = new Dictionary<string, string> {
+                {"00 - General/AutoConfigureFiresGhettoNetworking", "true"},
                 {"00 - General/Enabled", "true"}, {"01 - Simulation Settings/NoServerSideSimulation", "false"}, {"09 - Logs/EnableLogs", "false"},
                 {"01 - Simulation Settings/ServerOwnedInteractivesByDefault", "false"},
                 {"01 - Simulation Settings/ServerOwnedStaticBuildingsByDefault", "false"},
@@ -156,7 +157,7 @@ namespace TooManyLags
                 "SapCollectors", "Wards", "MapTables", "Wisplights", "TamedAnimals", "Containers", "ItemStands", "Signs",
                 "Portals", "Fermenters", "Incinerators", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables", "WorldMarkers", "LooseItems"
             }) expected.Add("10 - Object Categories/" + category, "true");
-            if (config.Count != 54) throw new Exception("Expected 54 config entries; found " + config.Count + ".");
+            if (config.Count != 55) throw new Exception("Expected 55 config entries; found " + config.Count + ".");
             int categoryNotes = 0;
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> entry in config) {
                 string key = entry.Key.Section + "/" + entry.Key.Key, value = Convert.ToString(entry.Value.BoxedValue, CultureInfo.InvariantCulture), wanted;

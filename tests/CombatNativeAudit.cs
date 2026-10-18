@@ -88,10 +88,11 @@ internal static class NativeCombatAudit
         string inputHash;
         using(SHA256 sha=SHA256.Create())using(Stream stream=File.OpenRead(args[0]))
             inputHash=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","");
-        bool possessionRelease=inputHash=="C11FF8A96B1A7AE4BB76A433BC26447BD914C31797C6E1EBA557217C2FB9399D"||
+        bool possessionRelease=inputHash=="E43F8E7B7614D0C6B7C8437CD235D837851955A41ACE1238858EC5FCEF75B2CB"||
+            inputHash=="C11FF8A96B1A7AE4BB76A433BC26447BD914C31797C6E1EBA557217C2FB9399D"||
             inputHash=="41B18BF36F837620DC5A76DE3BEE0569555B699AAA10722B8D95C07A70A638B2";
         Check(possessionRelease||inputHash=="75F5446AD4E43529F57D2C56F8CE34E061A78B289AE88DE6DE6B3CE69506E292",
-            "audit input is exact original FGN1.5.36,1.5.41 or1.5.53; hash is test provenance, not runtime gating");
+            "audit input is exact original FGN1.5.36,1.5.41,1.5.53 or1.5.65; hash is test provenance, not runtime gating");
         using(AssemblyDefinition fgn=AssemblyDefinition.ReadAssembly(args[0]))
         using(AssemblyDefinition native=AssemblyDefinition.ReadAssembly(Path.Combine(args[1],"assembly_valheim.dll")))
         using(AssemblyDefinition core=AssemblyDefinition.ReadAssembly(Path.Combine(args[1],"mscorlib.dll")))

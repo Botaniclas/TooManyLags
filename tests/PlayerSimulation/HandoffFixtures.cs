@@ -163,7 +163,7 @@ namespace TooManyLags.PlayerSimulation
 {
     internal enum Kinds { None, Containers, Incinerators, TamedAnimals, Smelters, Doors, Seats, Beds, Workstations, Wards, Signs, Portals, OtherInteractables, LooseItems }
     internal static class Plugin { internal const string Id="botanic.toomanylags.standalone";internal static LocalAgent Local; internal static Network Network=new Network(); internal static AuthorityController Controller; internal static readonly Settings Options=new Settings();internal static bool ServerMode=true; internal static int Activations; internal static void Activate() { Activations++; if(Local==null)Local=new LocalAgent(); } internal static void Deactivate() { Local=null; } internal static void Warn(string m) { } }
-    internal sealed class Settings { internal float PingInterval=2;internal bool Mobs=true; }
+    internal sealed class Settings { internal bool Logs = false; internal float PingInterval=2;internal bool Mobs=true; }
 #if !NETWORK_AUDIT
     internal enum Message { Prepare, Prepared, Commit, Result, Wake, Cancel, Target, Forward, ActivationCheck, Activated }
     internal sealed class Network

@@ -17,8 +17,10 @@
     {
       "file": "NativePup.cs",
       "source_sha256": "06E5467492E1ED4DCEA73CD2FB28973159075DE0C5E3D001672EFB84930FC027",
-      "import_sha256": "B70909488FEE58C4F15030636BDE7B640569D763EFA795B7097CC1D07F89C22D",
-      "namespace_only": true
+      "import_sha256": "F208671B423A6608A3474956CE976B88D3A903C5D6992EBB06130ECC45414CD7",
+      "namespace_only": false,
+      "previous_import_sha256": "B70909488FEE58C4F15030636BDE7B640569D763EFA795B7097CC1D07F89C22D",
+      "logging_review": "Compared to tracked import: removing only the three diagnostic-message guards restores identical source. Collision/support decisions, native calls, failure returns and cache updates remain unchanged."
     },
     {
       "file": "NativeWaitPatch.cs",
@@ -29,8 +31,10 @@
     {
       "file": "Statics.cs",
       "source_sha256": "3477F9A7AE47ECFAD7D0E5AFB09FED08CEFEBCEBB9E4E9DDB21A47DCB2A33E2F",
-      "import_sha256": "1DD5CCEFA1CC228FAFC379EFD015B20AD4C1BB503A388D36F61FB97E27D6F3B9",
-      "namespace_only": true
+      "import_sha256": "FA68CDC8BF9DCD7B8F59C25EAF86CD9A44C23C0E42CCB0C256479272A166B1F2",
+      "namespace_only": false,
+      "previous_import_sha256": "1DD5CCEFA1CC228FAFC379EFD015B20AD4C1BB503A388D36F61FB97E27D6F3B9",
+      "logging_review": "Compared to tracked import: removing only the three diagnostic-message guards restores identical source. Collision/support decisions, native calls, failure returns and cache updates remain unchanged."
     },
     {
       "file": "StructuralTranspiler.cs",

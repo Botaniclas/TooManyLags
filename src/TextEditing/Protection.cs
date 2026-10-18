@@ -91,7 +91,7 @@ namespace TooManyLags.TextEditing
                 ZPackage packet = new ZPackage(); packet.Write((int)message); packet.Write(id); packet.Write(token); packet.Write(revision); packet.Write(minimumState);
                 peer.m_rpc.Invoke(Endpoint, packet); return true;
             }
-            catch (Exception error) { Plugin.Warn("Text-edit message unavailable: " + error.GetBaseException().Message); return false; }
+            catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Text-edit message unavailable: " + error.GetBaseException().Message); return false; }
         }
         private static bool Request(TextInput __instance, TextReceiver __0, string __1, int __2, bool __runOriginal)
         {
@@ -156,7 +156,7 @@ namespace TooManyLags.TextEditing
                 else if (message == Message.Grant) { entry.Granted = true; entry.Revision = revision; entry.MinimumState = minimum; }
                 else if (message == Message.Native && ReferenceEquals(entry, opening)) { RemoveLocal(entry); Open(entry); }
             }
-            catch (Exception error) { Plugin.Warn("Text-edit packet rejected: " + error.GetBaseException().Message); }
+            catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Text-edit packet rejected: " + error.GetBaseException().Message); }
         }
         private static void Begin(ZNetPeer peer, ZDOID id, long token)
         {
@@ -233,7 +233,7 @@ namespace TooManyLags.TextEditing
             if (!receiver || !entry.Input || !view || !view.IsValid() || !Identity(entry) || !ReferenceEquals(view.GetZDO(), entry.Data) ||
                 !view.gameObject.activeInHierarchy || !Here(entry) || !PrivateArea.CheckAccess(receiver.transform.position)) return false;
             try { bypass = true; entry.Input.RequestText(entry.Receiver, entry.Topic, entry.Limit); displayed = local.ContainsKey(entry.Id) ? entry : null; return true; }
-            catch (Exception error) { Plugin.Warn("Native text input failed: " + error.GetBaseException().Message); return false; }
+            catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Native text input failed: " + error.GetBaseException().Message); return false; }
             finally { bypass = false; }
         }
         private static long Target(ZDO data)

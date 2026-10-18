@@ -893,7 +893,7 @@ internal static class NativeReleaseAudit
             FieldInfo mode = fgn.GetType("FiresGhettoNetworkMod." + typeName, true).GetField(fieldName, Static);
             Check(mode != null && mode.FieldType == typeof(bool) && !mode.IsInitOnly, "Native startup-only ownership mode: " + fieldName);
         }
-        List<CodeInstruction> awake = PatchProcessor.GetOriginalInstructions(plugin.GetMethod("Awake", Instance));
+        List<CodeInstruction> awake = PatchProcessor.GetOriginalInstructions(plugin.GetMethod("AwakeCore", Instance) ?? plugin.GetMethod("Awake", Instance));
         int nativeStart = -1, nativeReady = -1;
         for (int i = 0; i < awake.Count; i++)
         {

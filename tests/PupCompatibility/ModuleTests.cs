@@ -8,6 +8,7 @@ namespace TooManyLags
 {
     internal static class Plugin
     {
+        internal static bool Diagnostics = false;
         internal static int Reports;
         internal static void Warn(string message) { }
         internal static void Report(string message) { Reports++; }

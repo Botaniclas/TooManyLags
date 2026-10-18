@@ -24,8 +24,9 @@ namespace TooManyLags
                 Fields = null;
             }
         }
-        internal static IDisposable ApplyClient(Assembly assembly, ConfigFile original, bool enableAI)
+        internal static IDisposable ApplyClient(Assembly assembly, ConfigFile original, bool enableAI, bool automatic = true)
         {
+            if (!automatic) { ValidateManual(assembly, false, enableAI, false); return null; }
             Type plugin = assembly.GetType("FiresGhettoNetworkMod.FiresGhettoNetworkMod", true);
             List<FieldInfo> fields = new List<FieldInfo>();
             fields.Add(Field(plugin, "ConfigEnableServerOwnership", typeof(ConfigEntry<bool>)));
@@ -43,8 +44,9 @@ namespace TooManyLags
             return restore;
         }
 
-        internal static bool Apply(Assembly assembly, ConfigFile original, bool dedicated, bool enableAI, bool sceneConflict, bool noSimulation = false)
+        internal static bool Apply(Assembly assembly, ConfigFile original, bool dedicated, bool enableAI, bool sceneConflict, bool noSimulation = false, bool automatic = true)
         {
+            if (!automatic) { ValidateManual(assembly, dedicated, enableAI, noSimulation); return false; }
             Type plugin = assembly.GetType("FiresGhettoNetworkMod.FiresGhettoNetworkMod", true);
             List<FieldInfo> fields = new List<FieldInfo>(5);
             List<bool> values = new List<bool>(5);
@@ -109,8 +111,35 @@ namespace TooManyLags
             return !wasActive;
         }
 
-        internal static void CreatureBalancing(Assembly assembly, ConfigFile original, bool enabled)
+        private static void ValidateManual(Assembly assembly, bool dedicated, bool enableAI, bool noSimulation)
         {
+            Type plugin = assembly.GetType("FiresGhettoNetworkMod.FiresGhettoNetworkMod", true);
+            RequireConfig(plugin, "ConfigEnableServerOwnership", false);
+            RequireConfig(plugin, "ConfigEnableServerOwnershipSelective", false);
+            Type creatures = assembly.GetType("FiresGhettoNetworkMod.CreatureOwnership", true);
+            if (enableAI) RequireConfig(creatures, "ConfigEnabled", !dedicated || !noSimulation);
+            if (!dedicated) return;
+            if (!ReadBool(assembly.GetType("FiresGhettoNetworkMod.ServerClientUtils", true), "IsDedicatedServerDetected"))
+                throw new NotSupportedException("FiresGhettoNetworking must detect a dedicated server.");
+            RequireConfig(plugin, "ConfigEnableServerAuthority", !noSimulation);
+            RequireConfig(assembly.GetType("FiresGhettoNetworkMod.StationRouter", true), "ConfigEnabled", true);
+            bool active = (bool)Field(assembly.GetType("FiresGhettoNetworkMod.ServerAuthorityPatches", true), "SimulationActive", typeof(bool)).GetValue(null);
+            if (active != !noSimulation)
+                throw new NotSupportedException("Automatic FiresGhettoNetworking setup is disabled. Configure Server-Side Simulation to match NoServerSideSimulation and restart the server.");
+            if ((bool)Field(creatures, "ServerOwnsCreatures", typeof(bool)).GetValue(null) ||
+                (bool)Field(assembly.GetType("FiresGhettoNetworkMod.HelmOwnership", true), "ServerOwnsShips", typeof(bool)).GetValue(null))
+                throw new NotSupportedException("Automatic FiresGhettoNetworking setup is disabled. Disable both FGN server ZDO ownership options and restart.");
+        }
+        private static void RequireConfig(Type type, string name, bool expected)
+        {
+            ConfigEntry<bool> entry = (ConfigEntry<bool>)Field(type, name, typeof(ConfigEntry<bool>)).GetValue(null);
+            if (entry == null || entry.Value != expected)
+                throw new NotSupportedException("Automatic FiresGhettoNetworking setup is disabled. Set FGN '" +
+                    (entry == null ? type.Name + "." + name : entry.Definition.Key) + "' to " + expected + " for this TML mode and restart.");
+        }
+        internal static void CreatureBalancing(Assembly assembly, ConfigFile original, bool enabled, bool automatic = true)
+        {
+            if (!automatic) return;
             FieldInfo field = Field(assembly.GetType("FiresGhettoNetworkMod.CreatureOwnership", true), "ConfigEnabled", typeof(ConfigEntry<bool>));
             ConfigEntry<bool> previous = (ConfigEntry<bool>)field.GetValue(null);
             ConfigFile session = new ConfigFile(original.ConfigFilePath, false) { SaveOnConfigSet = false };

@@ -105,7 +105,7 @@ public sealed class MessageHud { public enum MessageType { Center } }
 public static class PrivateArea { public static bool Allowed=true;public static bool CheckAccess(UnityEngine.Vector3 point) { return Allowed; } }
 namespace TooManyLags
 {
-    internal static class Plugin { internal const string Id="test.textediting";internal static AuthorityController Controller;internal static void Warn(string text) { } }
+    internal static class Plugin { internal static bool Diagnostics = false; internal const string Id="test.textediting";internal static AuthorityController Controller;internal static void Warn(string text) { } }
     internal sealed class CooperativeStub { internal bool Busy;internal bool Reserved(ZDO data) { return Busy; } }
     internal sealed class AuthorityController
     {
@@ -125,7 +125,7 @@ namespace TooManyLags.GridHandoffs
 }
 namespace TooManyLags.PlayerSimulation
 {
-    internal static class Plugin { internal static AuthorityController Controller;internal static Network Network; }
+    internal static class Plugin { internal static bool Diagnostics = false; internal static AuthorityController Controller;internal static Network Network; }
     internal sealed class Network { internal static bool TextEditingAvailable;internal bool SupportsTextEditing(ZNetPeer peer) { return peer!=null && peer.TextSupported; } }
     internal sealed class LocalAgent { internal static Func<ZDO,bool> TextEditBusy; }
     internal sealed class HandoffsStub { internal bool Busy;internal bool Pending(ZDOID id) { return Busy; } }

@@ -9,8 +9,20 @@ $ErrorActionPreference='Stop'
 $authorityDll=Join-Path $PSScriptRoot 'bin\TooManyLags.dll'
 $authorityVerifiedHash=(Get-FileHash -LiteralPath $authorityDll -Algorithm SHA256).Hash
 $authorityResults=@()
+$authorityDiagnostics=Join-Path $PSScriptRoot 'bin\diagnostics-audit'
+New-Item -ItemType Directory -Force -Path $authorityDiagnostics | Out-Null
+$authorityCecil=Join-Path $BepInExDirectory 'core\Mono.Cecil.dll'
+Copy-Item -LiteralPath $authorityCecil -Destination $authorityDiagnostics -Force
+$authorityDiagnosticsExe=Join-Path $authorityDiagnostics 'ReleaseDiagnosticsAudit.exe'
+& (Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe') /nologo /target:exe /optimize+ /warnaserror+ /langversion:5 ('/reference:'+$authorityCecil) ('/out:'+$authorityDiagnosticsExe) (Join-Path $PSScriptRoot 'tests\ReleaseDiagnosticsAudit.cs')
+if($LASTEXITCODE -ne 0){throw 'Release diagnostics audit compilation failed.'}
+$authorityDiagnosticsLines=@(& $authorityDiagnosticsExe $authorityDll)
+if($LASTEXITCODE -ne 0){throw 'Release diagnostics audit failed.'}
+$authorityDiagnosticsLines | ForEach-Object {Write-Output $_}
+$authorityResults += [ordered]@{test='release-diagnostics';passed=$true;output=($authorityDiagnosticsLines -join [Environment]::NewLine)}
 foreach($authorityTest in @('test-grid-size.ps1','test-config-console.ps1','test-camera-recovery.ps1','test-mob-precedence.ps1','test-fgn-settings.ps1','test-player-simulation.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-recipient-scope.ps1','test-integration.ps1','test-grid-load.ps1','test-directional.ps1','test-field-cache.ps1','test-regions.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1','test-pup-compatibility.ps1','test-text-editing.ps1','test-loose-items.ps1')){
     $authorityArguments=@{}
+    if($authorityTest -eq 'test-integration.ps1'){$authorityArguments.GridProtocol=$true}
     if($authorityTest -in @('test-mob-precedence.ps1','test-inventory.ps1','test-fgn-handoff.ps1','test-native.ps1','test-combat.ps1','test-combat-mono.ps1','test-combat-readiness.ps1','test-pup-compatibility.ps1')){$authorityArguments.ValheimDirectory=$ValheimDirectory}
     if($authorityTest -in @('test-config-console.ps1','test-camera-recovery.ps1','test-mob-precedence.ps1','test-fgn-settings.ps1','test-player-simulation.ps1','test-fgn-handoff.ps1','test-integration.ps1','test-grid-load.ps1','test-native.ps1','test-combat.ps1','test-combat-bridge.ps1','test-combat-readiness.ps1','test-pup-compatibility.ps1')){$authorityArguments.BepInExDirectory=$BepInExDirectory}
     $authorityLines=@(& (Join-Path $PSScriptRoot $authorityTest) @authorityArguments)
@@ -35,6 +47,11 @@ $authorityCombatLines=@(& $authorityCombatAudit $authorityFgnCurrent (Join-Path 
 if($LASTEXITCODE -ne 0){throw 'Managed mob readiness contracts failed with PUP FPS 1.0.36.'}
 $authorityCombatLines | ForEach-Object {Write-Output $_}
 $authorityResults += [ordered]@{test='combat-native-pup-1.0.36';passed=$true;output=($authorityCombatLines -join [Environment]::NewLine)}
+$authorityFgnLatest=Join-Path $authorityModCache 'VerdantsAscent-FiresGhettoNetworking\1.5.65\plugins\FiresGhettoNetworking\VAGhettoNetworking.dll'
+$authorityCombatLines=@(& $authorityCombatAudit $authorityFgnLatest (Join-Path $ValheimDirectory 'valheim_Data\Managed') $authorityDll $authorityPupCurrent)
+if($LASTEXITCODE -ne 0){throw 'Managed mob contracts failed with FGN 1.5.65.'}
+$authorityCombatLines | ForEach-Object {Write-Output $_}
+$authorityResults += [ordered]@{test='combat-native-fgn-1.5.65';passed=$true;output=($authorityCombatLines -join [Environment]::NewLine)}
 if((Get-FileHash -LiteralPath $authorityDll -Algorithm SHA256).Hash -ne $authorityVerifiedHash){throw 'DLL changed during validation.'}
 $authorityNative=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'bin\native-audit\verification.json') -Raw | ConvertFrom-Json
 if($authorityNative.authority_sha256 -ne $authorityVerifiedHash -or $authorityNative.production_changed_during_audit){throw 'Native audit does not match final build.'}
@@ -64,7 +81,7 @@ if(Test-Path -LiteralPath $authorityRegionBenchmarkPath){
     }
 }
 [ordered]@{
-    version='1.0.47';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
+    version='1.0.48';dllSha256=$authorityVerifiedHash;validatedAt=(Get-Date).ToString('o');tests=$authorityResults;native=$authorityNative
     pupCompatibility=(Get-Content -LiteralPath (Join-Path $PSScriptRoot 'bin/pup-compatibility-tests/native-verification.json') -Raw | ConvertFrom-Json)
     benchmark=$authorityBenchmark;regionBenchmark=$authorityRegionBenchmark;import=$authorityImport;artifactHashes=$authorityHashes;liveMultiplayerTested=$false
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Encoding UTF8

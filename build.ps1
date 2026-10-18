@@ -13,7 +13,7 @@ $references = @('mscorlib.dll', 'System.dll', 'System.Core.dll', 'netstandard.dl
 $references += Join-Path $BepInExDirectory 'core\BepInEx.dll'
 $references += Join-Path $BepInExDirectory 'core\0Harmony.dll'
 foreach ($path in @($compiler) + $references) { if (!(Test-Path -LiteralPath $path)) { throw "Missing build input: $path" } }
-$arguments = @('/nologo', '/noconfig', '/nostdlib+', '/target:library', '/optimize+', '/warnaserror+', '/langversion:5',
+$arguments = @('/nologo', '/noconfig', '/nostdlib+', '/target:library', '/optimize+', '/warnaserror+', '/langversion:5', '/define:TML_RELEASE',
     ('/out:' + (Join-Path $output 'TooManyLags.dll')))
 $arguments += $references | ForEach-Object { '/reference:' + $_ }
 $arguments += Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' -Recurse | Select-Object -ExpandProperty FullName

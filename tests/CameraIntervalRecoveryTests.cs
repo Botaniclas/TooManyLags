@@ -57,10 +57,10 @@ namespace TooManyLags
         internal static string ConfigCommand(string text, bool server) { return "fixture"; }
         internal static string OwnerStatus(long peer, string filter = null) { return "fixture"; }
         internal static int Flags = 3, SessionApplies, SessionClears, SessionReports;
-        internal static bool SessionEnabled, SessionMobs;
+        internal static bool SessionEnabled, SessionMobs, SessionAutoFgn;
         internal static bool SessionFail = false;
         internal static int SessionFlags() { return Flags; }
-        internal static void ApplyServerSession(bool enabled, bool mobs) { SessionApplies++; SessionEnabled = enabled; SessionMobs = mobs; if (SessionFail) throw new Exception("startup fixture"); }
+        internal static void ApplyServerSession(bool enabled, bool mobs, bool automaticFgn = true) { SessionApplies++; SessionEnabled = enabled; SessionMobs = mobs; SessionAutoFgn = automaticFgn; if (SessionFail) throw new Exception("startup fixture"); }
         internal static void ClearClientSession() { SessionClears++; SessionEnabled = SessionMobs = false; }
         internal static void Report(string message) { SessionReports++; }
     }

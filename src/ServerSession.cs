@@ -31,12 +31,12 @@ namespace TooManyLags
                     Send(peer); return;
                 }
                 if (!peer.m_server || !ReferenceEquals(net.GetServerPeer(), peer) ||
-                    (flags != 0 && flags != 1 && flags != 3)) return;
+                    (flags != 0 && flags != 1 && flags != 3 && flags != 5 && flags != 7)) return;
                 bool same = ReferenceEquals(current, net) && ReferenceEquals(source, peer) && ReferenceEquals(socket, rpc);
                 if (same && known) return; // Restart settings never change mid-session.
                 if (!same) Reset();
                 current = net; source = peer; socket = rpc; known = true;
-                try { Plugin.ApplyServerSession((flags & 1) != 0, (flags & 2) != 0); }
+                try { Plugin.ApplyServerSession((flags & 1) != 0, (flags & 2) != 0, (flags & 4) == 0); }
                 catch (Exception error)
                 { Plugin.ClearClientSession(); Plugin.Report("Server-controlled startup failed; native ownership retained. " + error.GetBaseException().Message); }
             });

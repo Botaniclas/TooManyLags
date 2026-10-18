@@ -2,9 +2,24 @@
 
 ## FiresGhettoNetworking and simulation mode
 
-TooManyLags applies required FiresGhettoNetworking settings at startup, including enabling **Server-Side Simulation** on the dedicated server by default. Their saved config values are ignored while TooManyLags is enabled; the config file stays unchanged. Other FiresGhettoNetworking settings and incompatible-mod safety blocks remain active.
+With `AutoConfigureFiresGhettoNetworking=true` (default), TooManyLags applies required FiresGhettoNetworking settings at startup, including enabling **Server-Side Simulation** on the dedicated server by default. Their saved config values are ignored for that session; the config file stays unchanged. Other FiresGhettoNetworking settings and incompatible-mod safety blocks remain active.
 
 **Quick start:** Install both mods on the dedicated server and every client, then play. FiresGhettoNetworking's default settings and Auto-Tune, combined with TooManyLags' defaults and required overrides, are intended to provide an optimal starting setup for almost all dedicated servers without manual configuration. You can still fine-tune all other FiresGhettoNetworking settings yourself; its config is worth a look.
+
+### Optional manual FiresGhettoNetworking setup
+
+**`AutoConfigureFiresGhettoNetworking = true`** is the first setting. Leave it enabled for quick-start setup. Set it to **false on the server** to keep your own FiresGhettoNetworking settings: TooManyLags will neither replace those settings nor start or remove its Server-Side Simulation hooks. TML's ownership patches and handoff safeguards remain active. Restart the server and reconnect with updated clients; they follow the server's choice.
+
+With automatic setup disabled, configure FiresGhettoNetworking yourself:
+
+| FiresGhettoNetworking setting | Required value |
+|---|---|
+| Both **Server ZDO Ownership Transfer** options | **false** on server and clients. |
+| **Enable Server-Side Simulation** | On the server: **true** for normal mode; **false** with `NoServerSideSimulation=true`. Restart after changing it. |
+| **Fix Lost Station Inserts** | **true** on the server. |
+| **Balance Creature Ownership**, when `EnableAIOwnership=true` | **true** on clients and on a normal-mode server; **false** on the server with `NoServerSideSimulation=true`, where TML provides the player-only policy. |
+
+Incompatible settings are reported at startup without being changed. Server-owned defaults and shared server ownership require working Server-Side Simulation; merely selecting those TML options cannot enable it in manual mode.
 
 **Server-Side Simulation adds CPU workload to the server.** For a weak or already overloaded server CPU, set `NoServerSideSimulation=true`. Objects and Hostile Mobs then stay player-owned; shared fields prefer the better-connected player. Server-owned buildings, default ownership and permanent station ownership are unavailable. Inventory, refilling and active-use safeguards remain; all clients need the mod for full handoffs. Shared interactions can still depend on the selected player's latency.
 
@@ -136,6 +151,8 @@ tml_config OuterTransitionDelaySeconds 2
 Use `tml_config <Key>` to read a setting and `tml_config <Key> <Value>` to save it. Check intervals, camera overlap/prediction, transition delays, overlap cooldown and mob fallback ping/radius apply live. Other settings require a **server restart**; the reply confirms this and shows pending values. Manual config-file edits require a restart. Clients receive server settings when connecting; live camera changes are sent automatically. `EnableLogs` affects only the machine where it is changed.
 
 Use the optional client-side [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOwnerDebug/) overlay to see who owns objects and mobs while testing your setup. Start with a few nearby doors, chests or animals before changing several options together.
+
+**Logging:** `EnableLogs=false` is the default. Release builds omit test-only grid/region counter work; disabled diagnostics do not format optional error messages or set up AI status endpoints. To use `tml_config owner_status`, enable logging on the server first. `toomanylags_ai_status` requires logging on both the requesting client and server. Existing connections pick up live activation. Startup and feature-failure warnings remain separate from optional debugging.
 
 ## Updating from older versions
 

@@ -829,6 +829,9 @@ internal static partial class FgnCombatTests
     private static void RemoteDiagnosticTests()
     {
         Setup();Call("RemoveWatch",mob.m_uid);
+        Plugin.Diagnostics=false;Call("SessionConnection",old);
+        Assert(!old.m_rpc.HasHandler("TooManyLags_AI_Status")&&!old.m_rpc.HasHandler("TooManyLags_AI_StatusReply"),"disabled logging installs no diagnostic RPC endpoints");
+        Plugin.Diagnostics=true;
         string line=FgnCombatOwnership.DescribeServerMob(mob.m_uid);
         Assert(line.Contains("FGN candidates=3")&&line.Contains("eligible near mob=3")&&line.Contains("owner protocol=5")&&line.Contains("server watch=missing"),"server diagnostic distinguishes candidate count, owner capability and missing watch");
         Assert(line.Contains("prefab=True")&&line.Contains("type=True")&&line.Contains("scan pass="),"server diagnostic reads original FGN prefab/type filters and actual addon pass");
@@ -839,6 +842,9 @@ internal static partial class FgnCombatTests
         int writes=mob.Writes,owners=mob.OwnerWrites,sent=old.m_rpc.Sent,watchSent=old.m_rpc.WatchSent;
         Call("SessionConnection",old);for(int i=0;i<20;i++)old.m_rpc.ReceiveStatus(mob.m_uid,1);
         Assert(old.m_rpc.StatusReplies==6&&old.m_rpc.StatusLine.Contains("SERVER"),"manual remote diagnostics bounded to six replies per two seconds");
+        Plugin.Diagnostics=false;old.m_rpc.ReceiveStatus(mob.m_uid,9);
+        Assert(old.m_rpc.StatusReplies==6,"disabling live logs immediately stops existing diagnostic handlers");
+        Plugin.Diagnostics=true;
         Assert(mob.Writes==writes&&mob.OwnerWrites==owners&&old.m_rpc.Sent==sent&&old.m_rpc.WatchSent==watchSent,"server diagnostic request never changes report, watch or ownership");
         Time.realtimeSinceStartupAsDouble+=2;old.m_rpc.ReceiveStatus(mob.m_uid,2);Assert(old.m_rpc.StatusReplies==7,"rate limit renews without timer");
         int replies=old.m_rpc.StatusReplies;old.Ready=false;old.m_rpc.ReceiveStatus(mob.m_uid,3);old.Ready=true;
@@ -863,6 +869,7 @@ internal static partial class FgnCombatTests
         print.Invoke(null,new object[]{new Terminal.ConsoleEventArgs{Context=terminal}});ticket=server.m_rpc.StatusTicket;lines=terminal.Lines.Count;
         ZNet.instance=new ZNet{Dedicated=false,ServerPeer=server};server.m_rpc.ReceiveStatusReply(ticket,"old connection");
         Assert(terminal.Lines.Count==lines,"old network identity cannot deliver response into new session");
+        Plugin.Diagnostics=false;
     }
 
     private static void Client(long owner){ZNet.instance.Dedicated=false;ZDOMan.Session=owner;Set("serverConfirmed",true);}

@@ -28,6 +28,12 @@ namespace TooManyLags.PlayerSimulation
         private readonly HashSet<Cell> zones = new HashSet<Cell>();
         private bool uncertain;
         internal int Rebuilds, PairTests;
+        // Test instrumentation is compiled out of the production DLL, including argument evaluation.
+#if TML_RELEASE
+        [System.Diagnostics.Conditional("TML_TEST_METRICS")]
+#endif
+        private static void Count(ref int counter, int amount) { counter += amount; }
+
         internal int SharedPlayers { get { return shared.Count; } }
         internal HashSet<Cell> ZoneKeys { get { return zones; } }
         internal int CachedZones { get { return zones.Count; } }
@@ -40,13 +46,13 @@ namespace TooManyLags.PlayerSimulation
             bool changed = peers.Count != previous.Count;
             if (!changed) for (int i = 0; i < peers.Count; i++) if (!peers[i].Equals(previous[i])) { changed = true; break; }
             if (!changed) return false;
-            previous.Clear(); previous.AddRange(peers); shared.Clear(); zones.Clear(); uncertain = false; Rebuilds++;
+            previous.Clear(); previous.AddRange(peers); shared.Clear(); zones.Clear(); uncertain = false; Count(ref Rebuilds, 1);
             // An invalid reference cannot establish absence. Retain normal
             // grid handling until that ready connection supplies valid data.
             foreach (RegionPeer peer in peers) if (!peer.ReferenceValid) uncertain = true;
             for (int i = 0; i < peers.Count; i++) for (int j = i + 1; j < peers.Count; j++)
             {
-                PairTests++;
+                Count(ref PairTests, 1);
                 RegionPeer a = peers[i], b = peers[j];
                 if (uncertain || Near(a.Reference, b.Reference) ||
                     (a.CharacterValid && Near(a.Character, b.Reference)) ||

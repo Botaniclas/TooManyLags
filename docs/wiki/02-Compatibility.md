@@ -6,7 +6,7 @@ This page describes TooManyLags 1.0.45. Install matching TooManyLags versions on
 
 | Mod | Role | Required? |
 |---|---|---|
-| **[FiresGhettoNetworking](https://thunderstore.io/c/valheim/p/VerdantsAscent/FiresGhettoNetworking/)** | Provides the networking and simulation foundation. TooManyLags applies its required session settings automatically. Server-Side Simulation is enabled by default and can increase server CPU usage. | Required for this addon. |
+| **[FiresGhettoNetworking](https://thunderstore.io/c/valheim/p/VerdantsAscent/FiresGhettoNetworking/)** | Provides the networking and simulation foundation. TooManyLags applies required session settings automatically unless AutoConfigureFiresGhettoNetworking=false. Server-Side Simulation is enabled by default and can increase server CPU usage. | Required for this addon. |
 | **TooManyLags** | Distributes nearby object ownership through its grid and gives Hostile Mobs target-based ownership. With PUP FPS installed, it also includes the collision and building-stability safeguards previously supplied by BotanicPupPatch. | Install on server and clients. |
 | **[PUP FPS](https://thunderstore.io/c/valheim/p/PUP82/PUP_FPS/)** | Combines eligible objects into clusters and supplies their replacement colliders. It controls which objects are combined and when its collisions are prepared. | Optional. TooManyLags works without it. |
 

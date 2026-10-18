@@ -1,5 +1,12 @@
 # Changelog
 
+**1.0.48**
+```
+- Fixes startup with FiresGhettoNetworking 1.5.65 when NoServerSideSimulation=true; unrelated networking patches remain active.
+- Reduces diagnostic overhead with EnableLogs=false. Owner/AI status queries now require logging enabled; startup and feature-failure warnings remain available.
+- Adds AutoConfigureFiresGhettoNetworking (default true). Set false for manual FiresGhettoNetworking setup; TML ownership patches and handoff safeguards remain active. Update server and clients for manual mode.
+```
+
 **1.0.47**
 ```
 - Adds loose item drops to the existing ownership grid, including shared server fields. LooseItems defaults to true; set false to retain native ownership. Native pickup has priority. Update server and clients; older clients keep native item ownership.

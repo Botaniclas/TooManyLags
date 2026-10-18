@@ -96,7 +96,7 @@ internal static class ConfigLayoutTests
 #if STANDALONE
                     45
 #else
-                    54
+                    55
 #endif
                     , "Template key count changed.");
                 Check(Read(defaults, "MovementRotationCheckIntervalSeconds") == "0.1", "Fresh movement interval differs.");
@@ -107,10 +107,15 @@ internal static class ConfigLayoutTests
                 Check(Read(defaults, "OuterTransitionDelaySeconds") == "3", "Stale orphan overrode canonical value.");
 #if !STANDALONE
                 Check(Read(defaults, "ServerOwnedStaticBuildingsByDefault") == "false", "Deprecated alias overrode canonical value.");
+                Check(Read(defaults, "AutoConfigureFiresGhettoNetworking") == "true", "Fresh automatic FGN setup default differs.");
+                Entry(defaults, "AutoConfigureFiresGhettoNetworking").BoxedValue = false;
 #endif
                 Entry(defaults, "MovementRotationCheckIntervalSeconds").BoxedValue = .05f; defaults.Save();
                 var retained = new ConfigFile(fresh, false); ConfigLayout.Prepare(retained, "test"); Bind(retained, false); ConfigLayout.Finish(retained);
                 Check(Read(retained, "MovementRotationCheckIntervalSeconds") == "0.05", "Existing previous default overwritten.");
+#if !STANDALONE
+                Check(Read(retained, "AutoConfigureFiresGhettoNetworking") == "false", "Manual FGN setup was reset on reload.");
+#endif
             }
             finally
             {

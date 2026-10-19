@@ -324,7 +324,7 @@ namespace TooManyLags
                     SetDeferred(policy, true);
                 }
             }
-            if (policy.Count == 0 && policy.Owner == 0 && policies.Remove(cell) && discardVacant && reusable.Count < 1024)
+            if (policy.Count == 0 && policy.Owner == 0 && policies.Remove(cell) && reusable.Count < 1024)
             {
                 policy.Candidate = policy.Owner = policy.Uids = 0;
                 policy.Count = policy.FastCount = policy.ForwardCount = 0;
@@ -492,9 +492,12 @@ namespace TooManyLags
         private readonly List<AuthorityNode> scratch = new List<AuthorityNode>();
         private readonly bool keepOnExit;
         private readonly long server;
-        private float lastTime;
+        // Conservative earliest object deadline. A stale earlier value only
+        // permits one extra pass; new jobs/replies can never be delayed by it.
+        private float lastTime, nextWork = Single.PositiveInfinity;
         internal int Attempts;
         internal int SkippedCells;
+        internal int PendingVisits;
         // Test instrumentation is compiled out of the production DLL, including argument evaluation.
 #if TML_RELEASE
         [System.Diagnostics.Conditional("TML_TEST_METRICS")]
@@ -549,11 +552,22 @@ namespace TooManyLags
             // retry a previously refused object without replaying the old job.
             if (!node.Removed) { Invalidate(node); Queue(node, now); }
         }
+        internal void Advance(AuthorityNode node, float at)
+        {
+            if (node.Removed) return;
+            node.NotBefore = Math.Min(node.NotBefore, at);
+            if (pending.Contains(node)) nextWork = Math.Min(nextWork, node.NotBefore);
+        }
         internal void Tick(List<GridPeer> peers, float now)
         {
             if (peers.Count == 0 && !Grid.HasPeers && Grid.CachedCells == 0 && pending.Count == 0)
-            { Grid.Changes.Clear(); Grid.Accelerations.Clear(); return; }
-            if (now < lastTime) foreach (AuthorityNode node in pending) node.NotBefore = now + Grid.Wait(node.Cell);
+            { Grid.Changes.Clear(); Grid.Accelerations.Clear(); nextWork = Single.PositiveInfinity; return; }
+            if (now < lastTime)
+            {
+                nextWork = Single.PositiveInfinity;
+                foreach (AuthorityNode node in pending)
+                { node.NotBefore = now + Grid.Wait(node.Cell); nextWork = Math.Min(nextWork, node.NotBefore); }
+            }
             lastTime = now;
             Grid.Update(peers, now);
             foreach (Cell cell in Grid.Changes)
@@ -572,26 +586,38 @@ namespace TooManyLags
                 {
                     node.ConfirmedFieldOwner = 0;
                     if (!pending.Contains(node)) Queue(node, now);
-                    else if (Grid.Directional) node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(cell));
+                    else if (Grid.Directional)
+                    { node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(cell)); nextWork = Math.Min(nextWork, node.NotBefore); }
                 }
             }
+            if (pending.Count == 0) { nextWork = Single.PositiveInfinity; return; }
+            // Coverage, sparse renewals and field accelerations have already
+            // run. Only a set containing exclusively future jobs may sleep.
+            if (now < nextWork && Grid.Accelerations.Count == 0) return;
+            nextWork = Single.PositiveInfinity;
             scratch.Clear(); foreach (AuthorityNode node in pending) scratch.Add(node);
             foreach (AuthorityNode node in scratch)
             {
+                Count(ref PendingVisits, 1);
                 if (node.Removed || !pending.Contains(node)) continue;
                 if (Grid.Accelerations.Count != 0 && Grid.Accelerations.Contains(node.Cell))
                     node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(node.Cell));
-                if (now < node.NotBefore) continue;
+                if (now < node.NotBefore) { nextWork = Math.Min(nextWork, node.NotBefore); continue; }
                 Count(ref Attempts, 1);
                 ApplyResult result = node.Apply(Grid.Owner(node.Cell));
                 if (result != ApplyResult.Pending) pending.Remove(node);
                 if (result == ApplyResult.Dropped) node.Managed = false;
                 else if (result == ApplyResult.Done && keepOnExit && !node.Removed) Confirm(node);
+                // A callback may have retired this job. Keeping its earlier
+                // deadline is harmless and avoids another set lookup per retry.
+                if (result == ApplyResult.Pending)
+                    nextWork = Math.Min(nextWork, node.NotBefore);
             }
             scratch.Clear();
         }
         internal void Dismiss(AuthorityNode node) { Invalidate(node); pending.Remove(node); node.Managed = false; }
-        private void Queue(AuthorityNode node, float at) { node.NotBefore = at; pending.Add(node); }
+        private void Queue(AuthorityNode node, float at)
+        { node.NotBefore = at; pending.Add(node); nextWork = Math.Min(nextWork, at); }
         private void Invalidate(AuthorityNode node)
         {
             if (!keepOnExit) return;

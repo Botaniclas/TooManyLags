@@ -313,8 +313,12 @@ internal static class NativeReleaseAudit
                             instruction.Previous != null && instruction.Previous.OpCode == Mono.Cecil.Cil.OpCodes.Ldnull;
                         Check(!(called.DeclaringType.FullName == "System.Reflection.FieldInfo" && called.Name == "SetValue") ||
                             (type.FullName == "TooManyLags.FgnSessionSettings" && (method.Name == "Apply" || method.Name == "CreatureBalancing")) ||
-                            (type.FullName == "TooManyLags.FgnSessionSettings/ClientOverrides" && method.Name == "Dispose") || cancelOwnText,
+                            (type.FullName == "TooManyLags.FgnSessionSettings/ClientOverrides" && method.Name == "Dispose") ||
+                            (type.FullName == "TooManyLags.FgnSimulationStartup" && method.Name == "SynchronizeHooks") || cancelOwnText,
                             "Reflection writes must be confined to approved FGN startup settings or clearing this mod's queued native text receiver");
+                        if (called.DeclaringType.FullName == "TooManyLags.FgnSimulationStartup" && called.Name == "SynchronizeHooks")
+                            Check(type.FullName == "TooManyLags.FgnSessionSettings" && method.Name == "Apply",
+                                "Native simulation dispatcher reconciliation must stay inside session startup, never gameplay polling");
                     }
                     string text = instruction.Operand as string;
                     if (text != null)

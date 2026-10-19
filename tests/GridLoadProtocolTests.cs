@@ -103,11 +103,20 @@ internal static partial class IntegrationTests
             Check("changed owner revision cannot answer old proof",!GridReplyAvailable(GridClientReply(serverPeer,sent[1],true)));door.OwnerRevision=rev;
             door.SetOwnerInternal(1);
             Check("pre-owner proof requires authenticated server ownership",!GridReplyAvailable(GridClientReply(serverPeer,sent[1],true)));door.SetOwnerInternal(99);
+            // Simulate an existing residence barrier while the exact native
+            // destination proof is in flight. The actual reply must wake the
+            // scheduler as well as the controller's cadence.
+            var readinessNode=controller.RequestNode(door.m_uid,"UseDoor".GetStableHashCode());
+            var scheduling=(AuthorityWorld)typeof(AuthorityController).GetField("indexed",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(controller);
+            readinessNode.NotBefore=10f;scheduling.Received(readinessNode,.7f);Tick(.705f);
+            int waitingVisits=scheduling.PendingVisits;Tick(.706f);
+            Check("future native load job sleeps before its proof reply",scheduling.PendingVisits==waitingVisits&&door.GetOwner()==99);
             GridReceive(first,GridClientReply(serverPeer,sent[1],true));
             // The retained request wakes the next frame; it never writes inside the RPC.
             Check("proof reply alone makes no owner write",door.GetOwner()==99);
             Time.unscaledTime=.71f;controller.Poll(.71f);
             Check("valid destination world proof resumes exact static handoff",door.GetOwner()==1&&GridCacheCount()==0);
+            Check("authenticated native load reply bypasses the old object deadline",scheduling.PendingVisits==waitingVisits+1&&readinessNode.NotBefore<10f);
             int calls=sent.Count;for(int i=0;i<1000;i++)Tick(1+i*.05f);
             Check("settled object creates no repeated load queries",sent.Count==calls);
             uint minimum;Check("post-write delivery still requires new recipient revision",controller.TryRecipientState(door,1,out minimum));

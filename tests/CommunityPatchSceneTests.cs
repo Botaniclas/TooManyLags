@@ -23,6 +23,8 @@ internal static class CommunityPatchSceneTests
     {
         if (bridge != null) bridge.Dispose(); bridge = null;
         vcp.UnpatchSelf(); other.UnpatchSelf();
+        FiresGhettoNetworkMod.FiresGhettoNetworkMod.Harmony.UnpatchSelf();
+        FiresGhettoNetworkMod.FgnHooks.Reset();
         Vcp.Reset(); ZNet.instance = null; ZNetScene.instance = null;
         FiresGhettoNetworkMod.ServerClientUtils.IsDedicatedServerDetected = true;
         if (attach)
@@ -150,12 +152,16 @@ internal static class CommunityPatchSceneTests
             try { FgnSessionSettings.Apply(own, config, true, true, false); }
             catch (NotSupportedException) { rejected = true; }
             Check(rejected && FiresGhettoNetworkMod.FiresGhettoNetworkMod.Starts == 0, "real session setup rejects the original scene conflict");
+            FiresGhettoNetworkMod.FgnHooks.InstallInitial(false);
+            var zone = new ZoneSystem(); zone.Update();
+            Check(zone.Loads == 0, "initial VCP-blocked startup has no server zone dispatcher");
             bridge = CommunityPatchSceneCompatibility.Start(own, own);
             Check(FgnSessionSettings.Apply(own, config, true, true, false), "production bridge and production session setup activate simulation together");
             Check(FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive && FiresGhettoNetworkMod.ZSyncHookGate.Ready,
                 "normal native initializer and transform gate both complete after stand-down");
             Check(FiresGhettoNetworkMod.FiresGhettoNetworkMod.Starts == 1 && FiresGhettoNetworkMod.ZSyncHookGate.Calls == 1,
                 "initializer and sync gate run once");
+            zone.Update(); Check(zone.Loads == 1, "combined startup also installs missing native player-zone loading");
             var scene = new ZNetScene(); scene.CreateDestroyObjects();
             Check(scene.Simulated == 1 && scene.Created == 1 && scene.Removed == 1 && scene.Recoveries == 1,
                 "FGN simulation prefix can use native creation and retained VCP orphan recovery");
@@ -165,13 +171,56 @@ internal static class CommunityPatchSceneTests
         }
         finally { FiresGhettoNetworkMod.FiresGhettoNetworkMod.Harmony.UnpatchSelf(); if (File.Exists(path)) File.Delete(path); }
     }
+    private static void SharedSimulationDispatchers()
+    {
+        foreach (bool profile in new[] { false, true })
+        {
+            Reset(false);
+            FiresGhettoNetworkMod.FgnHooks.InstallInitial(profile);
+            var zone = new ZoneSystem(); zone.Update();
+            Check(zone.Loads == 0 && zone.Profiles == (profile ? 1 : 0), "original dispatcher preserves profiling but cannot load player areas");
+            FiresGhettoNetworkMod.FgnHooks.RecordSimulation();
+            zone.Update(); Check(zone.Loads == 0, "installing native simulation groups alone reproduces the stalled loader");
+            FgnSimulationStartup.SynchronizeHooks(own, true);
+            zone.Update(); Check(zone.Loads == 1 && zone.Profiles == (profile ? 3 : 0), "startup reconciliation restores native loading without duplicating existing profile work");
+            var body = new Ship(); body.CustomFixedUpdate();
+            var grave = new TombStone(); grave.Awake();
+            var wear = new WearNTear(); wear.UpdateSupport();
+            var rpc = new ZRoutedRpc(); rpc.RouteRPC();
+            var world = new ZDOMan(); world.RemovePeer();
+            var scene = new ZNetScene(); scene.Shutdown();
+            Check(body.Parks == 1 && body.Fixes == 1 && grave.Guards == 1 && wear.Guards == 1 && rpc.Guards == 1 && world.Cleanups == 1 && scene.Cleanups == 1,
+                "all seven simulation dispatchers activate their original branches");
+            for (int i = 0; i < 3; i++) FgnSimulationStartup.SynchronizeHooks(own, true);
+            zone.Update(); body.CustomFixedUpdate();
+            Check(zone.Loads == 2 && body.Parks == 2 && body.Fixes == 2, "repeated setup never duplicates callbacks");
+            Check(!FiresGhettoNetworkMod.FgnHooks.BroadOwnership, "native broad/selective snapshot branches stay off");
+            FgnSimulationStartup.SynchronizeHooks(own, false);
+            zone.Update(); body.CustomFixedUpdate(); grave.Awake(); wear.UpdateSupport(); rpc.RouteRPC(); world.RemovePeer(); scene.Shutdown();
+            Check(zone.Loads == 2 && body.Parks == 2 && body.Fixes == 2 && grave.Guards == 1 && wear.Guards == 1 && rpc.Guards == 1 && world.Cleanups == 1 && scene.Cleanups == 1,
+                "no-simulation mode disables only simulation branches, even while native attachment records remain");
+            Check(zone.Profiles == (profile ? 5 : 0) && world.Network == 2, "independent profiling and networking survive simulation disable");
+            FgnSimulationStartup.SynchronizeHooks(own, true); zone.Update();
+            Check(zone.Loads == 3, "a pre-world enable after disable resumes the single existing zone hook");
+        }
+        Reset(false); FiresGhettoNetworkMod.FgnHooks.RecordSimulation();
+        FiresGhettoNetworkMod.FgnHooks.InstallPartialZone();
+        bool refused = false;
+        try { FgnSimulationStartup.SynchronizeHooks(own, true); } catch (NotSupportedException) { refused = true; }
+        Check(refused && !FiresGhettoNetworkMod.FgnHooks.SimulationSnapshot, "partial shared dispatcher fails without leaving activated snapshot flags");
+        var partial = new ZoneSystem(); partial.Update(); Check(partial.Loads == 0, "partial installation does not add a second hook or start world loading");
+        Reset(false); ZNet.instance = new object(); refused = false;
+        try { FgnSimulationStartup.SynchronizeHooks(own, true); } catch (NotSupportedException) { refused = true; }
+        Check(refused, "dispatcher changes are refused after networking starts");
+        Reset(false);
+    }
     public static int Main()
     {
         // BepInEx normally establishes these paths before plugin Awake. The
         // isolated embedded-Mono host deliberately does not boot BepInEx.
         typeof(BepInEx.Paths).GetMethod("SetExecutablePath", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
             .Invoke(null, new object[] { own.Location, AppDomain.CurrentDomain.BaseDirectory, AppDomain.CurrentDomain.BaseDirectory, new string[0] });
-        try { Basic(); Rejections(); StatesAndFuturePatches(); CompleteSessionStartup(); Reset(false); Console.WriteLine("PASS: " + checks + " CommunityPatch startup/Harmony/session integration assertions; no Unity world."); return 0; }
+        try { Basic(); Rejections(); StatesAndFuturePatches(); CompleteSessionStartup(); SharedSimulationDispatchers(); Reset(false); Console.WriteLine("PASS: " + checks + " CommunityPatch startup/Harmony/session integration assertions; no Unity world."); return 0; }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
     private static class Unknown
@@ -189,26 +238,110 @@ internal sealed class TerrainComp { [MethodImpl(MethodImplOptions.NoInlining)] p
 internal sealed class ZNetScene
 {
     internal static object instance;
-    internal int Created, Removed, Recoveries, Simulated;
+    internal int Created, Removed, Recoveries, Simulated, Cleanups;
     [MethodImpl(MethodImplOptions.NoInlining)] public void CreateDestroyObjects()
     { int created = 0; CreateObjectsSorted(new List<ZDO>(), 100, ref created); RemoveObjects(new List<ZDO>(), new List<ZDO>()); }
     [MethodImpl(MethodImplOptions.NoInlining)] public void CreateObjectsSorted(List<ZDO> currentNearObjects, int maxCreatedPerFrame, ref int created) { Created++; created++; }
     [MethodImpl(MethodImplOptions.NoInlining)] public void RemoveObjects(List<ZDO> currentNearObjects, List<ZDO> currentDistantObjects) { Removed++; }
+    [MethodImpl(MethodImplOptions.NoInlining)] public void Shutdown() { }
 }
+internal sealed class ZoneSystem { internal int Loads, Profiles; [MethodImpl(MethodImplOptions.NoInlining)] public void Update() { } }
+internal sealed class ZDOMan { internal int Cleanups, Network; [MethodImpl(MethodImplOptions.NoInlining)] public void RemovePeer() { } }
+internal sealed class TombStone { internal int Guards; [MethodImpl(MethodImplOptions.NoInlining)] public void Awake() { } }
+internal sealed class ZRoutedRpc { internal int Guards; [MethodImpl(MethodImplOptions.NoInlining)] public void RouteRPC() { } }
+internal sealed class WearNTear { internal int Guards; [MethodImpl(MethodImplOptions.NoInlining)] public void UpdateSupport() { } }
+internal sealed class Ship { internal int Parks, Fixes; [MethodImpl(MethodImplOptions.NoInlining)] public void CustomFixedUpdate() { } }
 namespace FiresGhettoNetworkMod
 {
     internal static class FiresGhettoNetworkMod
     {
         public static ConfigEntry<bool> ConfigEnableServerAuthority, ConfigEnableServerOwnership, ConfigEnableServerOwnershipSelective;
         internal static int Starts;
-        internal static Harmony Harmony = new Harmony("test.fgn-simulation");
+        private static readonly Harmony harmony = new Harmony("test.fgn-simulation");
+        internal static Harmony Harmony { get { return harmony; } }
         private static void ApplyServerSideSimulationPatches()
         {
             if (ValheimCommunityPatchCompat.SchedulesSceneObjects || !ConfigEnableServerAuthority.Value || ConfigEnableServerOwnership.Value ||
                 ConfigEnableServerOwnershipSelective.Value || !StationRouter.ConfigEnabled.Value || CreatureOwnership.ServerOwnsCreatures || HelmOwnership.ServerOwnsShips)
                 throw new Exception("Native initializer received incomplete setup.");
             Starts++;
+            FgnHooks.RecordSimulation();
             Harmony.Patch(AccessTools.Method(typeof(ZNetScene), "CreateDestroyObjects"), prefix: new HarmonyMethod(typeof(ServerAuthorityPatches), "Prefix"));
+        }
+    }
+    internal static class ServerStabilityPatches { }
+    internal static class ServerShipSimulationPatches { }
+    internal static class ShipFixesGroup { }
+    internal static class FgnHooks
+    {
+        private static bool s_serverAuthority, s_stability, s_shipSim, s_shipFixes, s_ownershipV2, s_ownershipV3, profile;
+        private static readonly HashSet<Type> attached = new HashSet<Type>();
+        private static bool On(Type type) { return attached.Contains(type); }
+        internal static bool BroadOwnership { get { return s_ownershipV2 || s_ownershipV3; } }
+        internal static bool SimulationSnapshot { get { return s_serverAuthority || s_stability || s_shipSim || s_shipFixes; } }
+        internal static void Reset()
+        { attached.Clear(); s_serverAuthority = s_stability = s_shipSim = s_shipFixes = s_ownershipV2 = s_ownershipV3 = profile = false; }
+        internal static void RecordSimulation()
+        { foreach (Type type in new[] { typeof(ServerAuthorityPatches), typeof(ServerStabilityPatches), typeof(ServerShipSimulationPatches), typeof(ShipFixesGroup) }) attached.Add(type); }
+        internal static void InstallInitial(bool profiling)
+        {
+            profile = profiling;
+            foreach (Type type in typeof(FgnHooks).GetNestedTypes(BindingFlags.NonPublic)) FiresGhettoNetworkMod.Harmony.CreateClassProcessor(type).Patch();
+        }
+        internal static void InstallPartialZone()
+        { FiresGhettoNetworkMod.Harmony.Patch(AccessTools.Method(typeof(ZoneSystem), "Update"), prefix: new HarmonyMethod(typeof(ZoneSystemUpdate), "Prefix")); }
+        [HarmonyPatch]
+        private static class ZoneSystemUpdate
+        {
+            private static bool Prepare() { return s_serverAuthority || profile; }
+            [HarmonyPrefix, HarmonyPatch(typeof(ZoneSystem), "Update")]
+            private static void Prefix() { }
+            [HarmonyPostfix, HarmonyPatch(typeof(ZoneSystem), "Update")]
+            private static void Postfix(ZoneSystem __instance) { if (s_serverAuthority) __instance.Loads++; if (profile) __instance.Profiles++; }
+        }
+        [HarmonyPatch]
+        private static class ZDOManRemovePeer
+        {
+            private static bool Prepare() { return true; }
+            [HarmonyPostfix, HarmonyPatch(typeof(ZDOMan), "RemovePeer")]
+            private static void Postfix(ZDOMan __instance) { __instance.Network++; if (s_serverAuthority) __instance.Cleanups++; }
+        }
+        [HarmonyPatch]
+        private static class TombStoneAwake
+        {
+            private static bool Prepare() { return s_serverAuthority; }
+            [HarmonyPostfix, HarmonyPatch(typeof(TombStone), "Awake")]
+            private static void Postfix(TombStone __instance) { if (s_serverAuthority) __instance.Guards++; }
+        }
+        [HarmonyPatch]
+        private static class ZRoutedRpcRouteRPC
+        {
+            private static bool Prepare() { return s_stability; }
+            [HarmonyPrefix, HarmonyPatch(typeof(ZRoutedRpc), "RouteRPC")]
+            private static void Prefix(ZRoutedRpc __instance) { if (s_stability) __instance.Guards++; }
+        }
+        [HarmonyPatch]
+        private static class WearNTearUpdateSupport
+        {
+            private static bool Prepare() { return s_stability; }
+            [HarmonyPrefix, HarmonyPatch(typeof(WearNTear), "UpdateSupport")]
+            private static void Prefix(WearNTear __instance) { if (s_stability) __instance.Guards++; }
+        }
+        [HarmonyPatch]
+        private static class ShipCustomFixedUpdate
+        {
+            private static bool Prepare() { return s_shipSim || s_shipFixes; }
+            [HarmonyPrefix, HarmonyPatch(typeof(Ship), "CustomFixedUpdate")]
+            private static void Prefix(Ship __instance) { if (s_shipSim) __instance.Parks++; }
+            [HarmonyPostfix, HarmonyPatch(typeof(Ship), "CustomFixedUpdate")]
+            private static void Postfix(Ship __instance) { if (s_shipFixes) __instance.Fixes++; }
+        }
+        [HarmonyPatch]
+        private static class ZNetSceneShutdown
+        {
+            private static bool Prepare() { return s_shipSim; }
+            [HarmonyPostfix, HarmonyPatch(typeof(ZNetScene), "Shutdown")]
+            private static void Postfix(ZNetScene __instance) { if (s_shipSim) __instance.Cleanups++; }
         }
     }
     internal static class StationRouter { public static ConfigEntry<bool> ConfigEnabled; }

@@ -1,6 +1,6 @@
 # CommunityPatch scene integration
 
-Prepared for TooManyLags 1.0.49. Checked against the actual ValheimCommunityPatch 0.37.0 and FiresGhettoNetworking 1.5.65 DLLs, including the installed `Botanicserver` profile. No installed files are modified by building or testing this integration.
+Prepared for TooManyLags 1.0.50. Checked against the actual ValheimCommunityPatch 0.37.0 and FiresGhettoNetworking 1.5.65 DLLs, including the installed `Botanicserver` profile. No installed files are modified by building or testing this integration.
 
 ## Scope and startup
 
@@ -14,11 +14,13 @@ CommunityPatch keeps its now-inert Harmony methods installed. The integration th
 
 FGN's own normal simulation initializer is then invoked by the existing session setup. On backends that provide `ZSyncHookGate.Refresh`, startup also refreshes that native gate after changing simulation state, matching FGN's own `Awake` completion order. This attaches the native simulation transform-rescue hook even when transform limiting and remote-motion timestamps are both disabled; stopping an already active simulation refreshes the same gate without removing hooks needed by those other settings. The integration does not declare readiness by setting a flag, replace scene creation/removal itself, patch ownership decisions, or add interaction/collision guards.
 
+Newer FGN also snapshots installed simulation features into shared `FgnHooks` during its original startup. After a blocked start, session setup updates only the simulation branches and installs missing native shared wrappers with FGN's existing Harmony owner. This restores the original player-zone loader and the related simulation/cleanup hooks. Existing wrappers are retained without duplicate installation; shared profiling/networking branches keep their original state. The mode without Server-Side Simulation clears the simulation branches. Older backends without these shared dispatchers use their existing direct hooks.
+
 ## Failure behaviour and cost
 
 Unknown or misplaced CommunityPatch prefixes remain blocking. Any later call to FGN's detector also checks newly installed prefixes against their exact allowed targets; the bridge does not add polling for mods that change patches after startup. Missing/failed APIs, denied stand-downs, invalid states and changed bindings do not grant compatibility. All four permissions are preflighted; if a later API call nevertheless refuses, earlier successful stand-downs cannot be rolled back: CommunityPatch defines them as session-long. The normal FGN safety block remains intact in that case, and a restart restores CommunityPatch's startup configuration.
 
-The only additional installed hook is on FGN's compatibility detector, which is used at startup. There is no new frame, physics, object, region or player polling. The retained state is a fixed three-target method map and one native predicate delegate, independent of world size. Enabling FGN simulation and giving up overlapping CommunityPatch server scheduling optimisations can still change server CPU usage; this is distinct from the bridge's own startup work.
+TML's compatibility-detector hook and dispatcher reconciliation run at startup. Restored native FGN wrappers run their normal simulation work; no new TML frame, physics, object, region or player polling is added. The retained bridge state is a fixed three-target method map and one native predicate delegate, independent of world size; temporary dispatcher inspection state is not retained. Enabling FGN simulation and giving up overlapping CommunityPatch server scheduling optimisations can still change server CPU usage; this is distinct from the bridge's own startup work.
 
 ## Validation limits
 

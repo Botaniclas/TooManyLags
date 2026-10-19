@@ -76,6 +76,24 @@ internal static class CommunityPatchNativeAudit
             TypeDefinition backendPlugin = fgn.MainModule.GetType("FiresGhettoNetworkMod.FiresGhettoNetworkMod");
             Check(Calls(Method(backendPlugin, "Awake"), backendPlugin.FullName, "AwakeCore"), "native Awake invokes its startup core");
             Check(Calls(Method(backendPlugin, "AwakeCore"), sync.FullName, "Refresh"), "native startup completes simulation with sync-gate refresh");
+            TypeDefinition dispatch = fgn.MainModule.GetType("FiresGhettoNetworkMod.FgnHooks");
+            Check(dispatch != null, "new shared FGN feature dispatcher exists");
+            Signature(Method(dispatch, "On"), "System.Boolean", "System.Type");
+            Check(Calls(Method(backendPlugin, "TryPatchAll"), dispatch.FullName, "NoteAttached"), "native installer records successful feature groups");
+            string[] simulationFlags = { "s_serverAuthority", "s_stability", "s_shipSim", "s_shipFixes" };
+            foreach (string field in simulationFlags.Concat(new[] { "s_ownershipV2", "s_ownershipV3" }))
+                Check(dispatch.Fields.Any(f => f.Name == field && f.IsStatic && !f.IsInitOnly && f.FieldType.FullName == "System.Boolean"), "native simulation snapshot writable: " + field);
+            var consumers = dispatch.NestedTypes.Where(t => t.Methods.Any(m => m.HasBody && m.Body.Instructions.Any(i =>
+                i.Operand is FieldReference && ((FieldReference)i.Operand).DeclaringType.FullName == dispatch.FullName &&
+                simulationFlags.Contains(((FieldReference)i.Operand).Name)))).Select(t => t.Name).OrderBy(n => n).ToArray();
+            string[] expectedConsumers = { "ZoneSystemUpdate", "ZDOManRemovePeer", "TombStoneAwake", "ZRoutedRpcRouteRPC", "WearNTearUpdateSupport", "ShipCustomFixedUpdate", "ZNetSceneShutdown" };
+            Check(consumers.SequenceEqual(expectedConsumers.OrderBy(n => n)), "all and only seven native simulation-dependent shared hook classes are reconciled");
+            foreach (TypeDefinition type in dispatch.NestedTypes.Where(t => expectedConsumers.Contains(t.Name)))
+                Signature(Method(type, "Prepare"), "System.Boolean");
+            TypeDefinition zoneDispatch = dispatch.NestedTypes.Single(t => t.Name == "ZoneSystemUpdate");
+            Check(Calls(Method(zoneDispatch, "Postfix"), "FiresGhettoNetworkMod.ServerAuthorityPatches", "ZoneSystem_Update_Postfix"), "zone dispatcher invokes the original FGN player-area loader");
+            Check(Method(dispatch, "ReadAttachedFeatures").Body.Instructions.Any(i => i.OpCode == Mono.Cecil.Cil.OpCodes.Stsfld &&
+                i.Operand is FieldReference && ((FieldReference)i.Operand).Name == "s_serverAuthority"), "FGN originally snapshots zone-loading enablement only during its Awake tail");
             MethodDefinition simulation = Method(fgn.MainModule.GetType("FiresGhettoNetworkMod.ServerAuthorityPatches"), "CreateDestroyObjects_Prefix");
             Check(Calls(simulation, "ZNetScene", "CreateObjects") && Calls(simulation, "ZNetScene", "RemoveObjects"), "FGN supplies native create/remove lists");
             foreach (string field in new[] { "_cdoNearFiltered", "_cdoDistantFiltered" })
@@ -89,6 +107,9 @@ internal static class CommunityPatchNativeAudit
             Check(plugin.CustomAttributes.Any(a => a.AttributeType.FullName == "BepInEx.BepInDependency" && a.ConstructorArguments[0].Value.Equals("MidnightsFX.ValheimCommunityPatch")), "explicit optional startup ordering");
             Check(Calls(Method(plugin, "Awake"), bridge.FullName, "Start"), "compatibility runs during startup");
             Check(!Calls(Method(plugin, "Update"), bridge.FullName, "Start"), "normal runtime never repeats setup");
+            TypeDefinition installer = tml.MainModule.GetType("TooManyLags.FgnSimulationStartup");
+            Check(Calls(Method(tml.MainModule.GetType("TooManyLags.FgnSessionSettings"), "Apply"), installer.FullName, "SynchronizeHooks"), "production automatic session setup synchronizes shared simulation hooks");
+            Check(!installer.Methods.Any(m => m.Name == "Update" || m.Name == "FixedUpdate"), "dispatcher reconciliation adds no runtime polling");
             }
         }
         Console.WriteLine("PASS: " + checks + " actual CommunityPatch/FGN/production metadata and IL contracts; no Unity world.");

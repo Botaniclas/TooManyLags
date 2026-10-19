@@ -1,5 +1,12 @@
 # Changelog
 
+**1.0.50**
+```
+- Fixes server zones and tamed animals never loading after automatically enabling FiresGhettoNetworking simulation with ValheimCommunityPatch installed. Restores the missing native simulation hooks; update the server and restart. No client update is required for this fix.
+- Fixes cached simulation callbacks remaining active in NoServerSideSimulation mode; shared networking and profiling hooks remain unchanged.
+- Reduces grid allocations with KeepOwnershipOnCellExit=false and skips scans of future ownership jobs. Readiness replies, accelerated fields and due blocked handoffs retain their existing responsiveness in both simulation modes.
+```
+
 **1.0.49**
 ```
 - Adds server-side ValheimCommunityPatch compatibility for automatic Server-Side Simulation setup (checked with CommunityPatch 0.37.0 and FiresGhettoNetworking 1.5.65). Conflicting loading optimisations stand down while the unload crash guard keeps its setting; no client update is needed for this fix.

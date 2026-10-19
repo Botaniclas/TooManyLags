@@ -35,7 +35,7 @@ ServerOwnedInteractivesByDefault = false
 ServerOwnedStaticBuildingsByDefault = false
 
 
-## true: Include eligible static building pieces in the existing grid; requires ServerOwnedStaticBuildingsByDefault=true. Overlaps use the server; empty fields follow KeepOwnershipOnCellExit.
+## true: include eligible static building pieces in the existing grid, independently of ServerOwnedStaticBuildingsByDefault. That setting selects the default outside player fields. Overlaps use the server; empty fields follow KeepOwnershipOnCellExit. Requires Server-Side Simulation.
 UseGridForStaticBuildings = false
 
 

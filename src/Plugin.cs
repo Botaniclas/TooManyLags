@@ -7,11 +7,11 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.49.0")]
+[assembly: AssemblyVersion("1.0.50.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.49")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.50")]
     [BepInDependency(FgnId)]
     [BepInDependency(CommunityPatchSceneCompatibility.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(PupId, BepInDependency.DependencyFlags.SoftDependency)]
@@ -20,7 +20,7 @@ namespace TooManyLags
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.49", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.50", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -60,7 +60,7 @@ namespace TooManyLags
             bool buildings = Config.Bind("01 - Simulation Settings", "ServerOwnedStaticBuildingsByDefault", false,
                 "Server only; restart required. true: server default for eligible non-interactive building pieces; false: vanilla default. UseGridForStaticBuildings lets nearby clients share their simulation. Requires Server-Side Simulation.").Value;
             bool staticGrid = Config.Bind("01 - Simulation Settings", "UseGridForStaticBuildings", false,
-                "Server only; restart required. Include eligible static building pieces in the existing grid. Overlaps use the server; empty fields follow KeepOwnershipOnCellExit. PUP FPS is optional; baked clusters are excluded. Requires Server-Side Simulation.").Value;
+                "Server only; restart required. Include eligible static building pieces in the existing grid, independently of ServerOwnedStaticBuildingsByDefault. That setting selects the default outside player fields; empty fields follow KeepOwnershipOnCellExit. Overlaps use the server. PUP FPS is optional; baked clusters are excluded. Requires Server-Side Simulation.").Value;
             bool enabled = Config.Bind("00 - General", "Enabled", true, "Server only; restart required. Enable TooManyLags for this server session. Clients follow the server; their local value is ignored. Handoff safeguards are always active with Server-Side Simulation. Later sections contain tuned defaults; adjust only when needed.").Value;
             bool enableAI = Config.Bind("03 - AI Mob Ownership", "EnableAIOwnership", true,
                 "Server only; restart required. Enable target-based Hostile Mob ownership. Clients follow the server; their local value is ignored. Attacks block transfers until attack end.").Value;

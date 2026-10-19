@@ -96,5 +96,98 @@ namespace TooManyLags
             foreach (Patch p in patches.Transpilers) yield return p;
             foreach (Patch p in patches.Finalizers) yield return p;
         }
+
+        // Newer FGN snapshots installed features into shared dispatchers at the
+        // end of Awake. Starting its simulation groups later does not refresh
+        // those flags or attach dispatchers whose Prepare originally declined.
+        // Reconcile only simulation branches, once before a world is loaded.
+        internal static void SynchronizeHooks(Assembly assembly, bool enabled)
+        {
+            Type hooks = assembly.GetType("FiresGhettoNetworkMod.FgnHooks", false);
+            if (hooks == null) return; // Older FGN installs direct hooks.
+            if (!ReferenceEquals(ZNet.instance, null) || !ReferenceEquals(ZNetScene.instance, null))
+                throw new NotSupportedException("FiresGhettoNetworking's simulation hooks require a server restart.");
+            const BindingFlags flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+            MethodInfo attached = hooks.GetMethod("On", flags, null, new[] { typeof(Type) }, null);
+            if (attached == null || attached.ReturnType != typeof(bool))
+                throw new NotSupportedException("FiresGhettoNetworking's feature dispatcher contract changed.");
+            string[] names = { "s_serverAuthority", "s_stability", "s_shipSim", "s_shipFixes", "s_ownershipV2", "s_ownershipV3" };
+            string[] features = { "ServerAuthorityPatches", "ServerStabilityPatches", "ServerShipSimulationPatches", "ShipFixesGroup" };
+            var fields = new FieldInfo[names.Length];
+            var previous = new bool[names.Length];
+            var desired = new bool[names.Length];
+            for (int i = 0; i < names.Length; i++)
+            {
+                fields[i] = hooks.GetField(names[i], flags);
+                if (fields[i] == null || fields[i].FieldType != typeof(bool) || fields[i].IsInitOnly)
+                    throw new NotSupportedException("FiresGhettoNetworking's simulation dispatch field changed: " + names[i]);
+                previous[i] = (bool)fields[i].GetValue(null);
+                // TML disables both native broad/selective ownership modes.
+                desired[i] = enabled && i < features.Length && (bool)attached.Invoke(null,
+                    new object[] { assembly.GetType("FiresGhettoNetworkMod." + features[i], true) });
+            }
+            string[] dispatcherNames = { "ZoneSystemUpdate", "ZDOManRemovePeer", "TombStoneAwake", "ZRoutedRpcRouteRPC",
+                "WearNTearUpdateSupport", "ShipCustomFixedUpdate", "ZNetSceneShutdown" };
+            var dispatchers = new List<Type>();
+            var methods = new HashSet<MethodInfo>();
+            if (enabled)
+                foreach (string name in dispatcherNames)
+                {
+                    Type type = hooks.GetNestedType(name, BindingFlags.NonPublic);
+                    if (type == null) throw new NotSupportedException("FiresGhettoNetworking's simulation dispatcher changed: " + name);
+                    MethodInfo prepare = type.GetMethod("Prepare", flags, null, Type.EmptyTypes, null);
+                    if (prepare == null || prepare.ReturnType != typeof(bool))
+                        throw new NotSupportedException("FiresGhettoNetworking's dispatcher preparation changed: " + name);
+                    int count = 0;
+                    foreach (MethodInfo method in type.GetMethods(flags))
+                        if (Attribute.IsDefined(method, typeof(HarmonyPrefix)) || Attribute.IsDefined(method, typeof(HarmonyPostfix)) ||
+                            Attribute.IsDefined(method, typeof(HarmonyTranspiler)) || Attribute.IsDefined(method, typeof(HarmonyFinalizer)))
+                        { methods.Add(method); count++; }
+                    if (count == 0) throw new NotSupportedException("FiresGhettoNetworking's dispatcher patches are absent: " + name);
+                    dispatchers.Add(type);
+                }
+            var added = new List<KeyValuePair<MethodBase, MethodInfo>>();
+            Harmony owner = null;
+            try
+            {
+                for (int i = 0; i < fields.Length; i++) fields[i].SetValue(null, desired[i]);
+                if (!enabled) return; // Shared networking/profiling hooks remain installed.
+                Type plugin = assembly.GetType("FiresGhettoNetworkMod.FiresGhettoNetworkMod", true);
+                PropertyInfo property = plugin.GetProperty("Harmony", flags);
+                owner = property == null ? null : property.GetValue(null, null) as Harmony;
+                if (owner == null) throw new NotSupportedException("FiresGhettoNetworking's patch owner is unavailable.");
+                var installed = new HashSet<MethodInfo>();
+                foreach (MethodBase original in Harmony.GetAllPatchedMethods())
+                    foreach (Patch patch in All(Harmony.GetPatchInfo(original)))
+                        if (patch.owner == owner.Id && methods.Contains(patch.PatchMethod)) installed.Add(patch.PatchMethod);
+                var missing = new List<Type>();
+                foreach (Type type in dispatchers)
+                {
+                    int total = 0, present = 0;
+                    foreach (MethodInfo method in methods)
+                        if (method.DeclaringType == type) { total++; if (installed.Contains(method)) present++; }
+                    if (present == total) continue; // Never duplicate existing native wrappers.
+                    if (present != 0) throw new NotSupportedException("FiresGhettoNetworking's shared dispatcher is only partly installed: " + type.Name);
+                    if ((bool)type.GetMethod("Prepare", flags).Invoke(null, null)) missing.Add(type);
+                }
+                try
+                {
+                    foreach (Type type in missing) owner.CreateClassProcessor(type).Patch();
+                }
+                finally
+                {
+                    foreach (MethodBase original in Harmony.GetAllPatchedMethods())
+                        foreach (Patch patch in All(Harmony.GetPatchInfo(original)))
+                            if (patch.owner == owner.Id && methods.Contains(patch.PatchMethod) && !installed.Contains(patch.PatchMethod))
+                                added.Add(new KeyValuePair<MethodBase, MethodInfo>(original, patch.PatchMethod));
+                }
+            }
+            catch
+            {
+                if (owner != null) foreach (var patch in added) owner.Unpatch(patch.Key, patch.Value);
+                for (int i = 0; i < fields.Length; i++) fields[i].SetValue(null, previous[i]);
+                throw;
+            }
+        }
     }
 }

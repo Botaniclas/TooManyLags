@@ -908,7 +908,7 @@ namespace TooManyLags
                 if (!loadPending || loadTarget != target) return;
                 loadNext = 0;
                 if (Data.GetOwner() == loadOwner && Data.OwnerRevision == loadRevision && Data.GetPosition() == loadPosition &&
-                    DesiredOwner(owner.indexed.Grid.Owner(Cell)) == target) NotBefore = Math.Min(NotBefore, Time.unscaledTime);
+                    DesiredOwner(owner.indexed.Grid.Owner(Cell)) == target) owner.indexed.Advance(this, Time.unscaledTime);
             }
             internal void RejectAutomaticRequest(bool unreadyServer = false)
             { if (loadPending) CancelDestinationLoad(); Managed = false; WaitingForServer = unreadyServer; owner.WaitForFieldRequest(this); }

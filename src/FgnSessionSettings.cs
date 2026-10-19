@@ -111,6 +111,7 @@ namespace TooManyLags
             shipOwner.SetValue(null, false);
             if (noSimulation)
             {
+                FgnSimulationStartup.SynchronizeHooks(assembly, false);
                 simulation.SetValue(null, false);
                 if (wasActive && refreshSync != null) refreshSync.Invoke(null, new object[] { "TooManyLags Server-Side Simulation stopped" });
                 return false;
@@ -120,9 +121,11 @@ namespace TooManyLags
                 // Use the same initializer and completion flag as FGN's Awake.
                 // Never announce simulation readiness by changing a flag alone.
                 initialize.Invoke(null, null);
+                FgnSimulationStartup.SynchronizeHooks(assembly, true);
                 simulation.SetValue(null, true);
                 if (refreshSync != null) refreshSync.Invoke(null, new object[] { "TooManyLags Server-Side Simulation started" });
             }
+            else FgnSimulationStartup.SynchronizeHooks(assembly, true);
             return !wasActive;
         }
 

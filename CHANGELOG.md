@@ -1,8 +1,8 @@
 # Changelog
 
-**Unreleased**
+**1.0.49**
 ```
-- Allows dedicated Server-Side Simulation alongside ValheimCommunityPatch's supported fix-control API: hands four conflicting scene schedulers to FiresGhettoNetworking while preserving the object-unload crash guard. Requires automatic FiresGhettoNetworking setup; unknown scene prefixes still block simulation. Server-only integration.
+- Adds server-side ValheimCommunityPatch compatibility for automatic Server-Side Simulation setup (checked with CommunityPatch 0.37.0 and FiresGhettoNetworking 1.5.65). Conflicting loading optimisations stand down while the unload crash guard keeps its setting; no client update is needed for this fix.
 - Completes FiresGhettoNetworking's native transform-sync setup when TooManyLags starts or stops Server-Side Simulation.
 ```
 

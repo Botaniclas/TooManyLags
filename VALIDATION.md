@@ -1,4 +1,4 @@
-# TooManyLags - FiresGhettoNetworking Addon 1.0.49 candidate
+# TooManyLags - FiresGhettoNetworking Addon 1.0.49 release preparation
 
 Dedicated startup coordinates ValheimCommunityPatch through its official session API. Four competing scene performance policies stand down; the list-based object-unload crash guard retains its setting. A single startup detector transpiler distinguishes those known inert prefixes and the reviewed native-list recovery prefix on their exact targets. Unknown/misplaced prefixes and failed/denied API contracts remain blocking. Clients, manual setup and the no-simulation mode do not activate the bridge. No saved config values or ownership/interaction/collision rules are changed by the bridge.
 
@@ -7,6 +7,8 @@ The normal FGN simulation initializer remains responsible for its patches. When 
 Focused verification passes 85 production bridge/Harmony/session assertions on both .NET Framework and Valheim's embedded Mono, plus 62 actual CommunityPatch 0.37.0 / FiresGhettoNetworking 1.5.65 / production metadata and IL contracts. Legacy and modern session fixtures pass 111 and 118 assertions respectively. The combined fixture runs the real bridge and session setup together, then exercises an FGN simulation prefix with native creation and retained VCP recovery. It also verifies original safety blocking, permanent API stand-down, unknown late/misplaced hooks, API refusal and saved-config preservation. These are managed fixtures and native metadata checks, not a Unity world or live multiplayer test.
 
 All 28 full-build verification groups pass against DLL SHA256 `872F0BF2D3295D44378B8951D79CB986F3D2A604A794751556C8EBFA7F49D04D`, including the existing grid/loading, ownership, inventory, combat, camera, text, loose-item and optional PUP regressions. Full results are stored in `verification.json`. See `docs/COMMUNITYPATCH-COMPATIBILITY.md` for startup sequencing, bounded state, failure handling and live-test limits. Live multiplayer testing remains outstanding.
+
+On 2026-10-19 the user reported that the candidate appears to work. This is a limited user-reported smoke check, not an independently observed multiplayer test or a claim of exhaustive compatibility. Release preparation finalises the changelog and updates README/Wiki text only; the verified DLL is unchanged and the existing 28-group results remain tied to the same hash.
 
 ---
 

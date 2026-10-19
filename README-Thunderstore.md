@@ -18,6 +18,8 @@ Built to avoid almost all connection-related lag. TooManyLags is a multiplayer o
 
 **Server-Side Simulation is enabled by default and increases server CPU usage.** For a weak server CPU, use the mode recommended above.
 
+**ValheimCommunityPatch compatibility is built in.** With the default automatic Server-Side Simulation setup, TooManyLags coordinates conflicting loading optimisations on the dedicated server so both mods can run together. The unload crash guard keeps its setting; client-side CommunityPatch optimisations are unchanged. Requirements and supported interfaces are explained in the **[Wiki](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_FGN_Addon/wiki)**.
+
 **Optional PUP FPS support is built in.** With PUP FPS installed, TooManyLags includes BotanicPupPatch's collision and building-stability guards. Set `EnablePupCompatibility=false` locally and restart to disable them (default true). Missing dependencies or a separate BotanicPupPatch automatically disable the embedded module, with no guard hooks or runtime work.
 
 ## See it in action

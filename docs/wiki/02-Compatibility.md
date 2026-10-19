@@ -14,6 +14,12 @@ FiresGhettoNetworking's Server-Side Simulation loads the world around players on
 
 For weak dedicated-server CPUs, `NoServerSideSimulation=true` keeps simulation on players. FiresGhettoNetworking is still required; server-owned defaults are unavailable. See **Configuration** for the other edition and mode choices.
 
+## ValheimCommunityPatch
+
+With `AutoConfigureFiresGhettoNetworking=true` and `NoServerSideSimulation=false`, TooManyLags coordinates supported CommunityPatch scene fixes at dedicated-server startup. Four overlapping loading/unloading optimisations stand down through CommunityPatch's official API so FiresGhettoNetworking can simulate all player areas. The object-unload crash guard retains its setting. Saved configs and client-side CommunityPatch settings are unchanged.
+
+This integration is checked with CommunityPatch 0.37.0 and FiresGhettoNetworking 1.5.65. CommunityPatch needs its fix-control API, introduced in 0.35.0; incompatible or unknown scene prefixes retain the simulation safety block. Other networking compatibility decisions remain in effect. Manual setup and the mode without Server-Side Simulation do not activate this integration. No new client version is required specifically for this startup fix.
+
 ## Built-in PUP safeguards
 
 `[08 - PUP FPS Compatibility] EnablePupCompatibility = true` enables the integrated guards automatically when their required mods and interfaces are available. Install PUP FPS on the server and clients that use it; use matching versions.

@@ -28,6 +28,11 @@ internal static class FgnSessionSettingsTests
         FiresGhettoNetworkMod.FiresGhettoNetworkMod.Starts = 0;
         FiresGhettoNetworkMod.ServerClientUtils.IsDedicatedServerDetected = true;
         FiresGhettoNetworkMod.ValheimCommunityPatchCompat.SchedulesSceneObjects = false;
+#if FGN_165
+        FiresGhettoNetworkMod.ZSyncHookGate.Calls = 0;
+        FiresGhettoNetworkMod.ZSyncHookGate.Attached = active;
+        FiresGhettoNetworkMod.ZSyncHookGate.OtherFeature = false;
+#endif
         return file;
     }
     private static void Run(string path)
@@ -41,6 +46,10 @@ internal static class FgnSessionSettingsTests
             Check(FgnSessionSettings.Apply(assembly, original, true, true, false) == !active, "activation result");
             Check(FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive, "actual simulation ready");
             Check(FiresGhettoNetworkMod.FiresGhettoNetworkMod.Starts == (active ? 0 : 1), "native initializer only when needed");
+#if FGN_165
+            Check(FiresGhettoNetworkMod.ZSyncHookGate.Calls == (active ? 0 : 1) && FiresGhettoNetworkMod.ZSyncHookGate.Attached,
+                "new simulation refreshes native OwnerSync/rescue after readiness; active simulation is not refreshed");
+#endif
             Check(FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerAuthority.Value, "SSS runtime on");
             Check(!FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnership.Value, "broad runtime off");
             Check(!FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerOwnershipSelective.Value, "selective runtime off");
@@ -55,6 +64,9 @@ internal static class FgnSessionSettingsTests
             Check(FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerAuthority.Description == oldSSS.Description, "description retained");
             FgnSessionSettings.Apply(assembly, original, true, true, false);
             Check(FiresGhettoNetworkMod.FiresGhettoNetworkMod.Starts == (active ? 0 : 1), "repeat application cannot start twice");
+#if FGN_165
+            Check(FiresGhettoNetworkMod.ZSyncHookGate.Calls == (active ? 0 : 1), "repeat application does not refresh native gate again");
+#endif
         }
         foreach (bool nativeAI in new[] { false, true })
         {
@@ -125,6 +137,10 @@ internal static class FgnSessionSettingsTests
             other.Patch(target, postfix: new HarmonyMethod(typeof(SettingsTarget), "Other"));
             Check(!FgnSessionSettings.Apply(assembly, original, true, true, true, true), "player-simulation mode never starts simulation, even with a scene scheduler");
             Check(!FiresGhettoNetworkMod.FiresGhettoNetworkMod.ConfigEnableServerAuthority.Value && !FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive && FiresGhettoNetworkMod.FiresGhettoNetworkMod.Starts == 0, "already active and inactive simulation both become inactive");
+#if FGN_165
+            Check(FiresGhettoNetworkMod.ZSyncHookGate.Calls == (active ? 1 : 0) && !FiresGhettoNetworkMod.ZSyncHookGate.Attached,
+                "stopping simulation refreshes native gate only after clearing readiness");
+#endif
             Patches remaining = Harmony.GetPatchInfo(target);
             Check(remaining.Prefixes.Count == 0 && remaining.Postfixes.Count == 2, "simulation and optional quiet-pass hooks removed; network and other mod hooks preserved");
             Check(!FiresGhettoNetworkMod.CreatureOwnership.ServerOwnsCreatures && !FiresGhettoNetworkMod.HelmOwnership.ServerOwnsShips, "server creature/ship mode flags reset");
@@ -160,6 +176,13 @@ internal static class FgnSessionSettingsTests
                 FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive && File.ReadAllText(path) == saved, "validation failure changes no configuration or simulation flag");
             fgn.UnpatchSelf();
         }
+#if FGN_165
+        ConfigFile otherSync = Setup(path, true, true);
+        FiresGhettoNetworkMod.ZSyncHookGate.OtherFeature = true;
+        FgnSessionSettings.Apply(assembly, otherSync, true, true, false, true);
+        Check(FiresGhettoNetworkMod.ZSyncHookGate.Attached && FiresGhettoNetworkMod.ZSyncHookGate.Calls == 1,
+            "stopping simulation preserves OwnerSync needed by an independent transform feature");
+#endif
         ManualSetup(path, assembly);
         ZNet.instance = new object();
         bool liveBlocked = false;
@@ -251,6 +274,14 @@ internal static class FgnSessionSettingsTests
 
 namespace FiresGhettoNetworkMod
 {
+#if FGN_165
+    internal static class ZSyncHookGate
+    {
+        internal static int Calls;
+        internal static bool Attached, OtherFeature;
+        internal static void Refresh(string reason) { Calls++; Attached = OtherFeature || ServerAuthorityPatches.SimulationActive; }
+    }
+#endif
     internal static class FiresGhettoNetworkMod
     {
         public static ConfigEntry<bool> ConfigEnableServerAuthority, ConfigEnableServerOwnership, ConfigEnableServerOwnershipSelective;

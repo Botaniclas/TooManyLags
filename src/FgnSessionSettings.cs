@@ -56,7 +56,7 @@ namespace TooManyLags
             if (enableAI) Add(fields, values, creatures, "ConfigEnabled", true);
 
             FieldInfo simulation = null, creatureOwner = null, shipOwner = null;
-            MethodInfo initialize = null;
+            MethodInfo initialize = null, refreshSync = null;
             bool wasActive = false;
             if (dedicated)
             {
@@ -75,6 +75,15 @@ namespace TooManyLags
                 shipOwner = Field(assembly.GetType("FiresGhettoNetworkMod.HelmOwnership", true), "ServerOwnsShips", typeof(bool));
                 initialize = Method(plugin, "ApplyServerSideSimulationPatches");
                 wasActive = (bool)simulation.GetValue(null);
+                // Recent FGN installs its optional OwnerSync/rescue prefix
+                // through a separate gate after the simulation-ready flag.
+                Type syncGate = wasActive == noSimulation ? assembly.GetType("FiresGhettoNetworkMod.ZSyncHookGate", false) : null;
+                if (syncGate != null)
+                {
+                    refreshSync = syncGate.GetMethod("Refresh", Static, null, new[] { typeof(string) }, null);
+                    if (refreshSync == null || refreshSync.ReturnType != typeof(void))
+                        throw new NotSupportedException("FGN transform-sync startup contract changed.");
+                }
                 if (noSimulation) FgnSimulationStartup.Validate(initialize);
             }
 
@@ -100,13 +109,19 @@ namespace TooManyLags
             // and pass through. Clear their startup-only ownership mode flags.
             creatureOwner.SetValue(null, false);
             shipOwner.SetValue(null, false);
-            if (noSimulation) { simulation.SetValue(null, false); return false; }
+            if (noSimulation)
+            {
+                simulation.SetValue(null, false);
+                if (wasActive && refreshSync != null) refreshSync.Invoke(null, new object[] { "TooManyLags Server-Side Simulation stopped" });
+                return false;
+            }
             if (!wasActive)
             {
                 // Use the same initializer and completion flag as FGN's Awake.
                 // Never announce simulation readiness by changing a flag alone.
                 initialize.Invoke(null, null);
                 simulation.SetValue(null, true);
+                if (refreshSync != null) refreshSync.Invoke(null, new object[] { "TooManyLags Server-Side Simulation started" });
             }
             return !wasActive;
         }

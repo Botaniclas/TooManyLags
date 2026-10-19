@@ -7,19 +7,20 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.48.0")]
+[assembly: AssemblyVersion("1.0.49.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.48")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.49")]
     [BepInDependency(FgnId)]
+    [BepInDependency(CommunityPatchSceneCompatibility.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(PupId, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("botanic.pup.patch", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInIncompatibility("botanic.server.buildings")]
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.48", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.49", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -38,6 +39,7 @@ namespace TooManyLags
         private bool configuredAI;
         private bool sessionStarted;
         private IDisposable clientOverrides;
+        private IDisposable communityPatchCompatibility;
         private MobPolicyHandoff clientTakeover;
         private PupCompatibility.Plugin pupCompatibility;
         private void PrepareConfiguration()
@@ -140,12 +142,21 @@ namespace TooManyLags
             }
             try
             {
+                bool sceneConflict = Chainloader.PluginInfos.ContainsKey("dev.ontrigger.vpo");
+                PluginInfo communityPatch;
+                if (autoConfigureFgn && !playerSimulation && !sceneConflict &&
+                    Chainloader.PluginInfos.TryGetValue(CommunityPatchSceneCompatibility.Id, out communityPatch) && communityPatch.Instance)
+                    communityPatchCompatibility = CommunityPatchSceneCompatibility.Start(networkPlugin.Instance.GetType().Assembly, communityPatch.Instance.GetType().Assembly);
                 bool activated = FgnSessionSettings.Apply(networkPlugin.Instance.GetType().Assembly, networkPlugin.Instance.Config,
-                    Application.isBatchMode, enableAI, Chainloader.PluginInfos.ContainsKey("dev.ontrigger.vpo"), playerSimulation, autoConfigureFgn);
+                    Application.isBatchMode, enableAI, sceneConflict, playerSimulation, autoConfigureFgn);
+                if (communityPatchCompatibility != null) Logger.LogWarning("TooManyLags coordinated CommunityPatch scene scheduling for this server session. FiresGhettoNetworking manages player areas; CommunityPatch's unload crash guard and unrelated fixes retain their settings.");
                 if (activated) Logger.LogWarning("TooManyLags enabled FiresGhettoNetworking Server-Side Simulation for this session. This can increase server CPU usage; its saved config is unchanged.");
             }
             catch (Exception error)
-            { enabledMod = false; Logger.LogWarning("TooManyLags inactive: required FGN session settings could not be applied. " + error.GetBaseException()); return; }
+            {
+                if (communityPatchCompatibility != null) { communityPatchCompatibility.Dispose(); communityPatchCompatibility = null; }
+                enabledMod = false; Logger.LogWarning("TooManyLags inactive: required FGN session settings could not be applied. " + error.GetBaseException()); return;
+            }
             if (!playerSimulation)
             {
                 try { GridHandoffs.Protocol.Start(networkPlugin.Instance.GetType().Assembly); gridProtocol = true; }
@@ -447,6 +458,7 @@ namespace TooManyLags
         private void Cleanup() { if (harmony != null) harmony.UnpatchSelf(); }
         private void OnDestroy()
         {
+            if (communityPatchCompatibility != null) { communityPatchCompatibility.Dispose(); communityPatchCompatibility = null; }
             TextEditing.Protection.Stop();
             if (pupCompatibility != null) { pupCompatibility.Dispose(); pupCompatibility = null; }
             GridHandoffs.Protocol.Stop();

@@ -1,3 +1,15 @@
+# TooManyLags - FiresGhettoNetworking Addon 1.0.49 candidate
+
+Dedicated startup coordinates ValheimCommunityPatch through its official session API. Four competing scene performance policies stand down; the list-based object-unload crash guard retains its setting. A single startup detector transpiler distinguishes those known inert prefixes and the reviewed native-list recovery prefix on their exact targets. Unknown/misplaced prefixes and failed/denied API contracts remain blocking. Clients, manual setup and the no-simulation mode do not activate the bridge. No saved config values or ownership/interaction/collision rules are changed by the bridge.
+
+The normal FGN simulation initializer remains responsible for its patches. When simulation state changes, the existing session setup also refreshes the optional native ZSyncHookGate after changing SimulationActive, matching FGN's startup completion order. Repeated setup, already-active simulation and manual mode do not gain repeated work; the no-simulation path retains transform hooks required by independent FGN features. Older backends without this optional gate retain their original path.
+
+Focused verification passes 85 production bridge/Harmony/session assertions on both .NET Framework and Valheim's embedded Mono, plus 62 actual CommunityPatch 0.37.0 / FiresGhettoNetworking 1.5.65 / production metadata and IL contracts. Legacy and modern session fixtures pass 111 and 118 assertions respectively. The combined fixture runs the real bridge and session setup together, then exercises an FGN simulation prefix with native creation and retained VCP recovery. It also verifies original safety blocking, permanent API stand-down, unknown late/misplaced hooks, API refusal and saved-config preservation. These are managed fixtures and native metadata checks, not a Unity world or live multiplayer test.
+
+All 28 full-build verification groups pass against DLL SHA256 `872F0BF2D3295D44378B8951D79CB986F3D2A604A794751556C8EBFA7F49D04D`, including the existing grid/loading, ownership, inventory, combat, camera, text, loose-item and optional PUP regressions. Full results are stored in `verification.json`. See `docs/COMMUNITYPATCH-COMPATIBILITY.md` for startup sequencing, bounded state, failure handling and live-test limits. Live multiplayer testing remains outstanding.
+
+---
+
 # TooManyLags - FiresGhettoNetworking Addon 1.0.48 hotfix
 
 The no-simulation startup failure with FiresGhettoNetworking 1.5.65 was reproduced against the original 1.0.47 DLL and the new installer fixture before changing the implementation. FgnSimulationStartup now recognizes the exact optional FiresGhettoNetworkMod.SssQuietPass group and includes its simulation-only sector bookkeeping in the existing targeted patch removal. The seven original groups remain mandatory; unknown additions, foreign namespaces and switching after world creation remain rejected. Normal simulation mode retains these hooks. Saved backend configuration and all ownership/interaction safeguards are unchanged. The fix adds only startup recognition, with no new runtime loop or ownership work.

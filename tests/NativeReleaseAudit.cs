@@ -234,10 +234,10 @@ internal static class NativeReleaseAudit
             string id = Convert.ToString(attribute.ConstructorArguments[0].Value);
             Check(attribute.ConstructorArguments.Count == 2 &&
                 ((id == "com.Fire.FiresGhettoNetworkMod" && Convert.ToInt32(attribute.ConstructorArguments[1].Value) == 1) ||
-                ((id == "com.pup.instancecombiner.safe" || id == "botanic.pup.patch") && Convert.ToInt32(attribute.ConstructorArguments[1].Value) == 2)),
-                "Only unversioned required FGN and optional PUP load-order dependencies permitted");
+                ((id == "com.pup.instancecombiner.safe" || id == "botanic.pup.patch" || id == "MidnightsFX.ValheimCommunityPatch") && Convert.ToInt32(attribute.ConstructorArguments[1].Value) == 2)),
+                "Only unversioned required FGN and optional PUP/CommunityPatch load-order dependencies permitted");
         }
-        Check(dependencies == 3, "One required dependency and two optional load-order dependencies expected");
+        Check(dependencies == 4, "One required dependency and three optional load-order dependencies expected");
         foreach (AssemblyNameReference reference in authority.MainModule.AssemblyReferences)
             Check(reference.Name.IndexOf("pup", StringComparison.OrdinalIgnoreCase) < 0, "Unexpected Pup assembly dependency");
         int configRegistrations = 0, configAdminChecks = 0;

@@ -1,6 +1,6 @@
 param([string]$OutputDirectory = (Join-Path (Split-Path (Split-Path $PSScriptRoot)) 'outputs'))
 $ErrorActionPreference = 'Stop'
-$packageVersion = '1.1.0'
+$packageVersion = '1.1.2'
 $packageVerification = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Raw | ConvertFrom-Json
 $packageManifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'manifest.json') -Raw | ConvertFrom-Json
 $packageDll = Join-Path $PSScriptRoot 'bin\TooManyLagsStandalone.dll'

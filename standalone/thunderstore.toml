@@ -4,7 +4,7 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "Botaniclas"
 name = "TooManyLags_Standalone"
-versionNumber = "1.1.0"
+versionNumber = "1.1.2"
 description = "Leave avoidable connection lag behind: local interactions, smarter Hostile Mob ownership and better-connected owners in shared areas. Lightweight multiplayer without FiresGhettoNetworking. Clients optional; full features with matching clients."
 websiteUrl = "https://github.com/Botaniclas/TooManyLags"
 containsNsfwContent = false

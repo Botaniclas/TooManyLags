@@ -9,6 +9,7 @@ namespace TooManyLagsStandalone
     {
         internal static void Validate()
         {
+            ShipTransferGuard.Validate();
             string[] zdo = { "Deserialize", "InternalSetPosition", "SetPrefab", "SetOwner", "SetOwnerInternal" };
             foreach (string method in zdo) Required(typeof(ZDO), method);
             foreach (string method in new[] { "ReleaseZDOS", "RPC_ZDOData", "HandleDestroyedZDO", "FindObjects" }) Required(typeof(ZDOMan), method);
@@ -17,9 +18,15 @@ namespace TooManyLagsStandalone
             Required(typeof(ZNet), "OnNewConnection"); Required(typeof(ZNet), "Shutdown"); Required(typeof(ZNetScene), "AddInstance");
             Required(typeof(ZNetView), "ResetZDO"); Required(typeof(ZNetView), "OnDestroy");
             Required(typeof(InventoryGui), "Hide"); Required(typeof(InventoryGui), "CloseContainer");
+            Required(typeof(Fermenter), "DelayedTap"); Required(typeof(OfferingBowl), "DelayedSpawnBoss");
             if (AccessTools.Field(typeof(InventoryGui), "m_currentContainer") == null) throw new NotSupportedException("Native inventory GUI ownership guard unavailable.");
             var target = AccessTools.Field(typeof(MonsterAI), "m_targetCreature");
             if (target == null || target.FieldType != typeof(Character)) throw new NotSupportedException("Native monster target contract changed.");
+            var attack = AccessTools.Field(typeof(Humanoid), "m_currentAttack");
+            var requester = AccessTools.Field(typeof(Vagon), "m_useRequester");
+            if (attack == null || attack.IsStatic || attack.FieldType != typeof(Attack) ||
+                requester == null || requester.IsStatic || requester.FieldType != typeof(Humanoid))
+                throw new NotSupportedException("Native pending attack/cart use contract changed.");
             var find = AccessTools.Method(typeof(ZDOMan), "FindObjects");
             Type[] args = { typeof(Vector2s), typeof(List<ZDO>), typeof(HashSet<ZoneSystem.SectorIndex>) };
             ParameterInfo[] actual = find.GetParameters(); if (actual.Length != args.Length) throw new NotSupportedException("Native sector lookup changed.");

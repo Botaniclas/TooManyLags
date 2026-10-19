@@ -323,6 +323,81 @@ internal static class HandoffRuntimeTests
         Time.unscaledTime=.5f;controller.Handoffs.Tick(.5f);Plugin.Network.OnSend=null;
         Check(nested && controller.Handoffs.Committing(second.Data.m_uid),"Inline listen-host callback may add another receipt without invalidating iteration");
     }
+    private static void ShipPassengerOwnership()
+    {
+        Reset();var view=Object(Kinds.Vehicles);var ship=view.gameObject.Add<Ship>();
+        var aboard=Object(Kinds.None,81).gameObject.Add<Player>();ship.Passengers.Add(aboard);
+        Commit(Plugin.Local,view.Data,Kinds.Vehicles,++token);Check(Result()==2 && view.Data.Owner==11,"Passengers block a grid transfer to an offboard player that vanilla would undo");
+        Time.unscaledTime=.1f;Plugin.Local.Tick(.1f);Check(view.Data.Owner==11,"Occupied ship does not oscillate back to a shore owner on retry");
+        var target=Object(Kinds.None,82).gameObject.Add<Player>();target.GetComponent<ZNetView>().Data.Owner=22;ship.Passengers.Add(target);
+        Time.unscaledTime=.21f;Plugin.Local.Tick(.21f);Check(Last(Message.Wake).Message==Message.Wake,"Target boarding wakes the pending ship request");
+        Commit(Plugin.Local,view.Data,Kinds.Vehicles,++token);Check(Result()==1 && view.Data.Owner==22,"Another onboard player can still receive guarded ship ownership");
+        Reset();view=Object(Kinds.Vehicles);ship=view.gameObject.Add<Ship>();aboard=Object(Kinds.None,81).gameObject.Add<Player>();ship.Passengers.Add(aboard);
+        Commit(Plugin.Local,view.Data,Kinds.Vehicles,++token);Check(Result()==2,"Occupied ship remains guarded before last passenger exits");
+        ship.Passengers.Clear();Time.unscaledTime=.1f;Plugin.Local.Tick(.1f);
+        Commit(Plugin.Local,view.Data,Kinds.Vehicles,++token);Check(Result()==1 && view.Data.Owner==22,"Empty ship returns to normal grid transfers");
+        Reset();view=Object(Kinds.Vehicles);ship=view.gameObject.Add<Ship>();aboard=Object(Kinds.None,81).gameObject.Add<Player>();aboard.GetComponent<ZNetView>().Data.Owner=0;ship.Passengers.Add(aboard);
+        Commit(Plugin.Local,view.Data,Kinds.Vehicles,++token);Check(Result()==1,"Native zero-owner passenger entries do not strand an empty ship");
+    }
+    private static void NativeDelayedActions()
+    {
+        Reset();var cartView=Object(Kinds.Vehicles);var cart=cartView.gameObject.Add<Vagon>();cart.Requester=new GameObject().Add<Humanoid>();
+        Commit(Plugin.Local,cartView.Data,Kinds.Vehicles,++token);Check(Result()==2 && !cart.InUse() && cartView.Data.Owner==11,"Cart's native pending requester blocks before the attachment joint exists");
+        cart.Requester=null;Plugin.Local.Tick(0);Time.unscaledTime=.1f;Plugin.Local.Tick(.1f);Check(Last(Message.Wake).Message==Message.Wake,"Native cart requester completion wakes the waiting handoff");
+        Commit(Plugin.Local,cartView.Data,Kinds.Vehicles,++token);Check(Result()==1 && cartView.Data.Owner==22,"Idle cart still permits normal guarded ownership");
+        Reset();var mobView=Object(Kinds.TamedAnimals);var actor=mobView.gameObject.Add<Humanoid>();actor.Tamed=true;actor.CurrentAttack=new Attack();var ai=mobView.gameObject.Add<MonsterAI>();ai.Init();
+        Commit(Plugin.Local,mobView.Data,Kinds.TamedAnimals,++token);Check(Result()==2 && !actor.InAttack() && mobView.Data.Owner==11,"Live native Attack blocks even before animation reports InAttack");
+        actor.CurrentAttack.Done=true;ai.Charging=true;Commit(Plugin.Local,mobView.Data,Kinds.TamedAnimals,++token);Check(Result()==2 && mobView.Data.Owner==11,"Native AI charging remains protected after the prior Attack finishes");
+        Plugin.Local.Tick(0);ai.Charging=false;Time.unscaledTime=.1f;Plugin.Local.Tick(.1f);Check(Last(Message.Wake).Message==Message.Wake,"Charge completion wakes without permanent AI polling");
+        Commit(Plugin.Local,mobView.Data,Kinds.TamedAnimals,++token);Check(Result()==1 && mobView.Data.Owner==22,"Finished non-charging actor retains normal source-confirmed transfers");
+        Reset();var view=Object(Kinds.Fermenters);var fermenter=view.gameObject.Add<Fermenter>();fermenter.Invoking.Add("DelayedTap");long n=++token;
+        Commit(Plugin.Local,view.Data,Kinds.Fermenters,n);Check(Result()==2 && view.Data.Owner==11,"Pending native fermenter output retains its source owner");
+        Time.unscaledTime=5;Plugin.Local.Tick(5);Check(view.Data.Owner==11,"Elapsed handoff time cannot authorize loss of a queued local output");
+        fermenter.Invoking.Clear();Time.unscaledTime=5.11f;Plugin.Local.Tick(5.11f);Check(Last(Message.Wake).Message==Message.Wake,"Native output completion wakes the blocked handoff");
+        Commit(Plugin.Local,view.Data,Kinds.Fermenters,++token);Check(Result()==1 && view.Data.Owner==22,"Finished tapping permits the next source-confirmed transfer");
+        Reset();view=Object(Kinds.Offerings);var altar=view.gameObject.Add<OfferingBowl>();altar.Invoking.Add("DelayedSpawnBoss");n=++token;
+        Commit(Plugin.Local,view.Data,Kinds.Offerings,n);Check(Result()==2 && view.Data.Owner==11,"Queued native boss summon remains on its actual source");
+        Time.unscaledTime=1;Plugin.Local.Tick(1);Check(view.Data.Owner==11,"Boss summon is not released by a guessed fixed delay");
+        altar.Invoking.Clear();Time.unscaledTime=1.11f;Plugin.Local.Tick(1.11f);Check(Last(Message.Wake).Message==Message.Wake,"Finished native summon wakes without another interaction");
+        Commit(Plugin.Local,view.Data,Kinds.Offerings,++token);Check(Result()==1 && view.Data.Owner==22,"Idle altar retains ordinary guarded transfers");
+    }
+    private static void ReplacedSnapshotJob()
+    {
+        Reset();var controller=Plugin.Controller;var first=Object(Kinds.Doors,1);var second=Object(Kinds.Doors,2);second.Data.Owner=33;
+        Check(controller.Handoffs.Request(first.Data,22,Kinds.Doors,ZDOID.None),"Inline replacement: first job starts");
+        Check(controller.Handoffs.Request(second.Data,22,Kinds.Doors,ZDOID.None),"Inline replacement: second job starts");
+        bool replaced=false;Plugin.Network.OnSend=delegate(Network.Envelope sent)
+        {
+            if(replaced || sent.Message!=Message.Prepare)return;replaced=true;
+            controller.Handoffs.Cancel(second.Data.m_uid,true);controller.DesiredOwner=34;
+            Check(controller.Handoffs.Request(second.Data,34,Kinds.Doors,ZDOID.None),"Listen-host reply replaces a later snapshot job with a new target");
+        };
+        controller.Handoffs.Tick(0);Plugin.Network.OnSend=null;
+        Check(replaced && controller.Handoffs.Pending(second.Data.m_uid) && second.Data.Owner==33,"Retired snapshot cannot cancel or commit the replacement job");
+        Time.unscaledTime=.1f;controller.Handoffs.Tick(.1f);
+        Check(second.Data.Owner==34 && second.Data.OwnerRevision==1,"Replacement still commits once to its new native target");
+    }
+    private static void BlockedActionScheduling()
+    {
+        Reset();var first=Object(Kinds.Smelters,1);var second=Object(Kinds.Smelters,2);var agent=Plugin.Local;
+        agent.Refilling(first.Data,"RPC_AddOre".GetStableHashCode());Commit(agent,first.Data,Kinds.Smelters,++token);
+        Time.unscaledTime=.4f;agent.Refilling(second.Data,"RPC_AddOre".GetStableHashCode());Commit(agent,second.Data,Kinds.Smelters,++token);agent.Tick(.4f);
+        Plugin.Network.Sent.Clear();Time.unscaledTime=.9f;agent.Refilling(first.Data,"RPC_AddOre".GetStableHashCode());agent.Tick(.9f);
+        Time.unscaledTime=1f;agent.Tick(1f);Check(Plugin.Network.Sent.Count==0,"Renewed refill cannot wake at the old deadline");
+        Time.unscaledTime=1.4f;agent.Tick(1.4f);Check(Plugin.Network.Sent.Count==1 && Last(Message.Wake).Data.ReadLong()==token,"Earliest remaining station wakes independently of another renewed lease");
+        Time.unscaledTime=1.91f;agent.Tick(1.91f);Check(Plugin.Network.Sent.Count==2 && first.Data.Owner==11 && second.Data.Owner==11,"Expired leases wake without committing ownership on the timer");
+
+        Reset();var view=Object(Kinds.Containers);var box=view.gameObject.Add<Container>();box.Used=true;agent=Plugin.Local;
+        Commit(agent,view.Data,Kinds.Containers,++token);Plugin.Network.Sent.Clear();agent.Tick(0);
+        for(int i=1;i<=9;i++) { Time.unscaledTime=i*.1f;agent.Tick(Time.unscaledTime); }
+        Check(Plugin.Network.Sent.Count==0 && view.Data.Owner==11,"Open inventory has no timer-triggered handoff or premature wake");
+        box.Used=false;agent.Response(box);Check(Last(Message.Wake).Message==Message.Wake && view.Data.Owner==11,"Inventory release still wakes immediately through its event");
+
+        Reset();view=Object(Kinds.TamedAnimals);var actor=view.gameObject.Add<Character>();actor.Tamed=true;actor.Attack=true;agent=Plugin.Local;
+        Commit(agent,view.Data,Kinds.TamedAnimals,++token);Plugin.Network.Sent.Clear();agent.Tick(0);
+        actor.Attack=false;Time.unscaledTime=.1f;agent.Tick(.1f);Check(Last(Message.Wake).Message==Message.Wake && view.Data.Owner==11,"Attack-end fallback retains its 0.1-second check without a new object update");
+        agent.Reset();Check(!agent.HasWork,"World reset retires all scheduled blocked actions");
+    }
     public static void Main()
-    { try { InventoryProtection();TextEditingSourceVeto();RefillAndUse();IncineratorBurnProtection();StationaryReadinessGeometry();ReceiptAndRouter();MobAndUnload();OptionalClients();StandActionsAndStatus();RecipientFloorAndUnload();DelayedReadiness();TargetedQueueCost();DenseAndReentrantReceipts();Console.WriteLine("PASS: "+checks+" production handoff/runtime assertions: inventory opening/loading, text source veto/replay fence, renewing one-second refills, native incinerator burn protection, stationary recipient readiness, stand actions, status fencing, final-state readiness, delayed replies, unload/relay, per-object queue cost, dense unclicked transfers, listen-host reentry, optional-client fallback and cache expiry."); } catch(Exception error) { Console.Error.WriteLine(error);Environment.ExitCode=1; } }
+    { try { InventoryProtection();TextEditingSourceVeto();RefillAndUse();IncineratorBurnProtection();StationaryReadinessGeometry();ReceiptAndRouter();MobAndUnload();OptionalClients();StandActionsAndStatus();RecipientFloorAndUnload();DelayedReadiness();TargetedQueueCost();DenseAndReentrantReceipts();ReplacedSnapshotJob();BlockedActionScheduling();NativeDelayedActions();ShipPassengerOwnership();Console.WriteLine("PASS: "+checks+" production handoff/runtime assertions: inventory opening/loading, text source veto/replay fence, renewing one-second refills, native incinerator burn protection, stationary recipient readiness, stand and delayed native actions, status fencing, final-state readiness, delayed replies, unload/relay, per-object queue cost, dense unclicked transfers, listen-host replacement, deadline/event wakeups, optional-client fallback and cache expiry."); } catch(Exception error) { Console.Error.WriteLine(error);Environment.ExitCode=1; } }
 }

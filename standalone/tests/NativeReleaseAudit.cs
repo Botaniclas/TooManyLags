@@ -36,7 +36,7 @@ internal static class NativeReleaseAudit
                     foreach (CustomAttribute attr in entry.CustomAttributes)
                     {
                         Check(attr.AttributeType.Name != "BepInDependency", "Dependency attribute present");
-                        if (attr.AttributeType.Name == "BepInPlugin") metadata = (string)attr.ConstructorArguments[0].Value == "botanic.toomanylags.standalone" && (string)attr.ConstructorArguments[2].Value == "1.1.0";
+                        if (attr.AttributeType.Name == "BepInPlugin") metadata = (string)attr.ConstructorArguments[0].Value == "botanic.toomanylags.standalone" && (string)attr.ConstructorArguments[2].Value == "1.1.2";
                     }
                     Check(metadata, "Release metadata");
                     var expectedHooks = new HashSet<string>(new[] { "GameCamera.LateUpdate","GameCamera.OnDestroy","Container.RPC_RequestOpen","Container.RPC_RequestStack","Container.RPC_RequestTakeAll","ZNet.OnNewConnection","ZNet.Shutdown","ZDO.Deserialize","ZDO.InternalSetPosition","ZDO.SetPrefab","ZDO.SetOwner","ZDO.SetOwnerInternal","ZDOMan.RPC_ZDOData","ZDOMan.HandleDestroyedZDO","ZNetScene.AddInstance","ZNetView.ResetZDO","ZNetView.OnDestroy","ZRoutedRpc.RouteRPC","ZRoutedRpc.HandleRoutedRPC","ZRoutedRpc.InvokeRoutedRPC","Container.RPC_OpenResponse","Container.RPC_StackResponse","Container.RPC_TakeAllResponse","Container.SetInUse","InventoryGui.Hide","InventoryGui.CloseContainer","ZDOMan.ReleaseZDOS","TextInput.RequestText" });
@@ -74,14 +74,21 @@ internal static class NativeReleaseAudit
                         }
                         patches++;
                     }
-                    Check(patches == 28 && expectedHooks.Count == 0, "Expected complete 1.1.0 native hook set; actual: " + patches);
+                    Check(patches == 28 && expectedHooks.Count == 0, "Expected complete 1.1.2 native hook set; actual: " + patches);
                     string localType = Prefix + "LocalAgent";
                     MethodDefinition guard = Method(plugin.MainModule.GetType(localType), "Check");
                     foreach (string call in new[] { "Container::IsInUse", "InventoryGui", "InAttack", "IsStaggering", "HaveRider", "IsAttached", "IsRiding", "IsSummoned" })
                     { bool found = false; foreach (var code in guard.Body.Instructions) found |= code.Operand != null && code.Operand.ToString().Contains(call); Check(found, "Source guard missing: " + call); }
-                    foreach (string call in new[] { "inventoryLoading", "IncineratorProtection::Busy", "IncineratorProtection::get_Supported" })
+                    foreach (string call in new[] { "inventoryLoading", "IncineratorProtection::Busy", "IncineratorProtection::get_Supported", "DelayedTap", "DelayedSpawnBoss", "currentAttack", "IsDone", "IsCharging", "cartRequester", "ShipTransferGuard::Allows" })
                     { bool found = false; foreach (var code in guard.Body.Instructions) found |= code.Operand != null && code.Operand.ToString().Contains(call); Check(found, "New source inventory/burn guard missing: " + call); }
                     MethodDefinition receive = Method(plugin.MainModule.GetType(localType), "Receive"); int checkedAt = -1, ownerAt = -1;
+                    bool capturesTick = false;
+                    foreach (var instruction in Method(plugin.MainModule.GetType(localType), "Tick").Body.Instructions)
+                    {
+                        var allocation = instruction.Operand as MethodReference;
+                        capturesTick |= instruction.OpCode == Mono.Cecil.Cil.OpCodes.Newobj && allocation != null && allocation.DeclaringType.Name.Contains("DisplayClass");
+                    }
+                    Check(!capturesTick, "Local action maintenance must not allocate a captured time value each frame");
                     for (int i = 0; i < receive.Body.Instructions.Count; i++)
                     { var call = receive.Body.Instructions[i].Operand as MethodReference; if (call == null) continue; if (call.Name == "Check") checkedAt = i; if (call.DeclaringType.FullName == "ZDO" && call.Name == "SetOwner") ownerAt = i; }
                     Check(checkedAt >= 0 && ownerAt > checkedAt, "Source-side guard must precede owner commit");
@@ -126,13 +133,31 @@ internal static class NativeReleaseAudit
     }
     private static void Bindings(AssemblyDefinition native)
     {
-        foreach (string contract in new[] { "BaseAI:m_nview:ZNetView", "MonsterAI:m_targetCreature:Character", "MonsterAI:m_timeSinceSensedTargetCreature:System.Single", "InventoryGui:m_currentContainer:Container", "Container:m_loading:System.Boolean", "Incinerator:isInUse:System.Boolean", "TextInput:m_queuedSign:TextReceiver" })
+        foreach (string contract in new[] { "BaseAI:m_nview:ZNetView", "MonsterAI:m_targetCreature:Character", "MonsterAI:m_timeSinceSensedTargetCreature:System.Single", "InventoryGui:m_currentContainer:Container", "Container:m_loading:System.Boolean", "Incinerator:isInUse:System.Boolean", "TextInput:m_queuedSign:TextReceiver", "Humanoid:m_currentAttack:Attack", "Vagon:m_useRequester:Humanoid", "Ship:m_players:System.Collections.Generic.List`1<Player>" })
         {
             string[] bits = contract.Split(':'); bool found = false;
             foreach (FieldDefinition field in native.MainModule.GetType(bits[0]).Fields) found |= field.Name == bits[1] && field.FieldType.FullName == bits[2] && !field.IsStatic;
             Check(found, "Native private-field contract: " + contract);
         }
         Check(Method(native.MainModule.GetType("BaseAI"), "SetAlerted").Parameters.Count == 1 && Method(native.MainModule.GetType("BaseAI"), "SetAlerted").Parameters[0].ParameterType.FullName == "System.Boolean", "Native alert setter");
+        foreach (string call in new[] { "IsPlayerInBoat", "GetNewOwnerID", "SetOwner" })
+        {
+            bool found = false;
+            foreach (var instruction in Method(native.MainModule.GetType("Ship"), "UpdateOwner").Body.Instructions)
+            {
+                var reference = instruction.Operand as MethodReference;
+                found |= reference != null && reference.Name == call;
+            }
+            Check(found, "Native occupied-ship owner policy: " + call);
+        }
+        foreach (string contract in new[] { "Fermenter:RPC_Tap:DelayedTap", "OfferingBowl:SpawnBoss:DelayedSpawnBoss" })
+        {
+            string[] bits = contract.Split(':'); TypeDefinition owner = native.MainModule.GetType(bits[0]);
+            Check(Method(owner, bits[2]).Parameters.Count == 0, "Native delayed callback contract: " + contract);
+            bool schedules = false; foreach (var instruction in Method(owner, bits[1]).Body.Instructions)
+                schedules |= instruction.OpCode == Mono.Cecil.Cil.OpCodes.Ldstr && Equals(instruction.Operand, bits[2]);
+            Check(schedules, "Native action schedules the guarded callback: " + contract);
+        }
         MethodDefinition lookup = Method(native.MainModule.GetType("ZDOMan"), "FindObjects");
         Check(lookup.Parameters.Count == 3 && lookup.Parameters[0].ParameterType.FullName == "Vector2s" && lookup.Parameters[1].ParameterType.FullName == "System.Collections.Generic.List`1<ZDO>" && lookup.Parameters[2].ParameterType.FullName == "System.Collections.Generic.HashSet`1<ZoneSystem/SectorIndex>", "Cached sector-lookup delegate contract");
     }

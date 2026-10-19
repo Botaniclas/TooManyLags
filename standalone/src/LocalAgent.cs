@@ -44,22 +44,28 @@ namespace TooManyLagsStandalone
             internal MonsterAI Ai;
             internal Tameable Animal;
             internal Vagon Cart;
+            internal Ship Ship;
             internal Container Container;
             internal Incinerator Incinerator;
             internal ItemStand ItemStand;
             internal ArmorStand ArmorStand;
+            internal Fermenter Fermenter;
+            internal OfferingBowl Offering;
             internal int Inventories;
             internal bool FixedRoot;
         }
         private readonly OwnershipCadence cadence = new OwnershipCadence(.1f);
         private int readinessFrame = -1;
         private float nextSweep;
+        private float nextBlockedCheck = Single.PositiveInfinity;
         private bool mobWatch;
         internal bool MobsEnabled = true;
         internal bool HasWork { get { return prepared.Count + blocked.Count + refill.Count + opening.Count + forward.Count + replay.Count != 0; } }
         private static readonly Action<MonsterAI, float> sensed = FloatSetter();
         private static readonly Func<BaseAI, ZNetView> aiView = FieldReader.Create<BaseAI, ZNetView>(AccessTools.Field(typeof(BaseAI), "m_nview"));
         private static readonly Func<MonsterAI, Character> aiTarget = FieldReader.Create<MonsterAI, Character>(AccessTools.Field(typeof(MonsterAI), "m_targetCreature"));
+        private static readonly Func<Humanoid, Attack> currentAttack = FieldReader.Create<Humanoid, Attack>(AccessTools.Field(typeof(Humanoid), "m_currentAttack"));
+        private static readonly Func<Vagon, Humanoid> cartRequester = FieldReader.Create<Vagon, Humanoid>(AccessTools.Field(typeof(Vagon), "m_useRequester"));
         private static readonly Action<BaseAI, bool> alerted = AccessTools.MethodDelegate<Action<BaseAI, bool>>(AccessTools.Method(typeof(BaseAI), "SetAlerted"));
         private static readonly Func<InventoryGui, Container> currentInventory = FieldReader.Create<InventoryGui, Container>(AccessTools.Field(typeof(InventoryGui), "m_currentContainer"));
         private static Action<MonsterAI, float> FloatSetter()
@@ -82,7 +88,8 @@ namespace TooManyLagsStandalone
             {
                 Container[] inventories = value.GetComponentsInChildren<Container>(true);
                 ViewState result = new ViewState { Kind = ObjectCatalog.Classify(value.gameObject), Actor = value.GetComponent<Character>(), Ai = value.GetComponent<MonsterAI>(),
-                    Animal = value.GetComponent<Tameable>(), Cart = value.GetComponent<Vagon>(), ItemStand = value.GetComponent<ItemStand>(), ArmorStand = value.GetComponent<ArmorStand>(), Container = inventories.Length == 1 ? inventories[0] : null, Incinerator = value.GetComponent<Incinerator>(), Inventories = inventories.Length };
+                    Animal = value.GetComponent<Tameable>(), Cart = value.GetComponent<Vagon>(), ItemStand = value.GetComponent<ItemStand>(), ArmorStand = value.GetComponent<ArmorStand>(), Container = inventories.Length == 1 ? inventories[0] : null, Incinerator = value.GetComponent<Incinerator>(), Inventories = inventories.Length,
+                    Fermenter = value.GetComponent<Fermenter>(), Offering = value.GetComponent<OfferingBowl>(), Ship = value.GetComponent<Ship>() };
                 result.FixedRoot = result.Kind != Kinds.None && !result.Actor && value.m_persistent && !value.m_distant && value.transform.parent == null &&
                     inventories.Length <= 1 && ObjectCatalog.Stationary(value.gameObject, result.Kind) &&
                     (!result.Container || (result.Container.m_rootObjectOverride ? result.Container.m_rootObjectOverride : result.Container.GetComponentInParent<ZNetView>(true)) == value);
@@ -175,7 +182,8 @@ namespace TooManyLagsStandalone
                 blocked.Remove(ticket.Id);
                 replay[ticket.Token] = new Replay { Result = 1, Until = Time.unscaledTime + 10f };
             }
-            else if (result == 2 && blocked.Count < 4096) blocked[ticket.Id] = new Busy { Ticket = ticket, Check = until };
+            else if (result == 2 && blocked.Count < 4096)
+            { blocked[ticket.Id] = new Busy { Ticket = ticket, Check = until }; nextBlockedCheck = Math.Min(nextBlockedCheck, until); }
             else if (result != 2) replay[ticket.Token] = new Replay { Result = result, Until = Time.unscaledTime + 15f };
             ReplyResult(ticket, result);
         }
@@ -196,15 +204,25 @@ namespace TooManyLagsStandalone
             if (state.Container && inventoryLoading == null) return 3;
             if (state.Container && inventoryLoading(state.Container)) { until = Time.unscaledTime + .1f; return 2; }
             if (state.Incinerator && IncineratorProtection.Busy(state.Incinerator)) { until = Time.unscaledTime + .1f; return 2; }
-            if (state.Actor && (state.Actor.InAttack() || state.Actor.IsStaggering() || (ticket.Kind == Kinds.TamedAnimals && state.Ai && aiTarget(state.Ai))))
+            Humanoid humanoid = state.Actor as Humanoid;
+            Attack attack = humanoid ? currentAttack(humanoid) : null;
+            if (state.Actor && ((attack != null && !attack.IsDone()) || (state.Ai && state.Ai.IsCharging()) ||
+                (ticket.Kind == Kinds.TamedAnimals && state.Ai && aiTarget(state.Ai)) || state.Actor.InAttack() || state.Actor.IsStaggering()))
             { until = Time.unscaledTime + .1f; return 2; }
             if (data.GetLong(ZDOVars.s_user, 0) != 0 || (state.Cart && state.Cart.InUse())) return 2;
+            if (state.Cart && cartRequester(state.Cart)) { until = Time.unscaledTime + .1f; return 2; }
+            if (!ShipTransferGuard.Allows(state.Ship, ticket.Target)) { until = Time.unscaledTime + .1f; return 2; }
             if (state.Animal && ObjectCatalog.IsSummoned(state.Animal)) return 3;
             if (state.Animal && (state.Animal.HaveRider() || (state.Animal.m_commandable && !String.IsNullOrEmpty(data.GetString(ZDOVars.s_follow))))) { until = Time.unscaledTime + .1f; return 2; }
             if (state.Actor && (FriendlyCreatures.IsFriendly(state.Actor) || state.Actor.IsDead())) return 3;
             if (state.Actor && (state.Actor.IsAttached() || state.Actor.IsRiding())) { until = Time.unscaledTime + .1f; return 2; }
             if ((state.ItemStand && (state.ItemStand.IsInvoking("UpdateAttach") || state.ItemStand.IsInvoking("UpdateOrientation"))) ||
                 (state.ArmorStand && state.ArmorStand.IsInvoking("UpdateAttach")))
+            { until = Time.unscaledTime + .1f; return 2; }
+            // These native callbacks keep their output/spawn state locally,
+            // outside the ZDO snapshot. Check only for a requested handoff.
+            if ((state.Fermenter && state.Fermenter.IsInvoking("DelayedTap")) ||
+                (state.Offering && state.Offering.IsInvoking("DelayedSpawnBoss")))
             { until = Time.unscaledTime + .1f; return 2; }
             float pending;
             if ((opening.TryGetValue(ticket.Id, out pending) && pending > Time.unscaledTime) || (state.Container && (state.Container.IsInUse() || data.GetInt(ZDOVars.s_inUse) != 0 || (InventoryGui.instance && currentInventory(InventoryGui.instance) == state.Container)))) return 2;
@@ -345,7 +363,12 @@ namespace TooManyLagsStandalone
         {
             if (ZNet.IsSinglePlayer || !ObjectCatalog.IsRefillMethod(method) || data == null || !data.IsOwner() || !ZNetScene.instance) return;
             ZNetView view = ZNetScene.instance.FindInstance(data); if (!view) return;
-            if (ObjectCatalog.RefillRequest(State(view).Kind, method)) refill[data.m_uid] = new Lease { Revision = data.OwnerRevision, Until = Time.unscaledTime + 1f };
+            if (ObjectCatalog.RefillRequest(State(view).Kind, method))
+            {
+                Lease lease;
+                if (!refill.TryGetValue(data.m_uid, out lease)) { lease = new Lease(); refill.Add(data.m_uid, lease); }
+                lease.Revision = data.OwnerRevision; lease.Until = Time.unscaledTime + 1f;
+            }
         }
         internal bool MayForward(ZDO data, int method)
         {
@@ -376,19 +399,28 @@ namespace TooManyLagsStandalone
             Busy busy; if (!blocked.TryGetValue(id, out busy)) return;
             ZDO data = ZDOMan.instance != null ? ZDOMan.instance.GetZDO(id) : null; ZNetView view = data != null && ZNetScene.instance ? ZNetScene.instance.FindInstance(data) : null;
             float until; int result = Check(busy.Ticket, data, view, out until);
-            if (result == 2) { busy.Check = until; return; }
+            if (result == 2) { busy.Check = until; nextBlockedCheck = Math.Min(nextBlockedCheck, until); return; }
             blocked.Remove(id); Reply(Message.Wake, busy.Ticket, delegate(ZPackage p) { });
         }
         internal void Tick(float now)
         {
             if (!cadence.Due(now)) return;
-            ids.Clear(); foreach (KeyValuePair<ZDOID, Busy> item in blocked) if (now >= item.Value.Check) ids.Add(item.Key);
-            foreach (ZDOID id in ids) UseEnded(id); ids.Clear();
+            if (now >= nextBlockedCheck)
+            {
+                // Open inventories and native user locks wait for their existing
+                // events. Timed action checks retain the same 0.1s cadence.
+                nextBlockedCheck = Single.PositiveInfinity;
+                ids.Clear(); foreach (KeyValuePair<ZDOID, Busy> item in blocked)
+                    if (now >= item.Value.Check) ids.Add(item.Key); else nextBlockedCheck = Math.Min(nextBlockedCheck, item.Value.Check);
+                foreach (ZDOID id in ids) UseEnded(id); ids.Clear();
+            }
             if (now < nextSweep) return; nextSweep = now + 2f;
-            Sweep(prepared, delegate(Ticket t) { return now >= t.Until; });
-            Sweep(refill, delegate(Lease t) { return now >= t.Until; });
-            Sweep(opening, delegate(float t) { return now >= t; });
-            Sweep(forward, delegate(Forward t) { return now >= t.Until; });
+            // Noncapturing selectors: a captured 'now' would allocate a
+            // display object on every Tick, even before the cadence gate.
+            Sweep(prepared, now, delegate(Ticket t) { return t.Until; });
+            Sweep(refill, now, delegate(Lease t) { return t.Until; });
+            Sweep(opening, now, delegate(float t) { return t; });
+            Sweep(forward, now, delegate(Forward t) { return t.Until; });
             tokens.Clear(); foreach (KeyValuePair<long, Replay> item in replay) if (now >= item.Value.Until) tokens.Add(item.Key);
             foreach (long token in tokens) replay.Remove(token); tokens.Clear();
             // Source-side veto registrations cannot outlive a disconnected
@@ -397,8 +429,8 @@ namespace TooManyLagsStandalone
                 if (ZDOMan.instance == null || ZDOMan.instance.GetZDO(item.Key) == null || now - item.Value.Ticket.Until > 10f) ids.Add(item.Key);
             foreach (ZDOID id in ids) blocked.Remove(id); ids.Clear();
         }
-        private void Sweep<T>(Dictionary<ZDOID, T> source, Predicate<T> expired)
-        { ids.Clear(); foreach (KeyValuePair<ZDOID, T> item in source) if (expired(item.Value)) ids.Add(item.Key); foreach (ZDOID id in ids) source.Remove(id); ids.Clear(); }
+        private void Sweep<T>(Dictionary<ZDOID, T> source, float now, Func<T, float> expiry)
+        { ids.Clear(); foreach (KeyValuePair<ZDOID, T> item in source) if (now >= expiry(item.Value)) ids.Add(item.Key); foreach (ZDOID id in ids) source.Remove(id); ids.Clear(); }
         private static void Reply(Message message, Ticket ticket, Action<ZPackage> write)
         { Plugin.Network.ToServer(message, delegate(ZPackage p) { p.Write(ticket.Token); p.Write(ticket.Id); write(p); }); }
         private static void ReplyResult(Ticket ticket, int result)
@@ -409,6 +441,6 @@ namespace TooManyLagsStandalone
         }
         private static void Activation(Ticket ticket, ushort revision)
         { Reply(Message.Activated, ticket, delegate(ZPackage p) { p.Write(revision); p.Write(ZDOMan.instance.GetZDO(ticket.Id).DataRevision); }); }
-        internal void Reset() { prepared.Clear(); blocked.Clear(); refill.Clear(); opening.Clear(); forward.Clear(); replay.Clear(); areaReady.Clear(); advertised = new ConditionalWeakTable<ZNetView, Advertisement>(); mobWatch = false; }
+        internal void Reset() { prepared.Clear(); blocked.Clear(); refill.Clear(); opening.Clear(); forward.Clear(); replay.Clear(); areaReady.Clear(); advertised = new ConditionalWeakTable<ZNetView, Advertisement>(); mobWatch = false; nextBlockedCheck = Single.PositiveInfinity; nextSweep = 0; }
     }
 }

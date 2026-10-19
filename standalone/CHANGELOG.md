@@ -1,5 +1,12 @@
 # Changelog
 
+**1.1.2**
+```
+- Fixes a listen-host reply cancelling a replacement ownership request. Source consent, final-state receipts and receiving-client readiness remain required.
+- Protects pending cart attachment, attacks before animation startup, charging, fermenter tapping and queued boss summons. Occupied ships reject grid transfers to players on shore, avoiding competing vanilla owner changes. Update modded owner clients for these additional checks.
+- Reduces repeated work while handoffs wait for use events or action deadlines, and reuses refill guards during repeated inserts without shortening protection.
+```
+
 **1.1.0**
 ```
 - Rebuilds Standalone with the current directional grid: host-controlled camera overlap and turn prediction, 6.4-metre cells, and a short hold only for overlapping player fields. Unmodified clients retain character direction and restricted simple-object handoffs.

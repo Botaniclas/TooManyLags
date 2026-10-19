@@ -116,7 +116,10 @@ namespace TooManyLagsStandalone
             scratch.Clear(); foreach (Job job in jobs.Values) scratch.Add(job);
             foreach (Job job in scratch)
             {
-                if (!jobs.ContainsKey(job.Data.m_uid)) continue;
+                // A listen-host reply can replace a later snapshot entry inline.
+                // Never cancel or send on behalf of that retired job.
+                Job current;
+                if (!jobs.TryGetValue(job.Data.m_uid, out current) || !ReferenceEquals(current, job)) continue;
                 HandoffTransaction s = job.State;
                 if (!ReferenceEquals(job.SourcePeer, ZNet.instance.GetPeer(s.Source)) || !ReferenceEquals(job.TargetPeer, ZNet.instance.GetPeer(s.Target)))
                 { Cancel(job.Data.m_uid, true); controller.Wake(job.Data.m_uid); continue; }

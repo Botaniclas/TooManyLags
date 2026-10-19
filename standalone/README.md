@@ -20,6 +20,8 @@ For dedicated servers, the **FiresGhettoNetworking Addon is highly recommended i
 
 **Clients are optional:** players without the mod can still join, using character direction and a restricted set of simple interactions. Inventories, refill stations, signs/portals, vehicles, tamed animals and Hostile Mob target handoffs need compatible modded clients on both sides of the transfer. Only BepInEx is required.
 
+For the full supported feature set, install the same version on the host/server and all players. On a local host, the host installation also supplies its own client safeguards. A dedicated server coordinates ownership between players without simulating their objects.
+
 ## See it in action
 
 These FiresGhettoNetworking Addon recordings show the shared directional grid using the optional [BotanicOwnerDebug](https://thunderstore.io/c/valheim/p/Botaniclas/BotanicOwnerDebug/) overlay. Standalone uses the same grid, but keeps simulation on players rather than moving shared objects to the server.
@@ -41,6 +43,8 @@ Start with the defaults. Configure gameplay **on the host/server**; modded clien
 Your nearby grid prepares interactive objects for local use. Where players' fields overlap, a suitable player with a better measured connection takes ownership; a small margin and overlap hold avoid needless switching. Hostile Mobs normally follow their current player target's ownership. A high-ping target can use a better-connected player near the mob instead, without changing the attack target.
 
 **Locally owned interactions avoid another player's connection delay.** Shared objects and shared combat can still depend on the selected player's connection: this edition never moves simulation to a dedicated server. Open inventories, refilling, burning and other supported active use protect ongoing actions before a handoff.
+
+Queued fermenter output and boss summons also retain their source owner until the native delayed action finishes.
 
 Native sign and portal-name editing keeps the edited object's owner until the player moves. Ownership is confirmed before the text window opens; other objects keep their normal grid behavior.
 

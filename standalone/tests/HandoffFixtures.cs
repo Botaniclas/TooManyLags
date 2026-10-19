@@ -39,13 +39,14 @@ public sealed class ZPackage
     public void ReadPackage(ref ZPackage p) { p = new ZPackage(read.ReadBytes(ReadInt())); } public string ReadString() { return read.ReadString(); } public byte[] GetArray() { return data.ToArray(); } public void SetPos(int n) { data.Position=n; } public int Size() { return (int)data.Length; }
 }
 public static class HashFixture { public static int GetStableHashCode(this string text) { unchecked { int h=17; foreach(char c in text) h=h*31+c; return h; } } }
-public static class ZDOVars { public const int s_user=1,s_inUse=2,s_follow=3,s_health=8,s_attachJointHash=9; }
+public static class ZDOVars { public const int s_user=1,s_inUse=2,s_follow=3,s_health=8,s_attachJointHash=9,s_tamed=10; }
 public sealed class ZDO
 {
     public ZDOID m_uid; public ushort OwnerRevision; public uint DataRevision; public bool Valid=true; public long Owner=11; public UnityEngine.Vector3 Point; public UnityEngine.Quaternion Rotation;
     private readonly Dictionary<object,object> values = new Dictionary<object,object>();
     public bool IsValid() { return Valid; } public bool IsOwner() { return Owner==ZDOMan.GetSessionID(); } public long GetOwner() { return Owner; } public UnityEngine.Vector3 GetPosition() { return Point; }
-    public int GetPrefab() { return 1; }
+    public int Prefab=1; public int GetPrefab() { return Prefab; }
+    public static KeyValuePair<int,int> GetHashZDOID(string key) { return new KeyValuePair<int,int>(key.GetStableHashCode(),(key+".second").GetStableHashCode()); }
     public UnityEngine.Quaternion GetRotation() { return Rotation; }
     public void SetOwner(long owner) { Owner=owner; OwnerRevision++; }
     public long GetLong(int key,long fallback=0) { object n; return values.TryGetValue(key,out n)?Convert.ToInt64(n):fallback; }
@@ -65,8 +66,16 @@ public sealed class ZDOMan
 public class ZNetView : UnityEngine.Component { public ZDO Data; public bool m_persistent=true,m_distant; public readonly List<string> Replies=new List<string>(); public bool IsValid() { return Data!=null && Data.IsValid(); } public ZDO GetZDO() { return Data; } public bool IsOwner() { return Data.IsOwner(); } public void InvokeRPC(long peer,string response,params object[] args) { Replies.Add(peer+":"+response+":"+args[0]); } }
 public sealed class ZNetScene : UnityEngine.Object
 {
+    public readonly Dictionary<int,UnityEngine.GameObject> Prefabs=new Dictionary<int,UnityEngine.GameObject>();
+    public UnityEngine.GameObject GetPrefab(int hash) { UnityEngine.GameObject root;return Prefabs.TryGetValue(hash,out root)?root:null; }
+#if MOB_INTEGRATION
+    public bool ForbidLiveInstances;
+    private void InstanceAccess() { if(ForbidLiveInstances)throw new Exception("Dedicated coordinator attempted to read a live scene instance"); }
+#else
+    private void InstanceAccess() { }
+#endif
     public static ZNetScene instance = new ZNetScene(); public bool Ready=true; public Func<UnityEngine.Vector3,bool> Readiness; public readonly List<UnityEngine.Vector3> ReadinessPoints=new List<UnityEngine.Vector3>(); public readonly Dictionary<ZDOID,ZNetView> Views = new Dictionary<ZDOID,ZNetView>();
-    public ZNetView FindInstance(ZDO d) { ZNetView v; return Views.TryGetValue(d.m_uid,out v)?v:null; } public UnityEngine.GameObject FindInstance(ZDOID id) { ZNetView v; return Views.TryGetValue(id,out v)?v.gameObject:null; } public bool IsAreaReady(UnityEngine.Vector3 p) { ReadinessPoints.Add(p);return Readiness!=null?Readiness(p):Ready; }
+    public ZNetView FindInstance(ZDO d) { InstanceAccess();ZNetView v; return Views.TryGetValue(d.m_uid,out v)?v:null; } public UnityEngine.GameObject FindInstance(ZDOID id) { InstanceAccess();ZNetView v; return Views.TryGetValue(id,out v)?v.gameObject:null; } public bool IsAreaReady(UnityEngine.Vector3 p) { InstanceAccess();ReadinessPoints.Add(p);return Readiness!=null?Readiness(p):Ready; }
     public static bool InActiveArea(UnityEngine.Vector3 p,Vector2s reference) { Vector2s zone=ZoneSystem.GetZone(p);return Math.Abs(zone.x-reference.x)<=2 && Math.Abs(zone.y-reference.y)<=2; }
 }
 public sealed class ZNet : UnityEngine.Object
@@ -122,11 +131,14 @@ public class Character : UnityEngine.Component
     public enum Faction { Players, Monsters } public bool Dead, Boss, Tamed, Attack, Stagger, Attached, Riding; public Faction Side=Faction.Monsters;
     public bool IsDead() { return Dead; } public bool IsBoss() { return Boss; } public bool IsTamed() { return Tamed; } public bool InAttack() { return Attack; } public bool IsStaggering() { return Stagger; } public bool IsAttached() { return Attached; } public bool IsRiding() { return Riding; }
     public bool IsPlayer() { return this is Player; } public Faction GetFaction() { return Side; } public ZDOID GetZDOID() { return GetComponent<ZNetView>().Data.m_uid; }
+    public long GetOwner() { var view=GetComponent<ZNetView>();return view && view.IsValid()?view.Data.GetOwner():0; }
 }
-public class Player : Character { public static Player m_localPlayer; }
+public class Attack { public bool Done; public bool IsDone() { return Done; } }
+public class Humanoid : Character { private Attack m_currentAttack; public Attack CurrentAttack { get { return m_currentAttack; } set { m_currentAttack=value; } } }
+public class Player : Humanoid { public static Player m_localPlayer; }
 public class BaseAI : UnityEngine.Component
 {
-    private ZNetView m_nview; public void Init() { m_nview=GetComponent<ZNetView>(); } public bool Alerted;
+    private ZNetView m_nview; public void Init() { m_nview=GetComponent<ZNetView>(); } public bool Alerted, Charging; public bool IsCharging() { return Charging; }
     private void SetAlerted(bool value) { Alerted=value; }
     public static bool IsEnemy(Character a,Character b) { return a.Side!=b.Side; }
     public static List<BaseAI> GetAllInstances() { return new List<BaseAI>(); }
@@ -134,12 +146,15 @@ public class BaseAI : UnityEngine.Component
 }
 public class MonsterAI : BaseAI { private Character m_targetCreature;public Character Target { get { return m_targetCreature; } set { m_targetCreature=value; } } private float m_timeSinceSensedTargetCreature=9; public float Sensed { get { return m_timeSinceSensedTargetCreature; } } }
 public class Tameable : UnityEngine.Component { public bool Rider, m_commandable, Summon; public bool HaveRider() { return Rider; } }
-public class Vagon : UnityEngine.Component { public bool Used; public bool InUse() { return Used; } }
+public class Vagon : UnityEngine.Component { public bool Used; private Humanoid m_useRequester; public Humanoid Requester { get { return m_useRequester; } set { m_useRequester=value; } } public bool InUse() { return Used; } }
+public class Ship : UnityEngine.Component { private readonly List<Player> m_players=new List<Player>(); public List<Player> Passengers { get { return m_players; } } }
 public class Container : UnityEngine.Component { public enum PrivacySetting { Public,Private } public PrivacySetting m_privacy; public ZNetView m_rootObjectOverride; private bool m_loading; public bool Loading { get { return m_loading; } set { m_loading=value; } } public bool Used; public bool IsInUse() { return Used; } }
 public class Incinerator : UnityEngine.Component { private bool isInUse; public bool Burning { get { return isInUse; } set { isInUse=value; } } public Container m_container; }
 public interface Interactable { }
 public class Door : UnityEngine.MonoBehaviour, Interactable { }
 public class ItemStand : UnityEngine.MonoBehaviour, Interactable { }
+public class Fermenter : UnityEngine.MonoBehaviour, Interactable { }
+public class OfferingBowl : UnityEngine.MonoBehaviour, Interactable { }
 public class ArmorStand : UnityEngine.MonoBehaviour, Interactable { }
 public class Chair : UnityEngine.MonoBehaviour, Interactable { }
 public class Barber : UnityEngine.MonoBehaviour, Interactable { }
@@ -165,11 +180,12 @@ public sealed class ZRoutedRpc
 namespace TooManyLagsStandalone
 {
     internal static class TextEditingProtection { internal static bool Supported = true; internal static int Packets; internal static void Receive(ZNetPeer peer,long uid,ZPackage packet) { Packets++; } internal static void Disconnected(ZNetPeer peer) { } }
-    internal enum Kinds { None, Containers, Incinerators, TamedAnimals, Smelters, Doors, Seats, Beds, Workstations, Wards, Signs, Portals, OtherInteractables, ItemStands }
+    internal enum Kinds { None, Containers, Incinerators, TamedAnimals, Smelters, Doors, Seats, Beds, Workstations, Wards, Signs, Portals, OtherInteractables, ItemStands, Fermenters, Offerings, Vehicles }
     internal static class Plugin { internal const string Id="botanic.toomanylags.standalone";internal static LocalAgent Local; internal static Network Network=new Network(); internal static AuthorityController Controller; internal static readonly Settings Options=new Settings();internal static bool HooksActive=true,TargetSupport=true,SessionEnabled;internal static float CameraOverlap,CameraPrediction,CameraInterval;internal static void ApplySession(bool enabled,bool mobs,float interval,float degrees,float prediction) { SessionEnabled=enabled;Local.MobsEnabled=mobs;ApplyCameraSettings(interval,degrees,prediction); } internal static void ApplyCameraSettings(float interval,float degrees,float prediction) { CameraInterval=interval;CameraOverlap=degrees;CameraPrediction=prediction; } internal static void Warn(string m) { } }
-    internal sealed class Settings { internal float PingInterval=2, CameraInterval=.05f,CameraOverlap=30,CameraPrediction=.1f;internal bool Enabled=true,Mobs=true; }
+    internal sealed class Settings { internal float PingInterval=2, CameraInterval=.05f,CameraOverlap=30,CameraPrediction=.1f,Margin=30,MobRadius=6;internal int HighPing=200;internal bool Enabled=true,Mobs=true; }
     internal static class ConfigConsole { internal static string Request(ZNetPeer peer,string command) { return null; } internal static void Reply(ZNetPeer peer,int id,string reply) { } }
 #if !NETWORK_AUDIT
+    internal struct PlayerPeer { internal long Uid; internal ZDO Character; }
     internal enum Message { Prepare, Prepared, Commit, Result, Wake, Cancel, Target, Forward, ActivationCheck, Activated, Status, Ready, ReadyResult, ReadyLost, Relay }
     internal sealed class Network
     {
@@ -177,6 +193,8 @@ namespace TooManyLagsStandalone
         internal readonly List<Envelope> Sent=new List<Envelope>();
         internal readonly HashSet<long> AdditionalCapable=new HashSet<long>();
         internal readonly HashSet<long> LegacyText=new HashSet<long>();
+        internal readonly Dictionary<long,float> Latencies=new Dictionary<long,float>();
+        internal float Latency(long uid) { float ping;return Latencies.TryGetValue(uid,out ping)?ping:20f; }
         internal Action<Envelope> OnSend;
         internal void Send(long uid,Message message,Action<ZPackage> write) { ZPackage p=new ZPackage(); write(p); p.SetPos(0);var envelope=new Envelope { Uid=uid,Message=message,Data=p }; Sent.Add(envelope);if(OnSend!=null)OnSend(envelope); }
         internal void ToServer(Message m,Action<ZPackage> write) { Send(999,m,write); }
@@ -188,18 +206,33 @@ namespace TooManyLagsStandalone
     internal sealed class AuthorityController
     {
         internal bool Active=true; internal long DesiredOwner=22; internal readonly Handoffs Handoffs; internal int Wakes, Rejections; internal static bool Finite(UnityEngine.Vector3 p) { return !Single.IsNaN(p.x)&&!Single.IsNaN(p.y)&&!Single.IsNaN(p.z)&&!Single.IsInfinity(p.x)&&!Single.IsInfinity(p.y)&&!Single.IsInfinity(p.z); }
-        internal readonly MobSink Mobs=new MobSink();internal readonly RecipientReadiness Recipients;internal bool Shared(long uid) { return true; }
+#if MOB_INTEGRATION
+        internal readonly MobPolicy Mobs;
+#else
+        internal readonly MobSink Mobs=new MobSink();
+#endif
+        internal readonly List<PlayerPeer> Players=new List<PlayerPeer>();
+        internal readonly RecipientReadiness Recipients;internal bool Shared(long uid) { return true; }
         private readonly Dictionary<ZDOID,RecipientRequirement> requirements=new Dictionary<ZDOID,RecipientRequirement>();
         internal int RecipientLookups;
         internal int AvailabilityLookups;
         internal void RecordRecipient(ZDO d,long owner,ushort revision,uint state) { RecipientRequirement r;requirements.TryGetValue(d.m_uid,out r);r.Include(owner,revision,state);requirements[d.m_uid]=r; }
         internal bool TryRecipientState(ZDO d,long owner,out uint state) { RecipientLookups++;RecipientRequirement r;state=0;if(!requirements.TryGetValue(d.m_uid,out r)||!r.Matches(owner,d.OwnerRevision))return false;state=r.State;return true; }
         internal bool MobPair=true;internal bool WatchMobs(long uid) { return MobPair; }
-        internal AuthorityController() { Handoffs=new Handoffs(this); Recipients=new RecipientReadiness(this); }
+        internal AuthorityController() { Handoffs=new Handoffs(this); Recipients=new RecipientReadiness(this);
+#if MOB_INTEGRATION
+            Mobs=new MobPolicy(this);
+#endif
+        }
         internal bool Available(long uid,UnityEngine.Vector3 p) { AvailabilityLookups++;return uid==11 || uid==22 || uid==33 || uid==34; }
         internal bool NativeTransferSafe(ZDO data) { return ObjectCatalog.Classify(ZNetScene.instance.FindInstance(data).gameObject)==Kinds.Doors; }
         internal int CapabilityUpdates;internal void CapabilityChanged(long uid) { CapabilityUpdates++; }
-        internal long Desired(ZDO d,Kinds k,ZDOID t) { return DesiredOwner; }
+        internal long Desired(ZDO d,Kinds k,ZDOID t) {
+#if MOB_INTEGRATION
+            if(k==Kinds.None)return Mobs.Desired(d,t);
+#endif
+            return DesiredOwner;
+        }
         internal void Wake(ZDOID id) { Wakes++; } internal void Rejected(ZDOID id) { Rejections++; }
         internal bool IsManaged(ZDO d,int m) { return d!=null; }
     }
@@ -212,7 +245,9 @@ namespace TooManyLagsStandalone
         internal static bool PotentialOwnerRequest(int m) { return m=="RPC_RequestOpen".GetStableHashCode() || m=="UseDoor".GetStableHashCode() || m=="RPC_AddOre".GetStableHashCode() || m=="RPC_Damage".GetStableHashCode(); }
         internal static bool OwnerRequest(Kinds k,int m) { return m=="RPC_RequestOpen".GetStableHashCode() || m=="UseDoor".GetStableHashCode() || m=="RPC_AddOre".GetStableHashCode(); }
     }
+#if !MOB_INTEGRATION
     internal static class MobPolicy { internal static readonly KeyValuePair<int,int> TargetKey=new KeyValuePair<int,int>(4,5); internal const int WriterKey=6, RevisionKey=7; internal static bool Eligible(ZDO d) { return d!=null && d.IsValid(); } internal static bool HostilePrefab(int hash) { return hash!=0; } }
+#endif
     internal static class TargetEvents { internal static Character Read(MonsterAI ai) { return ai.Target; } internal static void Adopt(MonsterAI ai,Character t) { ai.Target=t; } }
     internal sealed class OwnershipCadence { private float next; private readonly float interval; internal OwnershipCadence(float n) { interval=n; } internal bool Due(float n) { if(n<next)return false;next=n+interval;return true; } }
 }

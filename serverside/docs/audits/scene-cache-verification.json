@@ -1,0 +1,270 @@
+{
+  "scope": "Research model plus existing guard baseline and native/reference contracts. No cache integrated into production, no Unity/network/world test, no timing measurement.",
+  "sourceHashes": [
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLagsDedicatedAddon\\docs\\audits\\SceneListCacheModelAudit.cs",
+      "sha256": "F295ACB60985ED65D5C9151E7C3380E8C42BC4E302737125F0EB863CBE5A90C2"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLagsDedicatedAddon\\docs\\audits\\SceneCacheContractAudit.ps1",
+      "sha256": "BA0A4AA4D0BE6614C14BB2BE297AE279FF8505C30C5C516D216FAA4CD6080E0E"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLagsDedicatedAddon\\docs\\audits\\RunSceneCacheAudit.ps1",
+      "sha256": "FFEA8ABF563C585827DF01C6AE2C6309F34EA0CC572E974482546BA17F40455F"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\CellReadiness.cs",
+      "sha256": "58FF40DC5AFD9849B626A4ECD07080167B58187C985BF3BC426C8B24F782EA18"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\FgnTakeover.cs",
+      "sha256": "0BD9FB34E916B960DDC25B481670B028D5050C2083B73EE2F880AB9F7CB466F4"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\FieldReader.cs",
+      "sha256": "1983E780CA309FF4BFF89D9562BE9BA679BB08F421E88C64C9C45AD83DC239B2"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\NativePup.cs",
+      "sha256": "B70909488FEE58C4F15030636BDE7B640569D763EFA795B7097CC1D07F89C22D"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\NativeWaitPatch.cs",
+      "sha256": "DD2BF88FB602AF1FE23A755FA5B4673758F8476751C6683D7E9038F2A9E0ACD4"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\Plugin.cs",
+      "sha256": "E575E7858B829D770CACD08397C1AA682EF909A98899B8930C66CF81AB121264"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\PupServerStreaming.cs",
+      "sha256": "421C7EEB905904906B9BFA01BAF49AE10F272C2CA88162A4635032ADFD8AECB8"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\Statics.cs",
+      "sha256": "1DD5CCEFA1CC228FAFC379EFD015B20AD4C1BB503A388D36F61FB97E27D6F3B9"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\StructuralTranspiler.cs",
+      "sha256": "DF47436659A9A95C3568DF6A4065E1E0DB917FD515CCF9DB36B6C9828162837C"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\SupportBounds.cs",
+      "sha256": "2265A20A3D700AE2E10128EEA37C43C99A75009FB1AD376CF1D58920E37A1E51"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\tests\\PupCompatibility\\RuntimeTests.cs",
+      "sha256": "0AC50E22502855339FDD50B552E04F7D5198ADA95BFE4D121CBDE2A7E6D3094C"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\tests\\PupCompatibility\\ModuleTests.cs",
+      "sha256": "76EE0C19E47A9707F816F4C0231715FA278CB7868AAAA7873C6D5703C78003FB"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\tests\\PupCompatibility\\RuntimeFixtures.cs",
+      "sha256": "13E3094FEE372D9E1EA6715DC827E9FE793DF6F773E00E668BF7B39413B3920E"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\tests\\PupCompatibility\\ModernPupFixtures.cs",
+      "sha256": "915C313AABC4A325E5C5932A9D680399DA3D76D4D14FE57BAF3C147A8009FF12"
+    }
+  ],
+  "nativeContracts": {
+    "checks": [
+      {
+        "name": "Native position field is written after sector callbacks",
+        "passed": true
+      },
+      {
+        "name": "Native ZDO hash depends on mutable UID",
+        "passed": true
+      },
+      {
+        "name": "Native prefab availability is dictionary key membership",
+        "passed": true
+      },
+      {
+        "name": "Scene registration writes Created independently of prefab filtering",
+        "passed": true
+      },
+      {
+        "name": "Sector callbacks carry explicit SectorIndex arguments",
+        "passed": true
+      },
+      {
+        "name": "Chunk loading has a separate InitialAddToSector path",
+        "passed": true
+      },
+      {
+        "name": "Deserialize bypasses SetPrefab",
+        "passed": true
+      },
+      {
+        "name": "Deserialize sets Distant directly",
+        "passed": true
+      },
+      {
+        "name": "Native portal storage must be read in collection",
+        "passed": true
+      },
+      {
+        "name": "FGN filter observes native prefab availability",
+        "passed": true
+      },
+      {
+        "name": "FGN filter observes current zone identity membership",
+        "passed": true
+      },
+      {
+        "name": "FGN candidate filter does not filter Created or ownership",
+        "passed": true
+      },
+      {
+        "name": "Fork clears reusable buffers every pass",
+        "passed": true
+      },
+      {
+        "name": "Fork recollects objects in its scene pass",
+        "passed": true
+      },
+      {
+        "name": "PUP uses Created true for suppressed originals",
+        "passed": true
+      },
+      {
+        "name": "PUP restore releases Created without guaranteed membership changes",
+        "passed": true
+      },
+      {
+        "name": "PUP removes a live instance separately from ZDO membership",
+        "passed": true
+      },
+      {
+        "name": "PUP can repair a sector without changing position",
+        "passed": true
+      },
+      {
+        "name": "PUP cell origin differs from native centred zones",
+        "passed": true
+      },
+      {
+        "name": "TML excludes baked originals separately in ownership registration",
+        "passed": true
+      },
+      {
+        "name": "TML structural guard uses owner and live PUP revisions",
+        "passed": true
+      },
+      {
+        "name": "FGN 1.5.53 still collects and filters in each served scene pass",
+        "passed": true
+      },
+      {
+        "name": "FGN 1.5.53 still services creation and removal",
+        "passed": true
+      },
+      {
+        "name": "FGN 1.5.53 candidate filter does not consult Created/owner",
+        "passed": true
+      },
+      {
+        "name": "FGN 1.5.53 keeps live creation/readiness/nearest-player checks",
+        "passed": true
+      },
+      {
+        "name": "FGN 1.5.65 still collects and filters in each served scene pass",
+        "passed": true
+      },
+      {
+        "name": "FGN 1.5.65 still services creation and removal",
+        "passed": true
+      },
+      {
+        "name": "FGN 1.5.65 candidate filter does not consult Created/owner",
+        "passed": true
+      },
+      {
+        "name": "FGN 1.5.65 keeps live creation/readiness/nearest-player checks",
+        "passed": true
+      },
+      {
+        "name": "Released PUP suppression writes Created",
+        "passed": true
+      },
+      {
+        "name": "Released PUP suppression release also writes Created",
+        "passed": true
+      },
+      {
+        "name": "Released PUP unload preserves ZDO while resetting/removing its view",
+        "passed": true
+      },
+      {
+        "name": "Released PUP repairs sectors through a separately bound delegate",
+        "passed": true
+      }
+    ],
+    "inputs": [
+      {
+        "path": "D:/Steam-Bibliotheksordner/steamapps/common/Valheim/valheim_Data/Managed/assembly_valheim.dll",
+        "sha256": "94998885B103D6E5F5480123EAEE0A093E82AF2DDEEEE37536C15BF555F24F3A"
+      },
+      {
+        "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\PupUpdateAudit-2026-10-14\\pup-1.0.36\\ValheimInstanceCombiner\\InstanceCombinerMod.cs",
+        "sha256": "94877D0E20A28F0262215EBBB3E6FF5838195DA68E5C90D57FC35B0812AF03AB"
+      },
+      {
+        "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\ServersideSimulation-reference\\src\\Valheim_Serverside\\Features\\Core.cs",
+        "sha256": "820886B2A56EB820FD86F33B6758FE1F259DE32B69094971082742F48E688EFD"
+      },
+      {
+        "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\KinematicVelocityAudit-2026-10-14\\fgn-1.5.53\\FiresGhettoNetworkMod\\ServerAuthorityPatches.cs",
+        "sha256": "3316E3D62AD4B794BCC7C28A6950B629F83CCF5F53D1DDC7731A80FFABC9B5E2"
+      },
+      {
+        "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\KinematicVelocityAudit-2026-10-14\\fgn-1.5.53\\FiresGhettoNetworkMod.AutoTune\\ZoneLoadPatches.cs",
+        "sha256": "7FE9623FD21170466622FBF97AC95B4B071708E7D7BC154C7354CB444709E10F"
+      },
+      {
+        "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\AuthorityController.cs",
+        "sha256": "BD6CE5EFFE11188088AD775D74C5FB55677AC055FDF102E1E0B11ADE74AA3DAE"
+      },
+      {
+        "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\Statics.cs",
+        "sha256": "1DD5CCEFA1CC228FAFC379EFD015B20AD4C1BB503A388D36F61FB97E27D6F3B9"
+      },
+      {
+        "path": "C:\\Users\\Niclas\\AppData\\Roaming\\Thunderstore Mod Manager\\DataFolder\\Valheim\\cache\\VerdantsAscent-FiresGhettoNetworking\\1.5.53\\plugins\\FiresGhettoNetworking\\VAGhettoNetworking.dll",
+        "sha256": "41B18BF36F837620DC5A76DE3BEE0569555B699AAA10722B8D95C07A70A638B2"
+      },
+      {
+        "path": "C:\\Users\\Niclas\\AppData\\Roaming\\Thunderstore Mod Manager\\DataFolder\\Valheim\\cache\\VerdantsAscent-FiresGhettoNetworking\\1.5.65\\plugins\\FiresGhettoNetworking\\VAGhettoNetworking.dll",
+        "sha256": "E43F8E7B7614D0C6B7C8437CD235D837851955A41ACE1238858EC5FCEF75B2CB"
+      },
+      {
+        "path": "C:\\Users\\Niclas\\AppData\\Roaming\\Thunderstore Mod Manager\\DataFolder\\Valheim\\cache\\PUP82-PUP_FPS\\1.0.36\\PUP_FPS.dll",
+        "sha256": "C685B43D90C99BA21A8C9477D095BE76CFAF703C9F3430FD8D678302CE8308F9"
+      }
+    ],
+    "scope": "Native IL plus version-scoped reference source checks; no production cache or live Unity integration executed."
+  },
+  "results": [
+    {
+      "name": "scene-cache-model-dotnet",
+      "output": "MODEL ONLY: 10000 objects; 1000 cache hits; saved 10000000 filter visits and reference copies after cold build; checks=100000 prefab, 4000 zone. No timing/performance claim.\r\nMODEL ONLY: filter-only seam preserves collection; 10000 objects, 1000 hits, saves 10000000 filter visits; reference copies retained. No timing/performance claim.\r\nScene candidate cache MODEL: 4095 assertions passed; no Unity/network/production integration executed.\r\n"
+    },
+    {
+      "name": "scene-cache-model-mono",
+      "output": "MODEL ONLY: 10000 objects; 1000 cache hits; saved 10000000 filter visits and reference copies after cold build; checks=100000 prefab, 4000 zone. No timing/performance claim.\r\nMODEL ONLY: filter-only seam preserves collection; 10000 objects, 1000 hits, saves 10000000 filter visits; reference copies retained. No timing/performance claim.\r\nScene candidate cache MODEL: 4095 assertions passed; no Unity/network/production integration executed.\r\n"
+    },
+    {
+      "name": "scene-cache-pup-baseline-dotnet",
+      "output": "PASS: 24 optional PUP module gate/lifecycle/streaming assertions; absent/disabled paths install no guards.\r\nPASS: 63 native-freeze/FGN/statics regression assertions; 100000 steady-owner calls make no readiness requests.\r\n"
+    },
+    {
+      "name": "scene-cache-pup-baseline-mono",
+      "output": "PASS: 24 optional PUP module gate/lifecycle/streaming assertions; absent/disabled paths install no guards.\r\nPASS: 63 native-freeze/FGN/statics regression assertions; 100000 steady-owner calls make no readiness requests.\r\n"
+    }
+  ]
+}

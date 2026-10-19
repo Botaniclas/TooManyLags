@@ -1,0 +1,4 @@
+# Preserve exact C# bytes for the SHA-256 import-equivalence checks.
+*.cs -text whitespace=cr-at-eol,-blank-at-eof
+*.png binary
+*.cfg whitespace=cr-at-eol,-blank-at-eof

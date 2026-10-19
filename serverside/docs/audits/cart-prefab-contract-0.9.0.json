@@ -1,0 +1,21 @@
+{
+  "asset": "Assets/GameElements/Cart/Cart.prefab",
+  "cartComponent": 7526896876782409018,
+  "containerComponent": 6015269178184750394,
+  "cartContainer": {
+    "m_FileID": 0,
+    "m_PathID": 6015269178184750394
+  },
+  "containerCart": {
+    "m_FileID": 0,
+    "m_PathID": 7526896876782409018
+  },
+  "networkOverride": {
+    "m_FileID": 0,
+    "m_PathID": -2626014331710548678
+  },
+  "privacy": 2,
+  "networkComponentIsRoot": true,
+  "persistent": true,
+  "distant": false
+}

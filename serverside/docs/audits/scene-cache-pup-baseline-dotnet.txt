@@ -1,0 +1,2 @@
+PASS: 24 optional PUP module gate/lifecycle/streaming assertions; absent/disabled paths install no guards.
+PASS: 63 native-freeze/FGN/statics regression assertions; 100000 steady-owner calls make no readiness requests.

@@ -1,0 +1,179 @@
+{
+  "checks": [
+    {
+      "name": "Native position field is written after sector callbacks",
+      "passed": true
+    },
+    {
+      "name": "Native ZDO hash depends on mutable UID",
+      "passed": true
+    },
+    {
+      "name": "Native prefab availability is dictionary key membership",
+      "passed": true
+    },
+    {
+      "name": "Scene registration writes Created independently of prefab filtering",
+      "passed": true
+    },
+    {
+      "name": "Sector callbacks carry explicit SectorIndex arguments",
+      "passed": true
+    },
+    {
+      "name": "Chunk loading has a separate InitialAddToSector path",
+      "passed": true
+    },
+    {
+      "name": "Deserialize bypasses SetPrefab",
+      "passed": true
+    },
+    {
+      "name": "Deserialize sets Distant directly",
+      "passed": true
+    },
+    {
+      "name": "Native portal storage must be read in collection",
+      "passed": true
+    },
+    {
+      "name": "FGN filter observes native prefab availability",
+      "passed": true
+    },
+    {
+      "name": "FGN filter observes current zone identity membership",
+      "passed": true
+    },
+    {
+      "name": "FGN candidate filter does not filter Created or ownership",
+      "passed": true
+    },
+    {
+      "name": "Fork clears reusable buffers every pass",
+      "passed": true
+    },
+    {
+      "name": "Fork recollects objects in its scene pass",
+      "passed": true
+    },
+    {
+      "name": "PUP uses Created true for suppressed originals",
+      "passed": true
+    },
+    {
+      "name": "PUP restore releases Created without guaranteed membership changes",
+      "passed": true
+    },
+    {
+      "name": "PUP removes a live instance separately from ZDO membership",
+      "passed": true
+    },
+    {
+      "name": "PUP can repair a sector without changing position",
+      "passed": true
+    },
+    {
+      "name": "PUP cell origin differs from native centred zones",
+      "passed": true
+    },
+    {
+      "name": "TML excludes baked originals separately in ownership registration",
+      "passed": true
+    },
+    {
+      "name": "TML structural guard uses owner and live PUP revisions",
+      "passed": true
+    },
+    {
+      "name": "FGN 1.5.53 still collects and filters in each served scene pass",
+      "passed": true
+    },
+    {
+      "name": "FGN 1.5.53 still services creation and removal",
+      "passed": true
+    },
+    {
+      "name": "FGN 1.5.53 candidate filter does not consult Created/owner",
+      "passed": true
+    },
+    {
+      "name": "FGN 1.5.53 keeps live creation/readiness/nearest-player checks",
+      "passed": true
+    },
+    {
+      "name": "FGN 1.5.65 still collects and filters in each served scene pass",
+      "passed": true
+    },
+    {
+      "name": "FGN 1.5.65 still services creation and removal",
+      "passed": true
+    },
+    {
+      "name": "FGN 1.5.65 candidate filter does not consult Created/owner",
+      "passed": true
+    },
+    {
+      "name": "FGN 1.5.65 keeps live creation/readiness/nearest-player checks",
+      "passed": true
+    },
+    {
+      "name": "Released PUP suppression writes Created",
+      "passed": true
+    },
+    {
+      "name": "Released PUP suppression release also writes Created",
+      "passed": true
+    },
+    {
+      "name": "Released PUP unload preserves ZDO while resetting/removing its view",
+      "passed": true
+    },
+    {
+      "name": "Released PUP repairs sectors through a separately bound delegate",
+      "passed": true
+    }
+  ],
+  "inputs": [
+    {
+      "path": "D:/Steam-Bibliotheksordner/steamapps/common/Valheim/valheim_Data/Managed/assembly_valheim.dll",
+      "sha256": "94998885B103D6E5F5480123EAEE0A093E82AF2DDEEEE37536C15BF555F24F3A"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\PupUpdateAudit-2026-10-14\\pup-1.0.36\\ValheimInstanceCombiner\\InstanceCombinerMod.cs",
+      "sha256": "94877D0E20A28F0262215EBBB3E6FF5838195DA68E5C90D57FC35B0812AF03AB"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\ServersideSimulation-reference\\src\\Valheim_Serverside\\Features\\Core.cs",
+      "sha256": "820886B2A56EB820FD86F33B6758FE1F259DE32B69094971082742F48E688EFD"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\KinematicVelocityAudit-2026-10-14\\fgn-1.5.53\\FiresGhettoNetworkMod\\ServerAuthorityPatches.cs",
+      "sha256": "3316E3D62AD4B794BCC7C28A6950B629F83CCF5F53D1DDC7731A80FFABC9B5E2"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\KinematicVelocityAudit-2026-10-14\\fgn-1.5.53\\FiresGhettoNetworkMod.AutoTune\\ZoneLoadPatches.cs",
+      "sha256": "7FE9623FD21170466622FBF97AC95B4B071708E7D7BC154C7354CB444709E10F"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\AuthorityController.cs",
+      "sha256": "BD6CE5EFFE11188088AD775D74C5FB55677AC055FDF102E1E0B11ADE74AA3DAE"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags\\src\\PupCompatibility\\Statics.cs",
+      "sha256": "1DD5CCEFA1CC228FAFC379EFD015B20AD4C1BB503A388D36F61FB97E27D6F3B9"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\AppData\\Roaming\\Thunderstore Mod Manager\\DataFolder\\Valheim\\cache\\VerdantsAscent-FiresGhettoNetworking\\1.5.53\\plugins\\FiresGhettoNetworking\\VAGhettoNetworking.dll",
+      "sha256": "41B18BF36F837620DC5A76DE3BEE0569555B699AAA10722B8D95C07A70A638B2"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\AppData\\Roaming\\Thunderstore Mod Manager\\DataFolder\\Valheim\\cache\\VerdantsAscent-FiresGhettoNetworking\\1.5.65\\plugins\\FiresGhettoNetworking\\VAGhettoNetworking.dll",
+      "sha256": "E43F8E7B7614D0C6B7C8437CD235D837851955A41ACE1238858EC5FCEF75B2CB"
+    },
+    {
+      "path": "C:\\Users\\Niclas\\AppData\\Roaming\\Thunderstore Mod Manager\\DataFolder\\Valheim\\cache\\PUP82-PUP_FPS\\1.0.36\\PUP_FPS.dll",
+      "sha256": "C685B43D90C99BA21A8C9477D095BE76CFAF703C9F3430FD8D678302CE8308F9"
+    }
+  ],
+  "scope": "Native IL plus version-scoped reference source checks; no production cache or live Unity integration executed."
+}

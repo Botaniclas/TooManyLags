@@ -1,0 +1,21 @@
+{
+  "version": "0.13.0",
+  "stage": "beta candidate",
+  "dllSha256": "20B477F4D97D689F7220D91B4BE58D80B9AD8AAE52B18B1DEE2088086381BE8D",
+  "gameSha256": "94998885B103D6E5F5480123EAEE0A093E82AF2DDEEEE37536C15BF555F24F3A",
+  "testedAtUtc": "2026-10-18T16:31:44.2382669Z",
+  "baseline": {
+    "package": "Sarkastic_gg-Dedicated_Simulation-1.18.0",
+    "dllSha256": "51D838EA1EDF8ED27E7F0BEA6FE39D9761B5A1F71DB599BB2EE196B83A325650",
+    "metadata": "PASS: 151 real native/released-fork metadata and ownership contract assertions. No live world claim.",
+    "startup": "PASS: production startup packet/completion, native observer state-type contracts, boat impact field and backend helm rewrite, optional FireControl rewrite, seven refill targets and real Steam reader checked against installed game/released dependency. Native Unity detours remain fixture-only; no Unity world or Steam session started."
+  },
+  "current": {
+    "package": "Sarkastic_gg-Dedicated_Simulation-1.23.2",
+    "dllSha256": "71F1FEDF6D05995D0BFE078ACFE537F5E17EA9CB4C58579FD6DC77D031425B05",
+    "verificationGroups": 32,
+    "metadata": "PASS: 151 real native/released-fork metadata and ownership contract assertions. No live world claim.",
+    "startup": "PASS: production startup packet/completion, native observer state-type contracts, boat impact field and backend helm rewrite, optional FireControl rewrite, seven refill targets and real Steam reader checked against installed game/released dependency. Native Unity detours remain fixture-only; no Unity world or Steam session started."
+  },
+  "liveMultiplayerTested": false
+}

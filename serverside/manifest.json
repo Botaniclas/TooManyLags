@@ -1,0 +1,10 @@
+{
+  "name": "TooManyLags_Server_Side",
+  "version_number": "0.13.1",
+  "website_url": "https://github.com/Botaniclas/TooManyLags",
+  "description": "Less connection lag, no client mod. Ownership optimisation for Dedicated Simulation: local nearby interactions, server-owned shared fields and smarter Hostile Mobs. Beta.",
+  "dependencies": [
+    "denikson-BepInExPack_Valheim-5.4.2351",
+    "Sarkastic_gg-Dedicated_Simulation-1.18.0"
+  ]
+}

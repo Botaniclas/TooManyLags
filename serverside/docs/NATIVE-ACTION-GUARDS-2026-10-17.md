@@ -1,0 +1,37 @@
+# Native inventory, deferred-action and refill review
+
+Inspected installed Valheim assembly SHA256: `94998885B103D6E5F5480123EAEE0A093E82AF2DDEEEE37536C15BF555F24F3A`. Source snapshots: `work/InteractionTypesAudit-2026-10-14/sources`. The current metadata suite checks the relevant methods/fields against that binary. Dependency: released Dedicated Simulation 1.18.0. These are source/managed findings, not a live multiplayer reproduction.
+
+## Inventories: native protection exists, with a specific entry point
+
+`Container.RPC_RequestOpen` runs on the current owner and checks its local `IsInUse` and access. On acceptance it explicitly assigns the requester, sends `RPC_OpenResponse`, and that response opens the GUI. Stack and take-all use their own native transactions. `Container.IsInUse` reads the local `m_inUse`; the owner also publishes `s_inUse` for other copies.
+
+`ZDO.SetOwner` does not call that protection. A grid changing the owner directly bypasses the native open/grant decision. A false replicated flag also does not prove there is no outstanding opening/stack/take-all response or final inventory write. Calling `RPC_RequestOpen` to ask permission is not a read-only probe: it starts the real open/grant transaction.
+
+In 0.6.0, public stationary Container identities enter the index for server returns. Player ownership still comes from real native opening; the grid does not synthesize player-directed opening or force player-to-player handoffs. A shared field reclaims an active player's chest with the actual native RequestOpen transaction, not a permission probe followed by SetOwner. The native handler checks its owner-local state and commits the server itself. The dedicated server has no local player, so its native response opens no GUI and sets no in-use flag. Reply bookkeeping uses source identity and native ownership revisions; denial or timeout never authorizes a forced write.
+
+Outside every player footprint, a supported chest is beyond normal use range: the complete inner 3x3 covers at least the native four-metre inventory range with the allowed cell sizes. Such returns use a direct assignment, without an opening request. A lone remaining player's field does not trigger a shared-field reclaim just because the server overlap cooldown is still active. Native zero-owner releases and disconnected-owner recovery remain intact. This depends on the stated native range/full-rear coverage; mods extending inventory use beyond the footprint need separate review.
+
+Only real overlap takeover attempts allocate request state, at most one in flight per chest/source revision. There is no inventory polling or expiry-triggered replay; fresh grid activity may retry after a refusal/timeout. Unload clears the object's state. Private/group containers, mobile vehicles, graves, incinerators, mixed transaction identities and unknown inventory controls remain excluded. Native pre-inUse GUI timing and remote local transactions do not acquire an additional client acknowledgement.
+
+## Exact delayed-action signals
+
+| Action | Useful check when the action runs on the server | What another client's copy does not prove | Current policy |
+|---|---|---|---|
+| Incinerator | Its private Boolean `isInUse` is set by the actual `Incinerate` coroutine and cleared by `StopAOE`. Also check its Container's local `IsInUse`. This can veto an actual server-to-player attempt without a guessed timer. | The Boolean is instance-local. Lever animation broadcasts show part of the sequence, but do not supply the inventory grant/final-write transaction or the full running state. Polling the server's false local flag cannot query the client. | Keep native inventory/dependency ownership. No unused incinerator guard is installed while the entire identity is excluded. |
+| Fermenter tap | `IsInvoking("DelayedTap")` on the executing instance. | `m_delayedTapItem` is private and is not cleared by `DelayedTap`; testing it for nonzero would create a permanent false lock. `DelayedTap` itself has no ownership check, so a transfer alone is not evidence of cancelled output. Another copy does not know that queued callback. | Native ownership; no blanket claim that every transfer loses output. |
+| Boss offering | Native `IsBossSpawnQueued` calls `IsInvoking("DelayedSpawnBoss")` on that instance. | The pending spawn point/callback are local. Another owner's false predicate is not an acknowledgement; a new copy could accept another request while the old callback remains queued. | Preserve native/dependency ownership and ritual requests. |
+| Item/armour stand attachment and orientation | Local `m_queuedItem`, `UpdateAttach` and orientation invokes describe the requester's work. | The requester can already be queued while waiting for a native ownership grant. A server-side empty queue is not a completion signal. | Native ownership/grants. Early delegation with sticky client ownership is possible, but full automatic reclaim is not supplied. |
+| Item-stand guardian power | `DelayedPowerActivation` acts on `Player.m_localPlayer`. | Its delay alone is not an owner-side object transaction. | No extra lock solely because this local player action is delayed; the stand identity is excluded for attachment/grant reasons. |
+| Sign / portal editor | Submission is visible; editor opening is local. | No native server query establishes that a remote editor is open or finished. | Keep native sign ownership and backend portal policy. |
+| Smelter / cooking production, shield charging, turret cooldown | Progress/counts/times use native serialized state. | Normal production must not be mistaken for a new user insert or a private pending GUI transaction. | These supported groups keep grid ownership; only observed refilling adds the new one-second veto. |
+
+If a deferred group is enabled later, an exact local-running predicate belongs in the actual transfer path, only when the server is its current owner. It does not need a 0.2-second all-object poll. A veto should discard the old attempt and require fresh field activity after completion; no automatic delayed takeover is needed. That local check still would not authorize stealing a client-owned private transaction.
+
+## Implemented refill hold
+
+Seven native server handler pairs compare before/after state: Smelter add-ore/add-fuel, CookingStation add-item/add-fuel, Fireplace add-fuel, ShieldGenerator add-fuel and Turret add-ammo. This catches actual accepted changes, including fuel refilled after prior server consumption. Failed/full attempts do not start the hold. No new hook runs on every numeric ZDO setter or automatic shield fuel update.
+
+For client-owned stations, applied native object data compares fuel/queue/ammo increases and empty-to-filled cooking slots. Consumption, removal, firing and normal raw-to-cooked changes do not restart it. The default one-second timestamp is refreshed by another observed insert. It cancels pending takeover work; expiry alone does not retry it. An actual later grid request can transfer after expiry. Native release/reassignment rules stay active.
+
+The timestamp starts when the server observes the insert. A purely local client action is unknown before transmission; net-zero/coalesced changes can conceal an insert. The existing cancellable player-to-server grace is retained, but neither a sampled flag nor a one-second window is a universal final-state acknowledgement. No extra client messages or station polling are introduced.

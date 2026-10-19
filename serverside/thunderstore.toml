@@ -1,0 +1,42 @@
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "Botaniclas"
+name = "TooManyLags_Server_Side"
+versionNumber = "0.13.1"
+description = "Less connection lag, no client mod. Ownership optimisation for Dedicated Simulation: local nearby interactions, server-owned shared fields and smarter Hostile Mobs. Beta."
+websiteUrl = "https://github.com/Botaniclas/TooManyLags"
+containsNsfwContent = false
+
+[package.dependencies]
+denikson-BepInExPack_Valheim = "5.4.2351"
+Sarkastic_gg-Dedicated_Simulation = "1.18.0"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "./outputs"
+
+[[build.copy]]
+source = "./bin/TooManyLagsServerSide.dll"
+target = "TooManyLagsServerSide.dll"
+
+[[build.copy]]
+source = "./CHANGELOG.md"
+target = "CHANGELOG.md"
+
+[[build.copy]]
+source = "./LICENSE"
+target = "LICENSE"
+
+[[build.copy]]
+source = "./THIRD_PARTY_NOTICES.md"
+target = "THIRD_PARTY_NOTICES.md"
+
+[publish]
+repository = "https://thunderstore.io"
+communities = ["valheim"]
+
+[publish.categories]
+valheim = ["mods", "tweaks", "utility", "server-side", "ai-generated"]

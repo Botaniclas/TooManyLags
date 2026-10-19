@@ -1,0 +1,82 @@
+{
+  "gameSha256": "94998885B103D6E5F5480123EAEE0A093E82AF2DDEEEE37536C15BF555F24F3A",
+  "checks": [
+    {
+      "name": "Creation still observes active-area loading",
+      "passed": true
+    },
+    {
+      "name": "Creation still observes type-specific readiness",
+      "passed": true
+    },
+    {
+      "name": "Creation reads live Created flag",
+      "passed": true
+    },
+    {
+      "name": "Creation copies candidates to scratch before sorting",
+      "passed": true
+    },
+    {
+      "name": "Native collection copies sector references with AddRange",
+      "passed": true
+    },
+    {
+      "name": "Native collection includes portal storage",
+      "passed": true
+    },
+    {
+      "name": "Far collection reads live Distant flag",
+      "passed": true
+    },
+    {
+      "name": "Removal marks current candidates",
+      "passed": true
+    },
+    {
+      "name": "Removal reads live instances",
+      "passed": true
+    },
+    {
+      "name": "Loaded zones refreshed through live dictionary lookup",
+      "passed": true
+    },
+    {
+      "name": "Zone poke can spawn existing generated zone roots",
+      "passed": true
+    },
+    {
+      "name": "Zone poke chooses generated versus new mode",
+      "passed": true
+    },
+    {
+      "name": "Zone spawn has terrain readiness gate",
+      "passed": true
+    },
+    {
+      "name": "Zone spawn places generated vegetation",
+      "passed": true
+    },
+    {
+      "name": "Zone spawn does not call ZNetScene object creation",
+      "passed": true
+    },
+    {
+      "name": "Native sector moves remove old membership",
+      "passed": true
+    },
+    {
+      "name": "Native sector moves add new membership",
+      "passed": true
+    },
+    {
+      "name": "Network imports can directly replace prefab metadata",
+      "passed": true
+    },
+    {
+      "name": "Network imports write Distant metadata",
+      "passed": true
+    }
+  ],
+  "scope": "Installed native metadata/IL only. Does not execute Unity, FGN or an optimisation."
+}

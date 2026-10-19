@@ -1,0 +1,228 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1350" viewBox="0 0 1600 1350" role="img" aria-labelledby="title desc">
+<title id="title">TooManyLags Server Side: grid coverage and transition delays</title><desc id="desc">Four north-facing examples using production grid masks. Normal: nine immediate red cells plus three orange cells with 0.2 seconds delay. Fast movement: the same twelve cells are immediate. Poor connection: sixteen immediate red cells plus three orange cells. Poor connection and fast movement: all nineteen cells are immediate. White cells make no player-grid request. Yellow outer cells are disabled by default. Green marks the player and character heading.</desc>
+<rect x="0" y="0" width="1600" height="1350" rx="0" fill="#FFFFFF"/>
+<text x="54" y="45" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" fill="#5B6878">TOOMANYLAGS / SERVER SIDE</text>
+<text x="52" y="103" font-family="Segoe UI,Arial,sans-serif" font-size="38" font-weight="700" fill="#172332">Grid coverage and transition delays</text>
+<text x="55" y="142" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#526072">Default directional settings. Poor connections expand the grid; fast movement removes the forward wait.</text>
+<rect x="56" y="179" width="20" height="20" rx="4" fill="#F04A55"/>
+<text x="88" y="193" font-family="Segoe UI,Arial,sans-serif" font-size="19" font-weight="700" fill="#253344">Immediate: 0 s</text>
+<rect x="322" y="179" width="20" height="20" rx="4" fill="#F49B32"/>
+<text x="354" y="193" font-family="Segoe UI,Arial,sans-serif" font-size="19" font-weight="700" fill="#253344">Forward: 0.2 s</text>
+<rect x="594" y="179" width="20" height="20" rx="4" fill="#FFFFFF" stroke="#CED5DE" stroke-width="1.5"/>
+<text x="626" y="193" font-family="Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#526072">No player-grid request</text>
+<rect x="980" y="179" width="20" height="20" rx="4" fill="#F4D54D"/>
+<text x="1012" y="193" font-family="Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#526072">Optional outer: 3 s (off by default)</text>
+<rect x="48" y="230" width="740" height="480" rx="16" fill="#F5F7FA"/>
+<text x="72" y="276" font-family="Segoe UI,Arial,sans-serif" font-size="26" font-weight="700" fill="#172332">Normal connection</text>
+<text x="72" y="306" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Default grid, normal forward delay</text>
+<rect x="72" y="340" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="92" y1="368" x2="108" y2="368" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="134" y="340" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="154" y1="368" x2="170" y2="368" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="196" y="340" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="216" y1="368" x2="232" y2="368" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="258" y="340" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="278" y1="368" x2="294" y2="368" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="320" y="340" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="340" y1="368" x2="356" y2="368" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="72" y="402" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="92" y1="430" x2="108" y2="430" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="134" y="402" width="56" height="56" rx="5" fill="#F49B32"/>
+<rect x="196" y="402" width="56" height="56" rx="5" fill="#F49B32"/>
+<rect x="258" y="402" width="56" height="56" rx="5" fill="#F49B32"/>
+<rect x="320" y="402" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="340" y1="430" x2="356" y2="430" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="72" y="464" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="92" y1="492" x2="108" y2="492" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="134" y="464" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="196" y="464" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="258" y="464" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="320" y="464" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="340" y1="492" x2="356" y2="492" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="72" y="526" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="92" y1="554" x2="108" y2="554" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="134" y="526" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="196" y="526" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="258" y="526" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="320" y="526" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="340" y1="554" x2="356" y2="554" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="72" y="588" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="92" y1="616" x2="108" y2="616" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="134" y="588" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="196" y="588" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="258" y="588" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="320" y="588" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="340" y1="616" x2="356" y2="616" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<line x1="224" y1="541" x2="224" y2="476" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="224" y1="473" x2="212" y2="491" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="224" y1="473" x2="236" y2="491" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="224" y1="541" x2="224" y2="476" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<line x1="224" y1="473" x2="212" y2="491" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<line x1="224" y1="473" x2="236" y2="491" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<circle cx="224" cy="554" r="19" fill="#158F59" stroke="white" stroke-width="4"/>
+<text x="212" y="557" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" fill="#FFFFFF">YOU</text>
+<text x="418" y="382" font-family="Segoe UI,Arial,sans-serif" font-size="29" font-weight="700" fill="#172332">9 immediate cells</text>
+<text x="419" y="416" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#D63343">Red: 0 seconds</text>
+<text x="418" y="483" font-family="Segoe UI,Arial,sans-serif" font-size="29" font-weight="700" fill="#172332">3 forward cells</text>
+<text x="419" y="517" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#B56511">Orange: 0.2 seconds</text>
+<text x="418" y="590" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Full red 3 x 3 centre.</text>
+<text x="418" y="620" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Rear cells stay active.</text>
+<text x="73" y="686" font-family="Segoe UI,Arial,sans-serif" font-size="17" font-weight="400" fill="#526072">Character facing: up  /  4 x 4 m per cell</text>
+<rect x="812" y="230" width="740" height="480" rx="16" fill="#F5F7FA"/>
+<text x="836" y="276" font-family="Segoe UI,Arial,sans-serif" font-size="26" font-weight="700" fill="#172332">Fast movement</text>
+<text x="836" y="306" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Forward row becomes immediate at 4 m/s</text>
+<rect x="836" y="340" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="856" y1="368" x2="872" y2="368" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="898" y="340" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="918" y1="368" x2="934" y2="368" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="960" y="340" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="980" y1="368" x2="996" y2="368" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="1022" y="340" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="1042" y1="368" x2="1058" y2="368" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="1084" y="340" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="1104" y1="368" x2="1120" y2="368" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="836" y="402" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="856" y1="430" x2="872" y2="430" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="898" y="402" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="960" y="402" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1022" y="402" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1084" y="402" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="1104" y1="430" x2="1120" y2="430" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="836" y="464" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="856" y1="492" x2="872" y2="492" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="898" y="464" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="960" y="464" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1022" y="464" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1084" y="464" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="1104" y1="492" x2="1120" y2="492" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="836" y="526" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="856" y1="554" x2="872" y2="554" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="898" y="526" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="960" y="526" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1022" y="526" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1084" y="526" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="1104" y1="554" x2="1120" y2="554" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="836" y="588" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="856" y1="616" x2="872" y2="616" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="898" y="588" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="960" y="588" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1022" y="588" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1084" y="588" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="1104" y1="616" x2="1120" y2="616" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<line x1="988" y1="541" x2="988" y2="476" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="988" y1="473" x2="976" y2="491" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="988" y1="473" x2="1000" y2="491" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="988" y1="541" x2="988" y2="476" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<line x1="988" y1="473" x2="976" y2="491" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<line x1="988" y1="473" x2="1000" y2="491" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<circle cx="988" cy="554" r="19" fill="#158F59" stroke="white" stroke-width="4"/>
+<text x="976" y="557" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" fill="#FFFFFF">YOU</text>
+<text x="1182" y="382" font-family="Segoe UI,Arial,sans-serif" font-size="29" font-weight="700" fill="#172332">12 immediate cells</text>
+<text x="1183" y="416" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#D63343">Red: 0 seconds</text>
+<text x="1182" y="483" font-family="Segoe UI,Arial,sans-serif" font-size="29" font-weight="700" fill="#172332">Forward row: 0 s</text>
+<text x="1183" y="517" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#526072">Speed removes its wait.</text>
+<text x="1182" y="590" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Same area, shorter wait.</text>
+<text x="1182" y="620" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Normal wait returns below 3 m/s.</text>
+<text x="837" y="686" font-family="Segoe UI,Arial,sans-serif" font-size="17" font-weight="400" fill="#526072">Character facing: up  /  4 x 4 m per cell</text>
+<rect x="48" y="736" width="740" height="480" rx="16" fill="#F5F7FA"/>
+<text x="72" y="782" font-family="Segoe UI,Arial,sans-serif" font-size="26" font-weight="700" fill="#172332">Poor connection</text>
+<text x="72" y="812" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Larger grid starts at 200 ms ping</text>
+<rect x="72" y="846" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="92" y1="874" x2="108" y2="874" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="134" y="846" width="56" height="56" rx="5" fill="#F49B32"/>
+<rect x="196" y="846" width="56" height="56" rx="5" fill="#F49B32"/>
+<rect x="258" y="846" width="56" height="56" rx="5" fill="#F49B32"/>
+<rect x="320" y="846" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="340" y1="874" x2="356" y2="874" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="72" y="908" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="92" y1="936" x2="108" y2="936" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="134" y="908" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="196" y="908" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="258" y="908" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="320" y="908" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="340" y1="936" x2="356" y2="936" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="72" y="970" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="134" y="970" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="196" y="970" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="258" y="970" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="320" y="970" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="72" y="1032" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="134" y="1032" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="196" y="1032" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="258" y="1032" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="320" y="1032" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="72" y="1094" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="92" y1="1122" x2="108" y2="1122" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="134" y="1094" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="196" y="1094" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="258" y="1094" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="320" y="1094" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="340" y1="1122" x2="356" y2="1122" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<line x1="224" y1="1047" x2="224" y2="982" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="224" y1="979" x2="212" y2="997" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="224" y1="979" x2="236" y2="997" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="224" y1="1047" x2="224" y2="982" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<line x1="224" y1="979" x2="212" y2="997" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<line x1="224" y1="979" x2="236" y2="997" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<circle cx="224" cy="1060" r="19" fill="#158F59" stroke="white" stroke-width="4"/>
+<text x="212" y="1063" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" fill="#FFFFFF">YOU</text>
+<text x="418" y="888" font-family="Segoe UI,Arial,sans-serif" font-size="29" font-weight="700" fill="#172332">16 immediate cells</text>
+<text x="419" y="922" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#D63343">Red: 0 seconds</text>
+<text x="418" y="989" font-family="Segoe UI,Arial,sans-serif" font-size="29" font-weight="700" fill="#172332">3 forward cells</text>
+<text x="419" y="1023" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#B56511">Orange: 0.2 seconds</text>
+<text x="418" y="1096" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Red rows: 3 / 5 / 5 / 3.</text>
+<text x="418" y="1126" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Normal size returns below 150 ms.</text>
+<text x="73" y="1192" font-family="Segoe UI,Arial,sans-serif" font-size="17" font-weight="400" fill="#526072">Character facing: up  /  4 x 4 m per cell</text>
+<rect x="812" y="736" width="740" height="480" rx="16" fill="#F5F7FA"/>
+<text x="836" y="782" font-family="Segoe UI,Arial,sans-serif" font-size="26" font-weight="700" fill="#172332">Poor connection + fast movement</text>
+<text x="836" y="812" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Both adaptations active</text>
+<rect x="836" y="846" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="856" y1="874" x2="872" y2="874" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="898" y="846" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="960" y="846" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1022" y="846" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1084" y="846" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="1104" y1="874" x2="1120" y2="874" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="836" y="908" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="856" y1="936" x2="872" y2="936" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="898" y="908" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="960" y="908" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1022" y="908" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1084" y="908" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="1104" y1="936" x2="1120" y2="936" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="836" y="970" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="898" y="970" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="960" y="970" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1022" y="970" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1084" y="970" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="836" y="1032" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="898" y="1032" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="960" y="1032" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1022" y="1032" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1084" y="1032" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="836" y="1094" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="856" y1="1122" x2="872" y2="1122" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<rect x="898" y="1094" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="960" y="1094" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1022" y="1094" width="56" height="56" rx="5" fill="#F04A55"/>
+<rect x="1084" y="1094" width="56" height="56" rx="5" fill="#FFFFFF" stroke="#DCE2EA" stroke-width="1.5"/>
+<line x1="1104" y1="1122" x2="1120" y2="1122" stroke="#CBD2DC" stroke-width="2" stroke-linecap="round"/>
+<line x1="988" y1="1047" x2="988" y2="982" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="988" y1="979" x2="976" y2="997" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="988" y1="979" x2="1000" y2="997" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<line x1="988" y1="1047" x2="988" y2="982" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<line x1="988" y1="979" x2="976" y2="997" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<line x1="988" y1="979" x2="1000" y2="997" stroke="#158F59" stroke-width="6" stroke-linecap="round"/>
+<circle cx="988" cy="1060" r="19" fill="#158F59" stroke="white" stroke-width="4"/>
+<text x="976" y="1063" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" fill="#FFFFFF">YOU</text>
+<text x="1182" y="888" font-family="Segoe UI,Arial,sans-serif" font-size="29" font-weight="700" fill="#172332">19 immediate cells</text>
+<text x="1183" y="922" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#D63343">Red: 0 seconds</text>
+<text x="1182" y="989" font-family="Segoe UI,Arial,sans-serif" font-size="29" font-weight="700" fill="#172332">Forward row: 0 s</text>
+<text x="1183" y="1023" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#526072">Speed removes its wait.</text>
+<text x="1182" y="1096" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Expanded grid; forward row is red.</text>
+<text x="1182" y="1126" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">No additional configured wait.</text>
+<text x="837" y="1192" font-family="Segoe UI,Arial,sans-serif" font-size="17" font-weight="400" fill="#526072">Character facing: up  /  4 x 4 m per cell</text>
+<line x1="56" y1="1242" x2="1544" y2="1242" stroke="#DFE4EB" stroke-width="1" stroke-linecap="round"/>
+<text x="56" y="1277" font-family="Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#253344">Thresholds and delays are configurable. White cells are not requested by the player grid; this does not mean unloaded.</text>
+<text x="56" y="1308" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#526072">Cardinal direction shown. Diagonal large grids use 20 red + 3 forward cells. Loading and active-use guards still apply.</text>
+</svg>

@@ -27,16 +27,9 @@ This concerns completely vacated fields; an overlapping field that still contain
 
 **`DirectionalGridMode = true`** uses the character's direction, not the free camera. Leave it enabled initially. Both retention modes keep the full red 3x3, including rear cells. **`EnableOuterCells = false`** leaves yellow cells off; with this default, rounded 5x5 and 7x7 use the same normal red/orange footprint.
 
-Default example, facing upwards; each cell is 4 metres:
+**Visual examples of the defaults:** character direction points upwards; each cell is 4 x 4 metres. The four panels show normal coverage, fast movement, poor connection and both adaptations together. White cells make no player-grid request; they are not unloaded cells. Yellow outer cells are disabled by default.
 
-```text
-    Forward
-       ^
-   O   O   O     Orange: 0.2 seconds
-   R   R   R
-   R   P   R     Red: 0 seconds; P = player
-   R   R   R
-```
+![Server Side default grids: normal coverage has nine immediate red cells and three orange cells with a 0.2-second delay; fast movement makes all twelve immediate. Poor connections expand this to sixteen red plus three orange cells, or nineteen immediate cells when also moving fast.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/serverside/docs/grid-coverage.png)
 
 | Setting | Default | Purpose |
 |---|---|---|
@@ -46,23 +39,15 @@ Default example, facing upwards; each cell is 4 metres:
 
 The delays can avoid unnecessary ownership changes at the edge. Lower delays or larger coverage can help poor connections and fast movement; they also affect more objects or create more transfers. Zero removes only the configured wait, not network delivery, loading or handoff protection.
 
-**`FastMovementThresholdMetersPerSecond = 4`** makes the orange row immediate at 4 m/s horizontal speed, forming twelve immediate cells. It returns to the orange delay below **3 m/s** (75% of the threshold). Zero disables this boost. This uses native velocity without extra client messages.
+**`FastMovementThresholdMetersPerSecond = 4`** makes the orange row immediate at 4 m/s horizontal speed, forming twelve immediate cells in the normal grid (top-right panel). It changes the delay, not the footprint. It returns to the orange delay below **3 m/s** (75% of the threshold). Zero disables this adaptation. This uses native velocity without extra client messages.
 
 With `DirectionalGridMode=false`, the entire selected pattern is active with **`TransitionDelaySeconds = 2`**. Red/orange/yellow delays and the speed boost do not control that full-grid mode. Pattern and cell settings do not change native loading distances.
 
 ## 3. Automatic coverage for poor connections
 
-**`LargeGridPingThresholdMs = 200`** expands directional coverage when measured ping reaches 200 ms. Facing upwards, the larger footprint has four red rows of **3 / 5 / 5 / 3** cells, plus an orange row ahead:
+**`LargeGridPingThresholdMs = 200`** expands directional coverage when measured ping reaches 200 ms (bottom-left panel above). Facing upwards, the larger footprint has four red rows of **3 / 5 / 5 / 3** cells, plus an orange row ahead: **16 immediate red + 3 orange cells**.
 
-```text
-    Forward
-       ^
-     O O O
-     R R R
-   R R R R R
-   R R P R R
-     R R R
-```
+The same movement threshold applies to the expanded grid. At 4 m/s, its orange row also becomes immediate: **19 immediate cells** (bottom-right panel). Slowing below 3 m/s restores the orange delay without shrinking the grid; ping controls its size separately.
 
 Diagonals use a grid-aligned approximation: twenty red cells plus three orange, rather than sixteen plus three. The grid shrinks below 150 ms with the default threshold. Ping is cached for one second; unavailable telemetry keeps the current coverage size. Zero disables adaptation. Full-grid mode keeps its selected shape.
 

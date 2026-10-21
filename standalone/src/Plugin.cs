@@ -5,7 +5,7 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.1.2.0")]
+[assembly: AssemblyVersion("1.1.3.0")]
 namespace TooManyLagsStandalone
 {
     [BepInPlugin(Id, "TooManyLags - Standalone", Version)]
@@ -15,7 +15,7 @@ namespace TooManyLagsStandalone
     [BepInIncompatibility("com.Fire.FiresGhettoNetworkMod")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.standalone", Version = "1.1.2";
+        internal const string Id = "botanic.toomanylags.standalone", Version = "1.1.3";
         internal static AuthorityController Controller;
         internal static Plugin Instance;
         internal static Network Network;

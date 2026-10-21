@@ -13,7 +13,7 @@ internal static class ConfigProbe
             string core = args[2];
             AppDomain.CurrentDomain.AssemblyResolve += delegate(object sender, ResolveEventArgs request)
             { string path = Path.Combine(core, new AssemblyName(request.Name).Name + ".dll"); return File.Exists(path) ? Assembly.LoadFrom(path) : null; };
-            var config = new ConfigFile(args[1], false, new BepInPlugin("botanic.toomanylags.dedicatedaddon", "TooManyLags - Server Side", "0.13.1"));
+            var config = new ConfigFile(args[1], false, new BepInPlugin("botanic.toomanylags.dedicatedaddon", "TooManyLags - Server Side", "0.13.2"));
             config.SaveOnConfigSet = false;
             Type settings = Assembly.LoadFrom(args[0]).GetType("TooManyLagsDedicatedAddon.Settings", true);
             object values = Activator.CreateInstance(settings, BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { config }, null);

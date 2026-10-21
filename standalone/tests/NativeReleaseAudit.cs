@@ -36,7 +36,7 @@ internal static class NativeReleaseAudit
                     foreach (CustomAttribute attr in entry.CustomAttributes)
                     {
                         Check(attr.AttributeType.Name != "BepInDependency", "Dependency attribute present");
-                        if (attr.AttributeType.Name == "BepInPlugin") metadata = (string)attr.ConstructorArguments[0].Value == "botanic.toomanylags.standalone" && (string)attr.ConstructorArguments[2].Value == "1.1.2";
+                        if (attr.AttributeType.Name == "BepInPlugin") metadata = (string)attr.ConstructorArguments[0].Value == "botanic.toomanylags.standalone" && (string)attr.ConstructorArguments[2].Value == "1.1.3";
                     }
                     Check(metadata, "Release metadata");
                     var expectedHooks = new HashSet<string>(new[] { "GameCamera.LateUpdate","GameCamera.OnDestroy","Container.RPC_RequestOpen","Container.RPC_RequestStack","Container.RPC_RequestTakeAll","ZNet.OnNewConnection","ZNet.Shutdown","ZDO.Deserialize","ZDO.InternalSetPosition","ZDO.SetPrefab","ZDO.SetOwner","ZDO.SetOwnerInternal","ZDOMan.RPC_ZDOData","ZDOMan.HandleDestroyedZDO","ZNetScene.AddInstance","ZNetView.ResetZDO","ZNetView.OnDestroy","ZRoutedRpc.RouteRPC","ZRoutedRpc.HandleRoutedRPC","ZRoutedRpc.InvokeRoutedRPC","Container.RPC_OpenResponse","Container.RPC_StackResponse","Container.RPC_TakeAllResponse","Container.SetInUse","InventoryGui.Hide","InventoryGui.CloseContainer","ZDOMan.ReleaseZDOS","TextInput.RequestText" });
@@ -74,7 +74,7 @@ internal static class NativeReleaseAudit
                         }
                         patches++;
                     }
-                    Check(patches == 28 && expectedHooks.Count == 0, "Expected complete 1.1.2 native hook set; actual: " + patches);
+                    Check(patches == 28 && expectedHooks.Count == 0, "Expected complete 1.1.3 native hook set; actual: " + patches);
                     string localType = Prefix + "LocalAgent";
                     MethodDefinition guard = Method(plugin.MainModule.GetType(localType), "Check");
                     foreach (string call in new[] { "Container::IsInUse", "InventoryGui", "InAttack", "IsStaggering", "HaveRider", "IsAttached", "IsRiding", "IsSummoned" })

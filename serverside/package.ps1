@@ -14,7 +14,7 @@ Copy-Item -LiteralPath $dll -Destination $stage -Force
 $stem='TooManyLags-ServerSide-'+$manifest.version_number
 $zip=Join-Path $OutputDirectory ($stem+'.zip')
 Compress-Archive -LiteralPath @((@($files)+@('TooManyLagsServerSide.dll')) | ForEach-Object {Join-Path $stage $_}) -DestinationPath $zip -Force
-$sources=@('src','tests','docs','.gitignore','.gitattributes','README.md','CHANGELOG.md','manifest.json','thunderstore.toml','LICENSE','THIRD_PARTY_NOTICES.md','icon.png','AGENTS.md','VALIDATION.md','build.ps1','test.ps1','generate-config.ps1','package.ps1','validate-release.ps1','verification.json','botanic.toomanylags.dedicatedaddon.cfg') | ForEach-Object {Join-Path $PSScriptRoot $_}
+$sources=@('src','tests','tools','docs','.gitignore','.gitattributes','README.md','CHANGELOG.md','manifest.json','thunderstore.toml','LICENSE','THIRD_PARTY_NOTICES.md','icon.png','AGENTS.md','VALIDATION.md','build.ps1','test.ps1','generate-config.ps1','package.ps1','validate-release.ps1','verification.json','botanic.toomanylags.dedicatedaddon.cfg') | ForEach-Object {Join-Path $PSScriptRoot $_}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $sourceZip=Join-Path $OutputDirectory ($stem+'-source.zip')
 if(Test-Path -LiteralPath $sourceZip -PathType Leaf){Remove-Item -LiteralPath $sourceZip -Force}
@@ -25,7 +25,7 @@ try{
         $sourceFiles=if($item.PSIsContainer){Get-ChildItem -LiteralPath $source -File -Recurse}else{@($item)}
         foreach($sourceFile in $sourceFiles){
             $relative=$sourceFile.FullName.Substring($PSScriptRoot.Length+1).Replace('\','/')
-            if($relative -match '(^|/)(bin|obj|\.git)/|\.(dll|exe|pdb|zip)$|^docs/audits/fgn-[^/]+/'){continue}
+            if($relative -match '(^|/)(bin|obj|\.git|__pycache__)/|\.(dll|exe|pdb|zip|pyc)$|^docs/audits/fgn-[^/]+/'){continue}
             [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($sourceArchive,$sourceFile.FullName,$relative,[IO.Compression.CompressionLevel]::Optimal) | Out-Null
         }
     }

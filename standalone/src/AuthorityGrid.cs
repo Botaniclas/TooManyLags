@@ -207,6 +207,13 @@ namespace TooManyLagsStandalone
         { if (Single.IsNaN(value) || Single.IsInfinity(value)) return fallback; value %= 360f; return value < 0 ? value + 360f : value; }
         internal long Owner(Cell cell) { Policy p; return policies.TryGetValue(cell, out p) ? p.Owner : 0L; }
         internal long Candidate(Cell cell) { Policy p; return policies.TryGetValue(cell, out p) ? p.Candidate : 0L; }
+        // Classify current coverage, not delay or destination. Shared red stays urgent.
+        internal int WorkPriority(Cell cell)
+        {
+            Policy p;
+            if (!policies.TryGetValue(cell, out p) || p.Count == 0) return 3;
+            return !directional ? 2 : p.FastCount != 0 ? 0 : p.ForwardCount != 0 ? 1 : 2;
+        }
         private float FieldWait(Policy policy)
         {
             if (!directional) return Delay;
@@ -481,6 +488,7 @@ namespace TooManyLagsStandalone
         internal bool Managed, Removed;
         internal long ManagedOwner;
         internal long ConfirmedFieldOwner;
+        internal AuthorityWorld.ObjectBucket IndexedBucket;
         internal float NotBefore;
         internal abstract long CurrentOwner { get; }
         // Done: safely applied/no-op. Pending: retry only this node next cycle.
@@ -494,16 +502,21 @@ namespace TooManyLagsStandalone
     // Indexed work scheduling. Stable cells never enumerate their object lists.
     internal sealed class AuthorityWorld
     {
-        private sealed class ObjectBucket
+        internal sealed class ObjectBucket
         {
             internal readonly HashSet<AuthorityNode> Nodes = new HashSet<AuthorityNode>();
             internal long Target;
             internal int Unconfirmed;
+            internal bool PriorityCached;
+            internal int Priority;
         }
         internal readonly AuthorityGrid Grid;
         private readonly Dictionary<Cell, ObjectBucket> buckets = new Dictionary<Cell, ObjectBucket>();
         private readonly HashSet<AuthorityNode> pending = new HashSet<AuthorityNode>();
-        private readonly List<AuthorityNode> scratch = new List<AuthorityNode>();
+        private readonly List<ObjectBucket> priorityBuckets = new List<ObjectBucket>();
+        private readonly List<AuthorityNode>[] work = {
+            new List<AuthorityNode>(), new List<AuthorityNode>(),
+            new List<AuthorityNode>(), new List<AuthorityNode>() };
         private readonly bool keepOnExit;
         private readonly long server;
         private float lastTime;
@@ -518,6 +531,7 @@ namespace TooManyLagsStandalone
             node.Removed = false;
             ObjectBucket bucket = Bucket(node.Cell);
             if (!bucket.Nodes.Add(node)) return;
+            node.IndexedBucket = bucket;
             node.ConfirmedFieldOwner = 0;
             if (bucket.Target != 0) bucket.Unconfirmed++;
             if (keepOnExit) Grid.Forget(node.Cell);
@@ -534,6 +548,7 @@ namespace TooManyLagsStandalone
             Detach(node);
             node.Cell = next;
             ObjectBucket bucket = Bucket(next); bucket.Nodes.Add(node);
+            node.IndexedBucket = bucket;
             node.ConfirmedFieldOwner = 0;
             if (bucket.Target != 0) bucket.Unconfirmed++;
             if (keepOnExit) Grid.Forget(next);
@@ -571,29 +586,66 @@ namespace TooManyLagsStandalone
                 { SkippedCells++; continue; }
                 bucket.Target = keepOnExit && target != server ? target : 0;
                 bucket.Unconfirmed = bucket.Target == 0 ? 0 : bucket.Nodes.Count;
+                bool haveWait = false; float fieldWait = 0f;
                 foreach (AuthorityNode node in bucket.Nodes)
                 {
                     node.ConfirmedFieldOwner = 0;
-                    if (!pending.Contains(node)) Queue(node, now);
-                    else if (Grid.Directional) node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(cell));
+                    if (pending.Add(node)) node.NotBefore = now;
+                    else if (Grid.Directional)
+                    {
+                        if (!haveWait) { fieldWait = Grid.Wait(cell); haveWait = true; }
+                        node.NotBefore = Math.Min(node.NotBefore, now + fieldWait);
+                    }
                 }
             }
-            scratch.Clear(); foreach (AuthorityNode node in pending) scratch.Add(node);
-            foreach (AuthorityNode node in scratch)
+            if (pending.Count == 0) return;
+            // Four reusable lanes avoid sorting and per-object distance checks.
+            // Snapshot first: native callbacks may add/remove pending jobs.
+            ClearPriorityBatch();
+            try
             {
-                if (node.Removed || !pending.Contains(node)) continue;
-                if (Grid.Accelerations.Count != 0 && Grid.Accelerations.Contains(node.Cell))
-                    node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(node.Cell));
-                if (now < node.NotBefore) continue;
-                Attempts++;
-                ApplyResult result = node.Apply(Grid.Owner(node.Cell));
-                if (result != ApplyResult.Pending) pending.Remove(node);
-                if (result == ApplyResult.Dropped) node.Managed = false;
-                else if (result == ApplyResult.Done && keepOnExit && !node.Removed) Confirm(node);
+                // The bucket reference avoids a dictionary lookup per node.
+                // This batch ends before any native/mod callback can run.
+                foreach (AuthorityNode node in pending) work[BatchPriority(node)].Add(node);
             }
-            scratch.Clear();
+            finally { ClearPriorityBatch(); }
+            try
+            {
+                // Red, forward, outer, then vacated/default ownership. Every
+                // due lane runs this pass: no new quota, timer or starvation.
+                foreach (List<AuthorityNode> lane in work) foreach (AuthorityNode node in lane)
+                {
+                    if (node.Removed || !pending.Contains(node)) continue;
+                    if (Grid.Accelerations.Count != 0 && Grid.Accelerations.Contains(node.Cell))
+                        node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(node.Cell));
+                    if (now < node.NotBefore) continue;
+                    Attempts++;
+                    ApplyResult result = node.Apply(Grid.Owner(node.Cell));
+                    if (result != ApplyResult.Pending) pending.Remove(node);
+                    if (result == ApplyResult.Dropped) node.Managed = false;
+                    else if (result == ApplyResult.Done && keepOnExit && !node.Removed) Confirm(node);
+                }
+            }
+            finally { foreach (List<AuthorityNode> lane in work) lane.Clear(); }
         }
         internal void Dismiss(AuthorityNode node) { Invalidate(node); pending.Remove(node); node.Managed = false; }
+        internal int BatchPriority(AuthorityNode node)
+        {
+            ObjectBucket bucket = node.IndexedBucket;
+            // A singleton has no repeated field work to amortise the cache.
+            if (bucket == null || bucket.Nodes.Count == 1) return Grid.WorkPriority(node.Cell);
+            if (!bucket.PriorityCached)
+            {
+                bucket.Priority = Grid.WorkPriority(node.Cell); bucket.PriorityCached = true;
+                priorityBuckets.Add(bucket);
+            }
+            return bucket.Priority;
+        }
+        internal void ClearPriorityBatch()
+        {
+            foreach (ObjectBucket bucket in priorityBuckets) bucket.PriorityCached = false;
+            priorityBuckets.Clear();
+        }
         private void Queue(AuthorityNode node, float at) { node.NotBefore = at; pending.Add(node); }
         private void Invalidate(AuthorityNode node)
         {
@@ -617,6 +669,7 @@ namespace TooManyLagsStandalone
         {
             ObjectBucket bucket;
             if (!buckets.TryGetValue(node.Cell, out bucket) || !bucket.Nodes.Remove(node)) return;
+            node.IndexedBucket = null;
             bool unconfirmed = bucket.Target != 0 && node.ConfirmedFieldOwner != bucket.Target;
             if (unconfirmed) bucket.Unconfirmed--;
             node.ConfirmedFieldOwner = 0;

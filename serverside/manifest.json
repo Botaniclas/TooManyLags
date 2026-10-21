@@ -1,6 +1,6 @@
 {
   "name": "TooManyLags_Server_Side",
-  "version_number": "0.13.1",
+  "version_number": "0.13.2",
   "website_url": "https://github.com/Botaniclas/TooManyLags",
   "description": "Less connection lag, no client mod. Ownership optimisation for Dedicated Simulation: local nearby interactions, server-owned shared fields and smarter Hostile Mobs. Beta.",
   "dependencies": [

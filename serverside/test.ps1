@@ -11,7 +11,7 @@ $out=Join-Path $PSScriptRoot 'bin/verification-tests'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 foreach ($dependency in @('0Harmony.dll','MonoMod.Utils.dll','MonoMod.RuntimeDetour.dll','Mono.Cecil.dll')) {Copy-Item -LiteralPath (Join-Path $core $dependency) -Destination $out -Force}
 $results=[ordered]@{}
-foreach ($suite in @('GridTests','FieldCacheTests','DirectionalGridTests','RuntimeTests','ForkRuntimeTests','HandoffTests','ServerGridTests','DynamicObjectTests','AdaptiveRefillTests','NativeInventoryTests','InventoryGridTests','ShipGridTests','CartGridTests','MobGridTests','RuntimeStatusTests','SocketLatencyTests')) {
+foreach ($suite in @('GridPriorityBatchTests','GridBatchEquivalence','GridTests','FieldCacheTests','DirectionalGridTests','RuntimeTests','ForkRuntimeTests','HandoffTests','ServerGridTests','DynamicObjectTests','AdaptiveRefillTests','NativeInventoryTests','InventoryGridTests','ShipGridTests','CartGridTests','MobGridTests','RuntimeStatusTests','SocketLatencyTests')) {
     $inputs=@('src/AuthorityGrid.cs',('tests/'+$suite+'.cs'))
     $extra=@()
     if ($suite -in @('RuntimeTests','ForkRuntimeTests','HandoffTests','ServerGridTests','DynamicObjectTests','AdaptiveRefillTests','InventoryGridTests','ShipGridTests','CartGridTests','MobGridTests','RuntimeStatusTests','SocketLatencyTests')) {

@@ -1,0 +1,92 @@
+{
+  "source_grid_sha256": "5f40615b32c26e1fb11a4d68b4b5ea2d92fcd24db422821029523e0264ae4caa",
+  "normal_cells": 12,
+  "normal_inner": 9,
+  "normal_forward": 3,
+  "yellow_enabled": false,
+  "full_rear_in_both_modes": true,
+  "character_heading_only": true,
+  "camera_overlap": false,
+  "speed_threshold_mps": 4,
+  "speed_release_mps": 3,
+  "snapshot_seconds": 1,
+  "playback_factor": 20,
+  "high_ping_expansion_illustrated": false,
+  "server_overlap_ticks": [
+    498,
+    498
+  ],
+  "speed_boost_ticks": [
+    75,
+    75
+  ],
+  "files": [
+    {
+      "file": "return-on-exit.gif",
+      "size": [
+        1080,
+        1268
+      ],
+      "frames": 280,
+      "duration_ms": 17300,
+      "final_hold_ms": 3000,
+      "final_frame_verified": true,
+      "bytes": 729333,
+      "sha256": "62e7d95c807c5b89fa63c62d2e4a63da018f347e2448fa5a8f5974296d279cf3"
+    },
+    {
+      "file": "compact/return-on-exit.gif",
+      "size": [
+        380,
+        438
+      ],
+      "frames": 280,
+      "duration_ms": 17300,
+      "final_hold_ms": 3000,
+      "final_frame_verified": true,
+      "bytes": 238230,
+      "sha256": "474685382c72c80d375dab7ef7100539528d88a2ad214df8ad3b21da782a5913"
+    },
+    {
+      "file": "retained.gif",
+      "size": [
+        1080,
+        1268
+      ],
+      "frames": 279,
+      "duration_ms": 17250,
+      "final_hold_ms": 3000,
+      "final_frame_verified": true,
+      "bytes": 638362,
+      "sha256": "7af4d17421b72b2a555d797dedaa54936a5140dbd213b4cb0ce51bde650d303a"
+    },
+    {
+      "file": "compact/retained.gif",
+      "size": [
+        380,
+        438
+      ],
+      "frames": 279,
+      "duration_ms": 17250,
+      "final_hold_ms": 3000,
+      "final_frame_verified": true,
+      "bytes": 214736,
+      "sha256": "3500e450cd31cd68a72e9d3ba87c9315d5cd183b99455380d1a9112c1f6d0abf"
+    },
+    {
+      "file": "comparison-preview.gif",
+      "size": [
+        760,
+        462
+      ],
+      "frames": 280,
+      "duration_ms": 17300,
+      "final_hold_ms": 3000,
+      "final_frame_verified": true,
+      "bytes": 423031,
+      "sha256": "d026fc94a4d26b48427fdbf166e738a8f37b740f2cb9bb210036ba61dbfff5ee"
+    }
+  ],
+  "equivalent_base_grid_sha256": "954b3642cba2536e1f66f4e05ae9c46875d84e0047d9e2fd6ab1564237da76b1",
+  "base_grid_snapshots_identical": true
+}

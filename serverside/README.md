@@ -36,6 +36,17 @@ White objects belong to the server; purple objects belong to a player. Recorded 
 
 [![Ownership while moving](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/grid-demo-2.gif)](https://github.com/user-attachments/assets/8555a985-7696-4cc6-865a-5115c3695f72)
 
+## Example settings
+
+White means the server; colours identify players. These animations use Server Side's actual default grid: full rear 3x3, three forward cells, yellow cells off and character direction. Fast movement makes the forward row immediate. Both retention modes use the same footprint and player routes.
+
+| Default: return on exit — CPU: mostly server | Retain ownership — CPU: shared |
+|---|---|
+| `KeepOwnershipOnCellExit=false` | `KeepOwnershipOnCellExit=true` |
+| [![Server-default ownership with returns: vacated cells return to the server; nearby players own their current work areas.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/serverside/docs/ownership-examples/compact/return-on-exit.gif)](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/serverside/docs/ownership-examples/return-on-exit.gif) | [![Server-default ownership with retention: players leave ownership trails; unvisited and shared cells stay server-owned.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/serverside/docs/ownership-examples/compact/retained.gif)](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/serverside/docs/ownership-examples/retained.gif) |
+
+Click a preview for the full-size animation. CPU notes refer to simulation of managed objects. Idle, ready objects are illustrated; loading and active-use safeguards can delay real handoffs.
+
 ## Configuration
 
 Use the **[Thunderstore Wiki](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_Server_Side/wiki)** for configuration, supported interactions and compatibility. **All settings are server-side and require a server restart.** Vanilla clients need no configuration.

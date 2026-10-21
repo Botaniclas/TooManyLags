@@ -1,6 +1,6 @@
 {
     "name": "TooManyLags_Standalone",
-    "version_number": "1.1.2",
+    "version_number": "1.1.3",
     "website_url": "https://github.com/Botaniclas/TooManyLags",
     "description": "Leave avoidable connection lag behind: local interactions, smarter Hostile Mob ownership and better-connected owners in shared areas. Lightweight multiplayer without FiresGhettoNetworking. Clients optional; full features with matching clients.",
     "dependencies": ["denikson-BepInExPack_Valheim-5.4.2351"]

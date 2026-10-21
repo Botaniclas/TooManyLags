@@ -16,9 +16,9 @@ namespace TooManyLagsStandalone
             {
                 System.Threading.Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
                 core = args[1]; AppDomain.CurrentDomain.AssemblyResolve += delegate(object sender, ResolveEventArgs request) { string path = Path.Combine(core, new AssemblyName(request.Name).Name + ".dll"); return File.Exists(path) ? Assembly.LoadFrom(path) : null; };
-                ConfigFile config = new ConfigFile(args[0], false, new BepInPlugin("botanic.toomanylags.standalone", "TooManyLags - Standalone", "1.1.2"));
+                ConfigFile config = new ConfigFile(args[0], false, new BepInPlugin("botanic.toomanylags.standalone", "TooManyLags - Standalone", "1.1.3"));
                 config.SaveOnConfigSet = false;
-                ConfigLayout.Prepare(config, "1.1.2");
+                ConfigLayout.Prepare(config, "1.1.3");
                 Settings defaults = new Settings(config);
                 if (defaults.CellSize != 4 || defaults.Pattern != GridCoveragePattern.Rounded7x7 || defaults.Interval != .1f || defaults.CameraInterval != .05f || defaults.CameraOverlap != 30f || !defaults.Keep || !defaults.Mobs || defaults.Inner != 0 || defaults.Forward != .2f || defaults.Outer != 3f || defaults.Full != 2f || defaults.PingInterval != 2f || defaults.Margin != 30f || defaults.OverlapCooldown != 1f || defaults.HighPing != 200 || defaults.MobRadius != 6f) throw new Exception("Production defaults changed unexpectedly.");
                 if (config.Count != 45) throw new Exception("Config entry count changed unexpectedly.");
@@ -50,7 +50,7 @@ namespace TooManyLagsStandalone
                 }
                 if (index != sections.Length) throw new Exception("A feature section is missing.");
                 var reloaded = new ConfigFile(args[0], false); reloaded.SaveOnConfigSet = false;
-                ConfigLayout.Prepare(reloaded, "1.1.2"); new Settings(reloaded); ConfigLayout.Save(reloaded);
+                ConfigLayout.Prepare(reloaded, "1.1.3"); new Settings(reloaded); ConfigLayout.Save(reloaded);
                 if (File.ReadAllText(args[0]) != generated) throw new Exception("Reload/save changed the config.");
                 Console.WriteLine("PASS: 45 production settings/defaults; ten ordered feature sections, categories last; movement 0.1, camera 0.05; identical real BepInEx reload/save.");
                 Console.WriteLine("PASS: camera/movement bounds 0.05-5; overlap 0-45 and prediction 0-0.5 enforced; overlap hold can be disabled.");

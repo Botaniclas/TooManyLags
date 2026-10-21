@@ -1,3 +1,9 @@
+## Release 0.13.2: grid priority and field batching
+
+See [GRID-PRIORITY-BATCHING.md](docs/GRID-PRIORITY-BATCHING.md) for the change, regression checks and exact baseline comparison. Historical results below refer to their original builds; current DLL hashes and suite results are in verification.json. Live multiplayer remains untested.
+
+Final release verification on 2026-10-21 passed all 34 groups against the declared Dedicated Simulation 1.18.0 minimum. DLL SHA256: `D55E6F5392D8D8B72E1392FBF6DDF965820731F34C8E0AB20937F5AE17C3ED8A`. The same final DLL also passed 151 native metadata assertions and the actual Valheim Mono startup contract probe against the public Dedicated Simulation 1.23.2 release. Both backend hashes and outputs are recorded in `docs/audits/backend-contracts-0.13.2.json`. All 45 generated config values remain unchanged. The README ownership animations are derived from this edition's unchanged production grid, including its full rear coverage, disabled outer cells and speed thresholds; their decoded final frames and exact 3-second final holds are checked separately.
+
 # Beta release validation - 0.13.1
 
 Beta release. Fixes the reproduced pursuit stall after our own guarded mob delegation by retaining its observed idle starting point. Existing combat guards, the optional ability forecast and the disabled solo diagnostic remain. No live multiplayer certification or measured CPU/latency gain is claimed.

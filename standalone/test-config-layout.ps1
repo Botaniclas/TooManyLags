@@ -8,7 +8,7 @@ foreach ($layoutDependency in @('BepInEx.dll','0Harmony.dll','MonoMod.Utils.dll'
 $layoutExe = Join-Path $layoutOutput 'ConfigLayoutTests.exe'
 $layoutInputs = @('src\ConfigLayout.cs','src\ConfigTemplate.cs','tests\ConfigLayoutTests.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ }
 $layoutArguments = @('/nologo','/target:exe','/optimize+','/warnaserror+','/langversion:5',('/reference:' + (Join-Path $layoutCore 'BepInEx.dll')),('/reference:' + (Join-Path $layoutCore '0Harmony.dll')),('/out:' + $layoutExe))
-if ($PSScriptRoot.EndsWith('TooManyLagsStandalone')) { $layoutArguments += '/define:STANDALONE' }
+$layoutArguments += '/define:STANDALONE'
 & $layoutCompiler @layoutArguments @layoutInputs
 if ($LASTEXITCODE -ne 0) { throw 'Config layout test compilation failed.' }
 & $layoutExe $layoutOutput

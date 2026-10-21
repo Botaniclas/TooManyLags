@@ -5,7 +5,7 @@ using BepInEx.Bootstrap;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("0.13.1.0")]
+[assembly: AssemblyVersion("0.13.2.0")]
 namespace TooManyLagsDedicatedAddon
 {
     [BepInPlugin(Id, "TooManyLags - Server Side", Version)]
@@ -16,7 +16,7 @@ namespace TooManyLagsDedicatedAddon
     [BepInIncompatibility("com.Fire.FiresGhettoNetworkMod")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.dedicatedaddon", Version = "0.13.1";
+        internal const string Id = "botanic.toomanylags.dedicatedaddon", Version = "0.13.2";
         internal const string Dependency = "MVP.Valheim_Serverside_Simulations";
         internal static Controller Current;
         internal static Plugin Instance;

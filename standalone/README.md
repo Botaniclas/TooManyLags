@@ -34,6 +34,16 @@ These FiresGhettoNetworking Addon recordings show the shared directional grid us
 
 [![Ownership while moving](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/grid-demo-2.gif)](https://github.com/user-attachments/assets/8555a985-7696-4cc6-865a-5115c3695f72)
 
+## How it works
+
+**Player-owned simulation — CPU: clients**
+
+With `KeepOwnershipOnCellExit=true` (default), vacated cells keep their last owner. Shared fields favour a suitable player with a better connection. Here, Player 2 has 25 ms ping versus 80 / 140 ms for the others. Simulation stays on players; a dedicated server does not take over shared fields.
+
+[![Standalone ownership: players retain their routes; shared fields favour the better-connected player.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/compact/no-server-simulation.gif)](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/no-server-simulation.gif)
+
+Colours identify players. This example illustrates the full grid with compatible client installations; click the preview for the full-size animation.
+
 ## Configuration
 
 Start with the defaults. Configure gameplay **on the host/server**; modded clients follow its settings. Find configuration, admin commands and compatibility details in the **[Thunderstore Wiki](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_Standalone/wiki/)**.

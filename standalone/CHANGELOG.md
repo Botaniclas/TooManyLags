@@ -1,5 +1,10 @@
 # Changelog
 
+**1.1.3**
+```
+- Prioritises red grid handoffs before forward and outer fields, with vacated-field returns last. All due jobs still run in the same pass; existing handoff safeguards remain active.
+- Reduces repeated field calculations when several objects share a cell, without changing transition timers.
+```
 **1.1.2**
 ```
 - Fixes a listen-host reply cancelling a replacement ownership request. Source consent, final-state receipts and receiving-client readiness remain required.

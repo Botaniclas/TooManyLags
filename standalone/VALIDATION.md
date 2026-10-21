@@ -1,3 +1,7 @@
+## Release 1.1.3: grid priority and field batching
+
+See [GRID-PRIORITY-BATCHING.md](docs/GRID-PRIORITY-BATCHING.md) for the change, regression checks and exact baseline comparison. Historical results below refer to their original builds; current DLL hashes and suite results are in verification.json. Live multiplayer remains untested.
+
 # Standalone validation
 
 ## Release 1.1.2

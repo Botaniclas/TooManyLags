@@ -1,5 +1,10 @@
 # Changelog
 
+**0.13.2**
+```
+- Prioritises red grid handoffs before forward and outer fields, with vacated-field returns last. All due jobs still run in the same pass; existing handoff safeguards remain active.
+- Reduces repeated field calculations when several objects share a cell, without changing transition timers.
+```
 **0.13.1**
 ```
 - Fixes Hostile Mobs waiting for their first attack before changing owner again after a completed guarded handoff. The previously observed idle handoff is retained while chasing; new attacks and external owner revisions invalidate it. Existing attack, loop, forecast and readiness safeguards remain active.

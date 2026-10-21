@@ -4,7 +4,7 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "Botaniclas"
 name = "TooManyLags_Server_Side"
-versionNumber = "0.13.1"
+versionNumber = "0.13.2"
 description = "Less connection lag, no client mod. Ownership optimisation for Dedicated Simulation: local nearby interactions, server-owned shared fields and smarter Hostile Mobs. Beta."
 websiteUrl = "https://github.com/Botaniclas/TooManyLags"
 containsNsfwContent = false

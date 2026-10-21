@@ -1,0 +1,14 @@
+{
+  "file": "readme-preview.gif",
+  "frames": 281,
+  "size": [
+    760,
+    924
+  ],
+  "duration_ms": 17300,
+  "final_hold_ms": 3000,
+  "synchronized_panels": true,
+  "final_frame_matches": true,
+  "bytes": 1169471,
+  "sha256": "58f3bf27519bfbe7bdbc725d3edb3ea997586728090ef1a382de02c23c3c5fe8"
+}

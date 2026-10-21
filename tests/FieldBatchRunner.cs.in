@@ -1,0 +1,38 @@
+using System.Collections.Generic;
+namespace NAMESPACE
+{
+    internal sealed class Runner : IFieldRunner
+    {
+        private sealed class Node : AuthorityNode
+        {
+            internal Runner Parent;
+            internal int Label;
+            internal override long CurrentOwner { get { return 7; } }
+            internal override ApplyResult Apply(long target)
+            {
+                Parent.calls++;
+                unchecked { Parent.trace = Parent.trace * 31 + target * 17 + Label; }
+                return ApplyResult.Pending;
+            }
+        }
+        private readonly AuthorityWorld world = new AuthorityWorld(99, 2, GridCoveragePattern.Rounded7x7, false, true, 0, 0, true, 0);
+        private readonly List<GridPeer> peers = new List<GridPeer> { new GridPeer(1, new Cell(0, 0)) };
+        private readonly List<Node> nodes = new List<Node>();
+        private long calls, trace;
+        private float now;
+        public long Calls { get { return calls; } }
+        public long Trace { get { return trace; } }
+        internal Runner(int fields, bool due)
+        {
+            for (int i = 0; i < 4096; i++)
+            {
+                var node = new Node { Parent = this, Label = i, Cell = new Cell(i % fields, 0), ManagedOwner = 7 };
+                nodes.Add(node); world.Add(node, 0);
+            }
+            world.Tick(peers, 0);
+            if (!due) foreach (Node node in nodes) node.NotBefore = 1000000;
+            calls = 0; trace = 0;
+        }
+        public void Step() { now += .05f; world.Tick(peers, now); }
+    }
+}

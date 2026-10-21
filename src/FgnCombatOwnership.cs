@@ -12,7 +12,7 @@ namespace TooManyLags
     internal static class FgnCombatOwnership
     {
         private sealed class Report { internal ZDO Data; internal long Owner; internal uint Revision; internal ZDOID Target; }
-        private sealed class Lease { internal ZDO Data; internal long ReturnPeer, SourceOwner; internal uint SourceRevision; internal double Requested; internal uint Pass; }
+        private sealed class Lease { internal ZDO Data; internal long ReturnPeer, SourceOwner; internal uint SourceRevision; internal double Requested; internal uint Pass; internal bool Initial; }
         private sealed class Forward { internal ZDO Data; internal long Owner; internal double Until; }
         private sealed class Watch { internal ZDO Data; internal long Owner; internal uint Revision, Pass; internal bool Acknowledged, AttackRejected, AttackReady; }
         private sealed class FactionActor { internal Character Actor; }
@@ -69,7 +69,7 @@ namespace TooManyLags
             bossPlayerRadius = config.Bind("03 - AI Mob Ownership", "BossPlayerRadius", 30f,
                 new ConfigDescription("Server only; restart required. Player distance from the boss in metres for BossAlwaysServerOwned. Evaluated on player-target acquisition, change or loss, not movement.", new AcceptableValueRange<float>(1f, 100f)));
             defaultMobs = config.Bind("02 - Default Ownership and Overrides", "ServerOwnedMobsByDefault", false,
-                "Server only; restart required. Give idle tamed animals a server default outside player fields, even when the interactive default is off. Hostile Mobs without a player target use guarded server handoffs (requires EnableAIOwnership); player targets keep normal target ownership. Friendly magic summons, bosses and active riding/following stay excluded. Requires Server-Side Simulation; can increase server CPU usage.");
+                "Server only; restart required. Give idle tamed animals a server default outside player fields, even when the interactive default is off. Fixed mob spawners also default to the server and stay outside the grid; ambient spawning stays native. Hostile Mobs without a player target use guarded server handoffs (requires EnableAIOwnership); player targets keep normal target ownership. Friendly magic summons, bosses and active riding/following stay excluded. Requires Server-Side Simulation; can increase server CPU usage.");
             serverDefaultsConfigured = defaultMobs.Value;
             maximumPing = config.Bind("03 - AI Mob Ownership", "ServerFallbackPingMs", 200,
                 new ConfigDescription("Server only; live console supported. Target ping limit in milliseconds for server fallback with Server-Side Simulation, or a lower-latency nearby player with NoServerSideSimulation=true. Requires another eligible FiresGhettoNetworking player within ServerFallbackRadius. 0: target ping must exceed the best other candidate by 250 ms.", new AcceptableValueRange<int>(0, 2000)));
@@ -466,6 +466,19 @@ namespace TooManyLags
         internal static void HandoffFailure(Exception error) { Fail(error); }
         private static void AiAwakePostfix(BaseAI __instance)
         {
+            // An initial native assignment has no source client to report its
+            // target. Bootstrap through the same deferred owner observation.
+            if (ServerDefaults && managed.Count != 0)
+            {
+                ZNetView view = aiView(__instance); Lease lease;
+                ZDO data = view && view.IsValid() ? view.GetZDO() : null;
+                if (data != null && managed.TryGetValue(data.m_uid, out lease) && lease.Initial &&
+                    ReferenceEquals(lease.Data, data) && data.GetOwner() == ZDOMan.GetSessionID() && data.OwnerRevision == lease.SourceRevision)
+                {
+                    lease.Initial = false;
+                    watching[data.m_uid] = new Watch { Data = data, Owner = data.GetOwner(), Revision = data.OwnerRevision, Pass = pass };
+                }
+            }
             if (Watching(__instance)) FgnTargetEvents.Schedule(__instance);
         }
         private static void PlayerDestroyPrefix(Player __instance)
@@ -664,9 +677,14 @@ namespace TooManyLags
         }
         private static bool ServerDefaults
         { get { return serverDefaultsConfigured && Enabled && Fgn != null && ZNet.instance && ZNet.instance.IsDedicated() && Fgn.Simulation(); } }
-        private static bool AnyCandidate(Vector3 position)
+        private static bool AnyLoadingPeer(Vector3 position)
         {
-            foreach (ZNetPeer peer in ZNet.instance.GetPeers()) if (Candidate(peer, position)) return true;
+            // Vanilla first assignment needs a ready native loading area, not
+            // a completed FGN greeting. Later player handoffs keep Candidate.
+            long server = ZDOMan.GetSessionID();
+            foreach (ZNetPeer peer in ZNet.instance.GetPeers())
+                if (peer != null && peer.m_uid != 0 && peer.m_uid != server && peer.IsReady() &&
+                    Finite(peer.GetRefPos()) && ZNetScene.InActiveArea(position, peer.GetRefPos())) return true;
             return false;
         }
         private static void DefaultLoadedPostfix(ZDO zdo, ZNetView nview)
@@ -677,6 +695,15 @@ namespace TooManyLags
                 Character actor = nview.GetComponent<Character>();
                 if (!actor || actor is Player || actor.IsBoss() || FriendlyCreatures.IsFriendly(actor)) return;
                 EnsureWorld(); defaultLoaded[zdo.m_uid] = zdo;
+                // ZNetView creates a new server ZDO already owned by this session.
+                // Keep that first owner before vanilla can replace it with a peer.
+                // Origin + zero owner revision exclude loaded/previously handed-off data.
+                if (Active && zdo.m_uid.UserID == ZDOMan.GetSessionID() && zdo.OwnerRevision == 0 &&
+                    zdo.GetOwner() == ZDOMan.GetSessionID() && Eligible(zdo) &&
+                    zdo.Persistent && nview.m_persistent && !nview.m_distant && zdo.GetFloat(ZDOVars.s_health, 1f) > 0f &&
+                    nview.GetComponent<BaseAI>() && nview.GetComponent<ZSyncTransform>() &&
+                    ReferenceEquals(world.GetZDO(zdo.m_uid), zdo) && !managed.ContainsKey(zdo.m_uid) &&
+                    AnyLoadingPeer(zdo.GetPosition())) RememberInitial(zdo);
                 // Early loads may still lack an owner or client capability;
                 // the existing balance pass retries only these loaded actors.
             }
@@ -684,16 +711,24 @@ namespace TooManyLags
         }
         private static void DefaultUnloadedPrefix(ZNetView __instance)
         {
-            if (defaultLoaded.Count == 0 || ReferenceEquals(__instance, null)) return;
+            if ((defaultLoaded.Count == 0 && managed.Count == 0) || ReferenceEquals(__instance, null)) return;
             try
             {
                 ZDO data = __instance.GetZDO(); ZDO known;
+                Lease lease;
+                if (data != null && managed.TryGetValue(data.m_uid, out lease) && lease.Initial && ReferenceEquals(lease.Data, data)) managed.Remove(data.m_uid);
                 if (data == null || !defaultLoaded.TryGetValue(data.m_uid, out known) || !ReferenceEquals(known, data)) return;
                 defaultLoaded.Remove(data.m_uid); managed.Remove(data.m_uid); RemoveWatch(data.m_uid); receivedTargets.Remove(data.m_uid);
             }
             catch (Exception error) { Fail(error); }
         }
-        private static void ClearDefaultLoaded() { defaultLoaded.Clear(); }
+        private static void ClearDefaultLoaded()
+        {
+            defaultLoaded.Clear(); scratch.Clear();
+            foreach (var entry in managed) if (entry.Value.Initial) scratch.Add(entry.Key);
+            foreach (ZDOID id in scratch) managed.Remove(id);
+            scratch.Clear();
+        }
         private static void ProcessDefaults()
         {
             scratch.Clear(); foreach (ZDOID id in defaultLoaded.Keys) scratch.Add(id);
@@ -794,6 +829,17 @@ namespace TooManyLags
                     Lease lease;
                     if (!managed.TryGetValue(id, out lease)) continue;
                     ZDO data = world.GetZDO(id);
+                    if (lease.Initial && ReferenceEquals(data, lease.Data) && data.IsValid() && ServerDefaults && Eligible(data) &&
+                        data.GetOwner() == ZDOMan.GetSessionID() && data.OwnerRevision == lease.SourceRevision)
+                    {
+                        if (!AnyLoadingPeer(data.GetPosition()))
+                        { managed.Remove(id); data.SetOwner(0L); Fgn.ClearOwned(id); continue; }
+                        // Reuse this existing, bounded-to-active-areas lease
+                        // pass until the normal scene creates the actor.
+                        if (!ZNetScene.instance.FindInstance(data)) continue;
+                        lease.Initial = false;
+                        if (MarkWatch(data)) QueueBootstrap(data);
+                    }
                     if (!ReferenceEquals(data, lease.Data) || !Eligible(data) || !LoadedCharacter(data))
                     { managed.Remove(id); if (!watching.ContainsKey(id)) receivedTargets.Remove(id); continue; }
                     if (data.GetOwner() != ZDOMan.GetSessionID())
@@ -884,10 +930,13 @@ namespace TooManyLags
             {
                 if (owner == server)
                 {
-                    // A departed/ineligible target must not turn a temporary exception into a permanent server pin.
+                    // Temporary exceptions still need an eligible recipient.
+                    // Configured server defaults remain while a native player
+                    // loads the area, including an unfinished FGN greeting.
                     ZNetPeer replacement = BestCandidate(data.GetPosition());
                     if (replacement != null) result = Request(data, replacement.m_uid, now);
-                    else { managed.Remove(data.m_uid); receivedTargets.Remove(data.m_uid); data.SetOwner(0L); Fgn.ClearOwned(data.m_uid); }
+                    else if (!(ServerDefaults && !FgnBossPolicy.IsBoss(data) && AnyLoadingPeer(data.GetPosition())))
+                    { managed.Remove(data.m_uid); receivedTargets.Remove(data.m_uid); data.SetOwner(0L); Fgn.ClearOwned(data.m_uid); }
                 }
                 return false;
             }
@@ -906,7 +955,7 @@ namespace TooManyLags
                     if (owner == server)
                     {
                         // Already settled: no repeated collider-readiness work.
-                        if (!AnyCandidate(data.GetPosition()))
+                        if (!AnyLoadingPeer(data.GetPosition()))
                         { managed.Remove(data.m_uid); RemoveWatch(data.m_uid); receivedTargets.Remove(data.m_uid); data.SetOwner(0L); Fgn.ClearOwned(data.m_uid); }
                         return false;
                     }
@@ -1099,13 +1148,56 @@ namespace TooManyLags
             if (Enabled && managed.Count != 0 && ReferenceEquals(world, ZDOMan.instance) && ReferenceEquals(network, ZNet.instance) &&
                 managed.TryGetValue(data.m_uid, out lease) && ReferenceEquals(lease.Data, data) && Active && Eligible(data))
             {
-                if (data.GetOwner() == ZDOMan.GetSessionID()) return;
+                if (lease.Initial && (data.GetOwner() != ZDOMan.GetSessionID() || data.OwnerRevision != lease.SourceRevision ||
+                    !ServerDefaults || !AnyLoadingPeer(data.GetPosition()))) managed.Remove(data.m_uid);
+                else if (data.GetOwner() == ZDOMan.GetSessionID()) return;
                 // Do not race the old owner's asynchronous FGN handoff with native ownership writes.
                 if (data.GetOwner() == lease.SourceOwner && data.OwnerRevision == lease.SourceRevision &&
                     (FgnMobHandoff.Waiting(data) || (Time.realtimeSinceStartupAsDouble - lease.Requested < 5.0 && Fgn.Pending(data.m_uid, Time.realtimeSinceStartupAsDouble))) &&
                     Candidate(ZNet.instance.GetPeer(lease.SourceOwner), data.GetPosition()) && ShouldOverride(data.m_uid)) return;
             }
+            bool initial = InitialDefault(data, owner);
+            if (initial) owner = ZDOMan.GetSessionID();
             data.SetOwner(owner);
+            if (initial && data.GetOwner() == owner) RememberInitial(data);
+        }
+        private static void RememberInitial(ZDO data)
+        {
+            managed[data.m_uid] = new Lease { Data = data, SourceOwner = data.GetOwner(), SourceRevision = data.OwnerRevision,
+                Requested = Time.realtimeSinceStartupAsDouble, Pass = pass, Initial = true };
+        }
+        internal static void InitialMobLoad(ZDO data)
+        {
+            if (!ServerDefaults || !Active) return;
+            try
+            {
+                if (!InitialDefault(data, ZDOMan.GetSessionID())) return;
+                // Called before the ordinary CreateObject/Instantiate sequence.
+                // Native terrain/type gates and all Awake/physics guards still run.
+                data.SetOwner(ZDOMan.GetSessionID());
+                if (data.GetOwner() == ZDOMan.GetSessionID()) RememberInitial(data);
+            }
+            catch (Exception error) { Fail(error); }
+        }
+        private static bool InitialDefault(ZDO data, long nativeOwner)
+        {
+            // An unowned ZDO may already have a passive server instance. Created
+            // describes that local instance, not previous ownership or active use.
+            // Existing owners and ordinary guarded handoffs stay untouched.
+            if (!ServerDefaults || !Active || nativeOwner == 0L || data == null || !data.IsValid() || data.GetOwner() != 0L ||
+                !data.Persistent || data.m_uid.IsNone() || data.OwnerRevision == UInt16.MaxValue ||
+                data.GetBool(ZDOVars.s_tamed) || data.GetLong(ZDOVars.s_user, 0L) != 0L ||
+                data.GetFloat(ZDOVars.s_health, 1f) <= 0f || !Finite(data.GetPosition()) || !ZNetScene.instance ||
+                Fgn.Held(data) || Fgn.Possessed(data)) return false;
+            EnsureWorld();
+            if (!ReferenceEquals(world.GetZDO(data.m_uid), data)) return false;
+            Character actor = CreatureActor(data);
+            if (!actor || actor is Player || actor.IsBoss() || FriendlyCreatures.IsFriendly(actor) ||
+                !actor.GetComponent<BaseAI>() || !actor.GetComponent<ZSyncTransform>()) return false;
+            ZNetView template = actor.GetComponent<ZNetView>();
+            // Only actual creature prefabs need a peer-area check. Ordinary
+            // scene objects leave through the existing cached actor lookup.
+            return template && template.m_persistent && !template.m_distant && AnyLoadingPeer(data.GetPosition());
         }
         private static bool LocalHit(Dictionary<ZDOID, double> hits, ZDOID id, out double value)
         {

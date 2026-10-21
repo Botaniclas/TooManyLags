@@ -9,7 +9,7 @@ internal static class ReleaseDiagnosticsAudit
     {
         try
         {
-            var counters = new HashSet<string>(new[] { "Rebuilds", "NeighborReads", "PlayerUpdates", "TimerVisits", "PolicyAllocations", "Attempts", "SkippedCells", "PendingVisits", "PairTests" });
+            var counters = new HashSet<string>(new[] { "Rebuilds", "NeighborReads", "PlayerUpdates", "TimerVisits", "PolicyAllocations", "PriorityReads", "Attempts", "SkippedCells", "PendingVisits", "PairTests" });
             using (AssemblyDefinition assembly = AssemblyDefinition.ReadAssembly(args[0]))
             {
                 int checkedTypes = 0;

@@ -782,7 +782,7 @@ internal static partial class IntegrationTests
             Tick(0);ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
             Check("public unowned inventory can get its initial server owner",chest.GetOwner()==99);
             Check("private inventory retains native initial owner",privateChest.GetOwner()==1);
-            Check("tames vehicles and rigid bodies retain existing loading path",tame.GetOwner()==1&&vehicle.GetOwner()==1&&physics.GetOwner()==1);
+            Check("unowned tame receives initial server default without changing vehicle/body exclusions",tame.GetOwner()==99&&vehicle.GetOwner()==1&&physics.GetOwner()==1);
 
             // A slow scene must never turn the first pending field into a
             // player->server takeover. Initial ownership is not a field grant.
@@ -871,6 +871,154 @@ internal static partial class IntegrationTests
         Check("real cell movement releases promoted forward object immediately",orange.GetOwner()==1&&yellow.GetOwner()==99&&outerAnimal.GetOwner()==99);
         Tick(24);
         Check("same-tier retained object and tame release after normal outer timer",yellow.GetOwner()==1&&outerAnimal.GetOwner()==1);
+    }
+    private static void InitialTamedDefaults()
+    {
+        var patcher = new Harmony("botanic.authority.test.initial-tames");
+        patcher.Patch(AccessTools.Method(typeof(ZDOMan),"ReleaseNearbyZDOS"),transpiler:new HarmonyMethod(AccessTools.Method(typeof(OwnershipPatch),"Transpiler")));
+        try
+        {
+            foreach(bool mobOnly in new[]{false,true})
+            {
+                Fresh(Kinds.TamedAnimals,defaultInteractives:!mobOnly,defaultMobs:mobOnly,nativeSolo:true);
+                var player=Peer(1);var animal=Object(typeof(Character),40,1,0);animal.Tamed=true;
+                var view=ZNetScene.instance.FindInstance(animal);controller.Unregister(view);ZNetScene.instance.Views.Remove(animal);
+                ZNetScene.instance.Ready=delegate{return false;};Tick(0);int queries=ZNetScene.instance.AreaQueries;
+                controller.InitialMobLoad(animal);
+                Check("tame receives default before CreateObject without constructing an actor",animal.GetOwner()==99&&animal.Writes==1&&ZNetScene.instance.FindInstance(animal)==null);
+                controller.InitialMobLoad(animal);
+                Check("repeated pre-construction tame event performs no extra write or readiness proof",animal.Writes==1&&ZNetScene.instance.AreaQueries==queries);
+                ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+                Check("initial tame gets server default before a server actor or ready area",animal.GetOwner()==99&&animal.Writes==1&&!controller.InitialObject(animal));
+                Check("initial tame has no invented actor, readiness scan or handoff RPC",ZNetScene.instance.AreaQueries==queries&&player.m_rpc.Calls==0&&controller.RequestNode(animal.m_uid,"Command".GetStableHashCode())==null);
+                int writes=animal.Writes,attempts=controller.ScheduledAttempts;
+                for(int i=1;i<12;i++){Tick(i);ZDOMan.instance.ReleaseNearbyZDOS(new Vector3(512,0,512),99);ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);}
+                Check("native passes retain initial tame without repeat writes or object jobs",animal.Writes==writes&&animal.GetOwner()==99&&controller.ScheduledAttempts==attempts);
+                animal.Created=true;ZNetScene.instance.Views.Add(animal,view);controller.Register(animal,view);Tick(12);
+                ZNetScene.instance.Ready=delegate{return true;};Tick(13);
+                Check("ordinary actor adoption does not repeat initial assignment",animal.GetOwner()==99&&animal.Writes==writes);
+                controller.Unregister(view);ZNetScene.instance.Views.Remove(animal);ZNet.instance.Peers.Clear();Tick(14);
+                ZDOMan.instance.ReleaseNearbyZDOS(new Vector3(512,0,512),99);
+                Check("initial tame default does not suppress native release after departure",animal.GetOwner()==0);
+            }
+            foreach(int excluded in new[]{0,1,2,3,4,5,6,7})
+            {
+                Fresh(excluded==0?Kinds.Doors:Kinds.TamedAnimals,defaultInteractives:excluded!=1,nativeSolo:true);
+                var player=Peer(1);var animal=Object(typeof(Character),40,1,0);animal.Tamed=excluded!=2;
+                var view=ZNetScene.instance.FindInstance(animal);
+                if(excluded==3)animal.User=1;
+                if(excluded==4)animal.Follow="player";
+                if(excluded==5)view.GetComponent<Tameable>().m_unsummonDistance=20;
+                if(excluded==6)view.GetComponent<Character>().m_faction=Character.Faction.Players;
+                controller.Unregister(view);ZNetScene.instance.Views.Remove(animal);
+                if(excluded==7)animal.SetOwner(7);
+                Tick(0);long initialOwner=animal.GetOwner();int initialWrites=animal.Writes;
+                controller.InitialMobLoad(animal);
+                Check("tame construction prefix retains category/default/wild/use/follow/summon/existing-owner exclusion "+excluded,animal.GetOwner()==initialOwner&&animal.Writes==initialWrites);
+                ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+                Check("early tame keeps category/default/wild/use/follow/summon/existing-owner exclusion "+excluded,animal.GetOwner()==1);
+            }
+            Fresh(Kinds.TamedAnimals,defaultInteractives:true,directional:true,pattern:GridCoveragePattern.Rounded7x7,nativeSolo:true);
+            var first=Peer(1);Tick(0);
+            var red=Object(typeof(Character),1,1,0);red.Tamed=true;var redView=ZNetScene.instance.FindInstance(red);
+            controller.Unregister(redView);ZNetScene.instance.Views.Remove(red);ZNetScene.instance.Ready=delegate{return false;};
+            controller.InitialMobLoad(red);
+            Check("tame creation never inserts a server owner ahead of a settled player grid",red.GetOwner()==0&&red.Writes==0);
+            ZDOMan.instance.ReleaseNearbyZDOS(first.Position,1);
+            Check("settled player grid wins over initial tame server default",red.GetOwner()==1);
+            Peer(2);Tick(1);
+            var shared=Object(typeof(Character),2,1,0);shared.Tamed=true;var sharedView=ZNetScene.instance.FindInstance(shared);
+            controller.Unregister(sharedView);ZNetScene.instance.Views.Remove(shared);
+            controller.InitialMobLoad(shared);
+            Check("tame creation uses the settled overlap server default before actor creation",shared.GetOwner()==99&&shared.Writes==1);
+            ZDOMan.instance.ReleaseNearbyZDOS(first.Position,1);
+            Check("settled overlap keeps initial tame on server",shared.GetOwner()==99);
+            Fresh(Kinds.TamedAnimals,defaultInteractives:true,nativeSolo:true);
+            first=Peer(1);var source=Peer(7,64);var activeAnimal=Object(typeof(Character),40,1,7);activeAnimal.Tamed=true;
+            var activeView=ZNetScene.instance.FindInstance(activeAnimal);controller.Unregister(activeView);ZNetScene.instance.Views.Remove(activeAnimal);
+            Tick(0);ZDOMan.instance.ReleaseNearbyZDOS(first.Position,1);
+            Check("native active-owner test still precedes early tame selection",activeAnimal.GetOwner()==7&&activeAnimal.Writes==0&&source.m_rpc.Calls==0);
+        }
+        finally{patcher.UnpatchSelf();}
+    }
+    private static void SpawnerDefaults()
+    {
+        var patcher=new Harmony("botanic.authority.test.spawner-defaults");
+        patcher.Patch(AccessTools.Method(typeof(ZDOMan),"ReleaseNearbyZDOS"),transpiler:new HarmonyMethod(AccessTools.Method(typeof(OwnershipPatch),"Transpiler")));
+        try
+        {
+            foreach(Type type in new[]{typeof(SpawnArea),typeof(CreatureSpawner)})
+            foreach(bool enabled in new[]{false,true})
+            foreach(bool inside in new[]{false,true})
+            {
+                // No animal category: spawners must follow the raw mob default.
+                Fresh(Kinds.Doors,defaultMobs:enabled,defaultInteractives:true,statics:true,nativeSolo:true,directional:true,pattern:GridCoveragePattern.Rounded7x7,keepOnExit:false);
+                var player=Peer(1);var spawner=Object(type,inside?1:40,1,0);
+                var view=ZNetScene.instance.FindInstance(spawner);controller.Unregister(view);ZNetScene.instance.Views.Remove(spawner);
+                ZNetScene.instance.Ready=delegate{return false;};Tick(0);
+                controller.InitialMobLoad(spawner);
+                Check("spawner construction follows only the mob default "+type.Name+enabled+inside,spawner.GetOwner()==(enabled?99:0));
+                ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+                Check("native spawner assignment ignores interactive/static defaults and player fields",spawner.GetOwner()==(enabled?99:1)&&spawner.Writes==1);
+                Check("spawner remains outside the interactive/static catalog",ObjectCatalog.Classify(view.gameObject)==Kinds.None&&controller.RequestNode(spawner.m_uid,"RPC_Damage".GetStableHashCode())==null);
+                int queries=ZNetScene.instance.AreaQueries,writes=spawner.Writes,scans=GameObject.Scans,rpcs=player.m_rpc.Calls,attempts=controller.ScheduledAttempts;
+                for(int i=1;i<=10;i++)
+                {
+                    Tick(i);controller.InitialMobLoad(spawner);
+                    ZDOMan.instance.ReleaseNearbyZDOS(new Vector3(512,0,512),99);
+                    ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+                }
+                Check("stable spawner adds no component/readiness scans, grid jobs, owner writes or RPCs",spawner.Writes==writes&&GameObject.Scans==scans&&ZNetScene.instance.AreaQueries==queries&&player.m_rpc.Calls==rpcs&&controller.ScheduledAttempts==attempts);
+                ZNet.instance.Peers.Clear();Tick(11);
+                ZDOMan.instance.ReleaseNearbyZDOS(new Vector3(512,0,512),99);
+                if(enabled)Check("spawner still uses vanilla release after every loading peer leaves",spawner.GetOwner()==0);
+            }
+            Fresh(Kinds.None,defaultMobs:true,nativeSolo:true);var first=Peer(1);var activeOwner=Peer(7,40);
+            var activeSpawner=Object(typeof(SpawnArea),40,1,7);Tick(0);
+            controller.InitialMobLoad(activeSpawner);ZDOMan.instance.ReleaseNearbyZDOS(first.Position,1);
+            Check("existing active client spawner is not stolen mid-spawn",activeSpawner.GetOwner()==7&&activeSpawner.Writes==0&&activeOwner.m_rpc.Calls==0);
+            MovePeer(activeOwner,1024);Tick(1);ZDOMan.instance.ReleaseNearbyZDOS(first.Position,1);
+            Check("native owner departure assigns spawner to server instead of another player",activeSpawner.GetOwner()==99&&activeSpawner.Writes==1);
+
+            Fresh(Kinds.None,defaultMobs:true,nativeSolo:true);Peer(1);
+            var newborn=Object(typeof(CreatureSpawner),40,1,99);Tick(0);
+            ZDOMan.instance.ReleaseNearbyZDOS(new Vector3(512,0,512),99);ZDOMan.instance.ReleaseNearbyZDOS(new Vector3(0,0,0),1);
+            Check("newborn server-owned spawner retains its first owner without another write",newborn.GetOwner()==99&&newborn.Writes==0);
+            Vector3 validPosition=newborn.Position;newborn.Position=new Vector3(Single.NaN,0,1);
+            Check("spawner target keeps the existing invalid-position rejection",controller.NativeOwnerTarget(newborn,1)==1);
+            newborn.Position=validPosition;newborn.OwnerRevision=UInt16.MaxValue;
+            Check("spawner target keeps the existing revision-wrap rejection",controller.NativeOwnerTarget(newborn,1)==1);
+
+            var catalog=new ObjectCatalog(Kinds.None);
+            foreach(int excluded in new[]{0,1,2,3,4,5,6,7})
+            {
+                var root=new GameObject();root.Add(new ZNetView());root.Add(new SpawnArea());
+                if(excluded==0)root.GetComponent<ZNetView>().m_persistent=false;
+                if(excluded==1)root.GetComponent<ZNetView>().m_distant=true;
+                if(excluded==2)root.Add(new Rigidbody());
+                if(excluded==3)root.Add(new Character());
+                if(excluded==4)root.Add(new Door());
+                if(excluded==5)root.Add(new SpawnSystem());
+                if(excluded==6)root.Add(new ItemDrop());
+                if(excluded==7)root.Add(new Container());
+                int hash=20000+excluded;ZNetScene.instance.Prefabs.Add(hash,root);
+                Check("unsupported/moving/interactive/native-SpawnSystem roots keep vanilla "+excluded,!catalog.NativeSpawnerDefault(hash,ZNetScene.instance));
+            }
+            var parent=new GameObject();var parentView=parent.Add(new ZNetView());var child=new GameObject();
+            parent.Children.Add(child);child.transform.parent=parent.transform;child.Add(new SpawnArea());ZNetScene.instance.Prefabs.Add(21000,parent);
+            Check("SpawnArea uses the actual parent network root",catalog.NativeSpawnerDefault(21000,ZNetScene.instance));
+            child.Add(new ZNetView());ZNetScene.instance.Prefabs.Add(21001,parent);
+            Check("spawner on another child ZDO does not assign an entire location",!catalog.NativeSpawnerDefault(21001,ZNetScene.instance));
+            var creatureChild=new GameObject();var creatureRoot=new GameObject();creatureRoot.Add(new ZNetView());creatureRoot.Children.Add(creatureChild);creatureChild.transform.parent=creatureRoot.transform;creatureChild.Add(new CreatureSpawner());ZNetScene.instance.Prefabs.Add(21002,creatureRoot);
+            Check("CreatureSpawner requires its own component-local network view",!catalog.NativeSpawnerDefault(21002,ZNetScene.instance));
+            Check("missing spawner prefab is not cached as absent",!catalog.NativeSpawnerDefault(21003,ZNetScene.instance));
+            var late=new GameObject();late.Add(new ZNetView());late.Add(new CreatureSpawner());ZNetScene.instance.Prefabs.Add(21003,late);
+            Check("late native-style spawner registration is detected",catalog.NativeSpawnerDefault(21003,ZNetScene.instance));
+            int cachedScans=GameObject.Scans,cachedLookups=GameObject.Lookups;
+            for(int i=0;i<1000;i++)Check("spawner cache retains its classification",catalog.NativeSpawnerDefault(21003,ZNetScene.instance));
+            Check("repeated spawner classification performs no component scan or lookup",GameObject.Scans==cachedScans&&GameObject.Lookups==cachedLookups);
+        }
+        finally{patcher.UnpatchSelf();}
     }
     private static void DirectionalController()
     {
@@ -1586,6 +1734,43 @@ internal static partial class IntegrationTests
         Check("targeted snapshots do not write owners, submit requests, send replicas or update fields",writes==torch.Writes+pickable.Writes+missing.Writes+unmanaged.Writes&&player.m_rpc.Calls==0&&forced==ZDOMan.instance.Forced&&updates==controller.FieldUpdates);
         foreach(var gate in clutter)Check("snapshot ranking does not change native active-owner gates",gate.GetOwner()==7&&gate.Writes==0);
     }
+    private static void ForcedGridPackets()
+    {
+        Fresh(Kinds.Doors,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,keepOnExit:false,directional:true,outerDelay:0,forwardDelay:0);
+        var player=Peer(1);
+        var red=Object(typeof(Door),1,1,99);
+        var forward=Object(typeof(Door),1,9,99);
+        var outer=Object(typeof(Door),13,1,99);
+        var retired=Object(typeof(Door),100,100,99);
+        var suffix=Object(typeof(Door),1,5,99);
+        Object(typeof(Door),2,1,99); Object(typeof(Door),2,9,99); Object(typeof(Door),2,5,99);
+        var unrelated=ZDOMan.instance.GetZDO(player.m_characterID);
+        Tick(0);
+        var packets=new List<ZDO>{retired,unrelated,outer,forward,red,suffix};
+        int writes=red.Writes+forward.Writes+outer.Writes+retired.Writes+suffix.Writes;
+        int calls=player.m_rpc.Calls,forced=ZDOMan.instance.Forced;
+        var patch=typeof(HandoffSendPatch).GetMethod("After",BindingFlags.Static|BindingFlags.NonPublic);
+        patch.Invoke(null,new object[]{ZDOMan.instance,packets,1,false});
+        Check("a replaced native forced-send method is left alone",packets[0]==retired&&packets[4]==red);
+        patch.Invoke(null,new object[]{ZDOMan.instance,packets,1,true});
+        Check("native TML forced entries use current red/forward/outer/return coverage",packets[0]==red&&packets[2]==forward&&packets[3]==outer&&packets[4]==retired);
+        Check("unmanaged native priority and normal suffix retain exact slots",packets[1]==unrelated&&packets[5]==suffix);
+        Check("send priority adds no owner write, RPC or forced packet",writes==red.Writes+forward.Writes+outer.Writes+retired.Writes+suffix.Writes&&calls==player.m_rpc.Calls&&forced==ZDOMan.instance.Forced);
+        var indexed=(AuthorityWorld)typeof(AuthorityController).GetField("indexed",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(controller);
+        var dense=new List<ZDO>();
+        for(int i=0;i<100;i++){dense.Add(forward);dense.Add(unrelated);dense.Add(red);dense.Add(suffix);}
+        int reads=indexed.Grid.PriorityReads;
+        controller.PrioritizeForced(ZDOMan.instance,dense,dense.Count);
+        Check("interleaved packet entries calculate one priority per recognised field",indexed.Grid.PriorityReads==reads+3);
+        reads=indexed.Grid.PriorityReads;
+        controller.PrioritizeForced(ZDOMan.instance,dense,dense.Count);
+        Check("new native packet starts a fresh field priority batch",indexed.Grid.PriorityReads==reads+3);
+        packets=new List<ZDO>{retired,outer,forward,red};
+        controller.PrioritizeForced(new ZDOMan(),packets,4);
+        Check("another world cannot reuse controller priorities",packets[0]==retired&&packets[3]==red);
+        controller.Reset();controller.PrioritizeForced(ZDOMan.instance,packets,4);
+        Check("teardown stops all send priority work",packets[0]==retired&&packets[3]==red);
+    }
     public static void Main()
     {
         StaticGridCoverage();
@@ -1593,7 +1778,8 @@ internal static partial class IntegrationTests
         LooseItems();
         TextEditingPlayerGrid();
         try {
-        InactiveNativeTemplates();Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
+        ForcedGridPackets();
+        InactiveNativeTemplates();Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();InitialTamedDefaults();SpawnerDefaults();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
         SeparateMobDefaults();DelayedReadinessInteractions();OwnerStatusSnapshot();TargetedOwnerStatusSnapshot();WorldDefaultAssignments();KinematicDoorDefaults();
 #if GRID_PROTOCOL

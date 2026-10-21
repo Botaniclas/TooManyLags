@@ -9,6 +9,49 @@ internal static class NativeCombatAudit
     private static int assertions;
     private static void Check(bool value,string label){assertions++;if(!value)throw new Exception(label);}
     private static MethodDefinition Method(TypeDefinition type,string name){return type.Methods.Single(m=>m.Name==name);}
+    private static bool Calls(MethodDefinition method,string name)
+    { return method.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name==name); }
+    private static bool ReadsLocalPlayer(MethodDefinition method)
+    { return method.Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).DeclaringType.Name=="Player"&&((FieldReference)i.Operand).Name=="m_localPlayer"); }
+    private static void AuditSpawners(AssemblyDefinition native,AssemblyDefinition fgn,AssemblyDefinition addon)
+    {
+        TypeDefinition area=native.MainModule.GetType("SpawnArea"), single=native.MainModule.GetType("CreatureSpawner");
+        Check(Calls(Method(area,"UpdateSpawn"),"IsOwner")&&Calls(Method(area,"UpdateSpawn"),"OutsideActiveArea")&&
+            Calls(Method(area,"UpdateSpawn"),"IsPlayerInRange")&&!ReadsLocalPlayer(Method(area,"UpdateSpawn")),
+            "SpawnArea keeps native ownership, active-area and nearby-player gates without a local-player requirement");
+        Check(Calls(Method(single,"UpdateSpawner"),"IsOwner")&&Calls(Method(single,"UpdateSpawner"),"IsPlayerInRange")&&
+            !ReadsLocalPlayer(Method(single,"UpdateSpawner")),"CreatureSpawner keeps native owner and nearby-player gates");
+        Check(Calls(Method(area,"SpawnOne"),"Instantiate")&&Calls(Method(single,"Spawn"),"Instantiate")&&
+            Calls(Method(single,"Spawn"),"SetConnection")&&!ReadsLocalPlayer(Method(area,"SpawnOne"))&&!ReadsLocalPlayer(Method(single,"Spawn")),
+            "native spawners instantiate locally and keep their spawned-ZDO linkage without a local player");
+        Check(ReadsLocalPlayer(Method(native.MainModule.GetType("SpawnSystem"),"UpdateSpawning")),
+            "general SpawnSystem must keep its native local-player path");
+        TypeDefinition authority=fgn.MainModule.Types.Single(t=>t.Name=="ServerAuthorityPatches");
+        MethodDefinition outside=authority.Methods.Single(m=>m.Name=="OutsideActiveArea_Prefix");
+        Check(Calls(outside,"IsDedicated")&&Calls(outside,"GetPeers")&&Calls(outside,"IsPointInsideAnyPeerActiveArea"),
+            "FGN's dedicated active-area query includes the loading peers, rather than only the server reference position");
+        TypeDefinition catalog=addon.MainModule.GetType("TooManyLags.ObjectCatalog");
+        var classifier=Method(catalog,"NativeSpawnerDefault").Body.Instructions;
+        Check(classifier.Any(i=>i.Operand is TypeReference&&((TypeReference)i.Operand).Name=="SpawnArea")&&
+            classifier.Any(i=>i.Operand is TypeReference&&((TypeReference)i.Operand).Name=="CreatureSpawner")&&
+            classifier.Any(i=>i.Operand is TypeReference&&((TypeReference)i.Operand).Name=="SpawnSystem"),
+            "spawner classification targets the fixed native components and explicitly excludes SpawnSystem");
+        Check(Calls(Method(catalog,"NativeSpawnerDefault"),"GetComponentInParent")&&
+            !Calls(Method(catalog,"NativeSpawnerDefault"),"SetOwner")&&!Calls(Method(catalog,"NativeSpawnerDefault"),"InvokeRPC"),
+            "spawner classification resolves the actual network root and performs no ownership or RPC work");
+        TypeDefinition controller=addon.MainModule.GetType("TooManyLags.AuthorityController");
+        Check(Calls(Method(controller,"NativeServerDefault"),"NativeSpawnerDefault")&&
+            Calls(Method(controller,"NativeOwnerTarget"),"NativeSpawnerDefault")&&
+            Calls(Method(controller,"InitialMobLoad"),"NativeSpawnerDefault"),
+            "spawners reuse native default selection, retention and the existing pre-construction event");
+        Check(!addon.MainModule.Types.Where(t=>t.Namespace=="TooManyLags").SelectMany(t=>t.Methods).Any(m=>m.HasBody&&
+            m.Body.Instructions.Any(i=>i.Operand is MethodReference&&new[]{"SpawnArea","CreatureSpawner"}.Contains(((MethodReference)i.Operand).DeclaringType.Name)&&
+                new[]{"SpawnOne","Spawn","UpdateSpawn","UpdateSpawner"}.Contains(((MethodReference)i.Operand).Name))),
+            "addon neither calls nor replaces fixed-spawner update/spawn decisions");
+        TypeDefinition destructible=native.MainModule.GetType("Destructible");
+        Check(!ReadsLocalPlayer(Method(destructible,"RPC_Damage"))&&!ReadsLocalPlayer(Method(destructible,"Destroy")),
+            "spawner native damage/destruction paths have no direct local-player dependency");
+    }
     private static void Field(TypeDefinition type,string name,string expected)
     {
         FieldDefinition field=type.Fields.Single(f=>f.Name==name);
@@ -203,12 +246,57 @@ internal static class NativeCombatAudit
             Check(Method(baseAI,"SetTargetInfo").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="s_haveTargetHash"),"native network target info contains boolean");
             Check(!Method(baseAI,"SetTargetInfo").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).FullName.Contains("ZDOID)")),"native target ID is not replicated by SetTargetInfo");
             TypeDefinition manager=native.MainModule.Types.Single(t=>t.Name=="ZDOMan");
+            AuditSpawners(native,fgn,addon);
             Check(Method(manager,"ReleaseNearbyZDOS").Body.Instructions.Count(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="SetOwner")==2,"native two ownership writes match wrapper");
             TypeDefinition net=native.MainModule.Types.Single(t=>t.Name=="ZNet");
             Check(Method(net,"SetCharacterID").Parameters.Single().ParameterType.Name=="ZDOID","spawn capability publication contract");
             TypeDefinition data=native.MainModule.Types.Single(t=>t.Name=="ZDOExtraData");
             Check(Method(data,"GetSaveData").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="s_sessionOnly"),"session-only fields excluded during save");
             TypeDefinition combat=addon.MainModule.Types.Single(t=>t.Name=="FgnCombatOwnership");
+            var initialOwner=Method(combat,"InitialDefault").Body.Instructions;
+            Check(new[]{"GetOwner","get_Persistent","IsBoss","IsFriendly"}.All(name=>
+                initialOwner.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name==name)),
+                "initial mob selector retains unowned/persistent and boss/friendly checks");
+            Check(!initialOwner.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="get_Created"),
+                "a passive created instance does not exclude an otherwise unowned mob");
+            Check(!initialOwner.Any(i=>i.Operand is MethodReference&&new[]{"SetOwner","InvokeRPC","IsAreaReady","ReadyPoint","Instantiate"}.Contains(((MethodReference)i.Operand).Name)),
+                "initial selector changes neither ownership directly, loading/physics nor RPC flow");
+            var initialArea=Method(combat,"AnyLoadingPeer").Body.Instructions;
+            Check(new[]{"IsReady","GetRefPos","InActiveArea"}.All(name=>initialArea.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name==name))&&
+                !initialArea.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="Candidate")&&
+                !initialArea.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="Matched"),
+                "initial server assignment requires native loading coverage without waiting for FGN greeting");
+            Check(Method(combat,"Candidate").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="Matched"),
+                "later player handoffs retain the matched-FGN candidate check");
+            Check(Method(combat,"NativeSetOwner").Body.Instructions.Count(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="SetOwner")==1,
+                "initial and ordinary mob assignment share the single existing native ownership write");
+            var earlyLoad=Method(combat,"InitialMobLoad").Body.Instructions;
+            Check(earlyLoad.Count(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="SetOwner")==1&&
+                earlyLoad.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="InitialDefault")&&
+                earlyLoad.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="RememberInitial")&&
+                !earlyLoad.Any(i=>i.Operand is MethodReference&&new[]{"Instantiate","IsAreaReady","ReadyPoint","InvokeRPC"}.Contains(((MethodReference)i.Operand).Name)),
+                "pre-construction default performs one eligible owner write without construction/readiness/RPC work");
+            var bornLoad=Method(combat,"DefaultLoadedPostfix").Body.Instructions;
+            Check(bornLoad.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="get_OwnerRevision")&&
+                bornLoad.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="RememberInitial")&&
+                !bornLoad.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="SetOwner"),
+                "newborn server-origin retention records the original ownership revision without an extra owner write");
+            var earlyHook=Method(addon.MainModule.Types.Single(t=>t.FullName=="TooManyLags.InitialMobLoadPatch"),"Prefix");
+            Check(earlyHook.ReturnType.FullName=="System.Void"&&earlyHook.Body.Instructions.Any(i=>i.Operand is MethodReference&&
+                ((MethodReference)i.Operand).DeclaringType.Name=="FgnCombatOwnership"&&((MethodReference)i.Operand).Name=="InitialMobLoad")&&
+                earlyHook.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.Name=="AuthorityController"&&
+                ((MethodReference)i.Operand).Name=="InitialMobLoad"),"construction prefix keeps the original running and dispatches both initial mob policies");
+            var createBody=Method(native.MainModule.Types.Single(t=>t.Name=="ZNetScene"),"CreateObject").Body.Instructions;
+            Check(createBody.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="m_initZDO")&&
+                createBody.Count(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="Instantiate")==1&&
+                Method(native.MainModule.Types.Single(t=>t.Name=="ZNetScene"),"AddInstance").Body.Instructions.Any(i=>i.Operand is MethodReference&&
+                    ((MethodReference)i.Operand).Name=="set_Created"),"native creation consumes init data once and Created marks local instance registration");
+            Check(Method(combat,"AiAwakePostfix").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="Schedule")&&
+                !Method(combat,"AiAwakePostfix").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="Observe"),
+                "initial server AI joins existing deferred target observation after Awake");
+            var nativeCreate=Method(native.MainModule.Types.Single(t=>t.Name=="ZNetScene"),"CreateObjectsSorted").Body.Instructions;
+            Check(new[]{"IsActiveAreaLoaded","IsZoneReadyForType","ZDOCompare"}.All(name=>nativeCreate.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name==name)),
+                "native creation still provides area/type gates and priority ordering");
             TypeDefinition plugin=addon.MainModule.Types.Single(t=>t.FullName=="TooManyLags.Plugin");
             var startPolicy=Method(plugin,"InitializeOwnership").Body.Instructions.ToList();
             Check(new[]{"Start","ApplyServerSession"}.All(name=>Method(plugin,name).Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="InitializeOwnership")),

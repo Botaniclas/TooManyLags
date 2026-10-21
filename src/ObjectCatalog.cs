@@ -23,6 +23,7 @@ namespace TooManyLags
         // Prefab-only eligibility: stationary, permanent refill, incinerator,
         // and default-only world markers. No scene-loading scan here.
         private readonly Dictionary<int, ulong> nativeDefaults = new Dictionary<int, ulong>();
+        private readonly Dictionary<int, bool> nativeSpawners = new Dictionary<int, bool>();
         private readonly Kinds enabled;
         private readonly HashSet<int> looseDrops = new HashSet<int>();
         internal bool IsLooseDrop(int hash) { return looseDrops.Contains(hash); }
@@ -69,6 +70,46 @@ namespace TooManyLags
         { return (Kinds)(NativeDefaultFlags(hash, scene) >> 8); }
         internal bool NativeInventoryDefault(int hash, ZNetScene scene)
         { return (NativeDefaultFlags(hash, scene) & 16) != 0; }
+        internal bool NativeSpawnerDefault(int hash, ZNetScene scene)
+        {
+            bool result;
+            if (nativeSpawners.TryGetValue(hash, out result)) return result;
+            GameObject prefab = scene.GetPrefab(hash); if (!prefab) return false;
+            ZNetView view = prefab.GetComponent<ZNetView>();
+            result = false;
+            if (view && view.m_persistent && !view.m_distant && !prefab.GetComponent<Character>() &&
+                !prefab.GetComponent<ItemDrop>() && !prefab.GetComponentInChildren<Rigidbody>(true))
+            {
+                foreach (MonoBehaviour component in prefab.GetComponentsInChildren<MonoBehaviour>(true))
+                {
+                    if (!component || component.GetComponentInParent<ZNetView>(true) != view) continue;
+                    // SpawnSystem requires Player.m_localPlayer and must stay native.
+                    // Mixed interactive roots need their own handoff/use protections.
+                    if (component is Interactable || component is SpawnSystem) { result = false; break; }
+                    if (component is SpawnArea || (component is CreatureSpawner && component.GetComponent<ZNetView>() == view)) result = true;
+                }
+            }
+            nativeSpawners.Add(hash, result); return result;
+        }
+        private sealed class AnimalTemplate { internal Character Actor; internal Tameable Animal; internal ZNetView View; }
+        private readonly Dictionary<int, AnimalTemplate> nativeAnimals = new Dictionary<int, AnimalTemplate>();
+        // Initial ownership needs saved instance state, not a simulated actor.
+        // Keep this separate from stationary early-object/harvest eligibility.
+        internal bool NativeTamedDefault(ZDO data, ZNetScene scene)
+        {
+            if ((enabled & Kinds.TamedAnimals) == 0 || !data.GetBool(ZDOVars.s_tamed) ||
+                data.GetLong(ZDOVars.s_user, 0L) != 0L || !String.IsNullOrEmpty(data.GetString(ZDOVars.s_follow)) ||
+                data.GetFloat(ZDOVars.s_health, 1f) <= 0f) return false;
+            int hash = data.GetPrefab(); AnimalTemplate template;
+            if (!nativeAnimals.TryGetValue(hash, out template))
+            {
+                GameObject prefab = scene.GetPrefab(hash); if (!prefab) return false;
+                template = new AnimalTemplate { Actor = prefab.GetComponent<Character>(), Animal = prefab.GetComponent<Tameable>(), View = prefab.GetComponent<ZNetView>() };
+                nativeAnimals.Add(hash, template);
+            }
+            return template.Actor && !(template.Actor is Player) && template.View && template.View.m_persistent && !template.View.m_distant &&
+                !FriendlyCreatures.IsFriendly(template.Actor) && !IsSummoned(template.Animal);
+        }
         private ulong NativeDefaultFlags(int hash, ZNetScene scene)
         {
             ulong flags; if (nativeDefaults.TryGetValue(hash, out flags)) return flags;

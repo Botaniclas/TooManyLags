@@ -14,4 +14,4 @@ These three pages accompany the prepared package. This index is for the author; 
 
 The package README links to the Wiki index, so no generated page IDs need to be inserted. Nothing has been uploaded automatically.
 
-The Configuration page includes four ownership GIFs in `docs/ownership-examples/`: Default settings, Max server ownership with retention, Max server ownership with returns, and No Server-Side Simulation. They use the same 50 x 50-cell base and five-minute routes at 20x playback, with a 3-second final hold. Embed the GitHub-hosted images in the Thunderstore Wiki; the gallery also includes final-state PNGs and comparison images.
+The Configuration page includes four ownership GIFs in `docs/ownership-examples/`: Default settings, Max server ownership with retention, Max server ownership with returns, and No Server-Side Simulation. They use the same 50 x 50-cell base and five-minute routes at 20x playback, with a 3-second final hold. The GitHub-hosted images need to be pushed before their online wiki links work; the local media bundle includes playable GIFs and final-state PNGs.

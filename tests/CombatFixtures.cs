@@ -74,7 +74,7 @@ public static class ZDOVars { public static int s_tamed=1,s_user=2,s_health=3; }
 public static class ZDOExtraData { public static readonly HashSet<int> Session=new HashSet<int>(); public static void AddSessionHash(int hash) { Session.Add(hash); } }
 public class ZDO
 {
-    public int Type,Prefab=42; public int GetPrefab(){return Prefab;}
+    public int Type,Prefab=42; public bool Persistent=true,Created; public int GetPrefab(){return Prefab;}
     public ZDOID m_uid; public uint OwnerRevision; public bool Valid=true, Held; public int Writes, OwnerWrites;
     private long owner; public UnityEngine.Vector3 Position;
     private readonly Dictionary<int,long> longs=new Dictionary<int,long>();
@@ -93,7 +93,7 @@ public class ZDO
     public void Set(KeyValuePair<int,int> hash,ZDOID id) { Set(hash.Key,id.UserID); Set(hash.Value,id.ID); }
     public ZDOID GetZDOID(KeyValuePair<int,int> hash) { return new ZDOID(GetLong(hash.Key,0),(uint)GetLong(hash.Value,0)); }
 }
-public class ZNetView : UnityEngine.Component { public ZDO Data; public bool m_distant; public int Forwarded; public long ForwardOwner; public HitData ForwardHit; public bool IsValid() { return Data!=null && Data.IsValid(); } public bool IsOwner() { return IsValid() && Data.GetOwner()==ZDOMan.Session; } public ZDO GetZDO() { return Data; } public void InvokeRPC(long owner,string name,params object[] args){Forwarded++;ForwardOwner=owner;ForwardHit=(HitData)args[0];}
+public class ZNetView : UnityEngine.Component { public ZDO Data; public bool m_persistent=true,m_distant; public int Forwarded; public long ForwardOwner; public HitData ForwardHit; public bool IsValid() { return Data!=null && Data.IsValid(); } public bool IsOwner() { return IsValid() && Data.GetOwner()==ZDOMan.Session; } public ZDO GetZDO() { return Data; } public void InvokeRPC(long owner,string name,params object[] args){Forwarded++;ForwardOwner=owner;ForwardHit=(HitData)args[0];}
     [MethodImpl(MethodImplOptions.NoInlining)] public void ResetZDO(){Data=null;}
     [MethodImpl(MethodImplOptions.NoInlining)] private void OnDestroy(){}
 }

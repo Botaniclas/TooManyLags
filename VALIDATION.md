@@ -1,3 +1,106 @@
+# TooManyLags 1.0.57 release verification (2026-10-21)
+
+Final release build: all 29 verification groups passed. DLL SHA256: `FAFFA234FEDA8B66472A5F809EED4CB801C4C56019DDA551FB72628BAA9D95F4`. The full-controller/grid/router suite passed 31,059 assertions; combat fixtures passed 1,925 assertions on CLR and embedded Valheim Mono. Actual native contracts passed with FiresGhettoNetworking 1.5.36, 1.5.53 and 1.5.65, including the PUP FPS 1.0.36 reference. The native audit identifies the same final DLL and reports no build mutation during verification.
+
+All 55 configuration values are preserved. The final README pair includes the compact animated ownership examples, and the configuration wiki remains byte-identical to the user's supplied final page. Existing clients and configs remain compatible; update and restart the server. Automated fixtures and native IL checks do not constitute live multiplayer, Unity physics or real-network testing.
+
+---
+
+# TooManyLags 1.0.57 fixed-spawner defaults candidate
+
+Based on verified local 1.0.56. The ServerOwnedMobsByDefault setting now also selects a server default for eligible fixed SpawnArea/CreatureSpawner network roots. It uses the raw setting even if the TamedAnimals category is disabled. Spawners stay outside all player-field decisions; interactive/static defaults do not opt them in. Setting false retains native ownership. Server-Side Simulation remains required; general SpawnSystem is excluded because it requires a local player.
+
+Reuses the existing native first-owner selector, pre-construction event, area retention/cache and native owner-departure predicates. It does not steal an active client spawner mid-spawn. No new hook, timer, background scan, RPC, physics guard or per-world-object queue is introduced. Prefab classification is cached only when enabled and missing prefabs remain retryable. Live grid/actor/interaction/attack protocols and scheduling remain unchanged; the imported combat source changes only its config description. Native spawn methods, limits and conditions are not replaced.
+
+All 29 final verification groups pass on DLL SHA256 2B502E0B5C0F262B8E6DA7537A58C5EF63DE6777535658D37C739A260A82D3E4. Production-controller tests pass 31,059 assertions; combat tests pass 1,925 on both CLR and embedded Valheim Mono. Native IL checks confirm owner gates, spawn linkage, absence of direct local-player dependency for the two fixed types, general SpawnSystem's local-player requirement, native damage/destruction and FiresGhettoNetworking's dedicated OutsideActiveArea query: 190 contracts pass with provider 1.5.36 and 192 with 1.5.53/1.5.65 and the PUP 1.0.36 reference. The separate forced-prefix native audit passes on the same DLL. Compiled combat policy differs from 1.0.56 only in one configuration-description string. Generated config includes the new spawner explanation; all 55 config values remain identical to 1.0.56. Invalid-position/revision, active-owner, scene-cache cleanup and ordinary grid/interaction guards are retained. No live Unity/PhysX/multiplayer spawn test, installed-profile change, publication or Git push is claimed. See docs/SPAWNER-DEFAULTS.md.
+
+Historical validation below applies to its own versions.
+
+---
+# TooManyLags 1.0.56 mob-load paths candidate
+
+Uses the verified 1.0.55 source and changes only AuthorityController, FgnCombatOwnership and Plugin (including version metadata). Grid schedulers, field batching, send priority, camera, both simulation modes and all client/interaction/attack/collision protocols are unchanged. All 55 config values are retained. The separate 1.0.50 pool/future-job-skip and shelved packet-catchup changes remain excluded.
+
+The new native CreateObject prefix seeds only eligible unowned mobs before normal server construction. Tamed animals keep settled player fields. Hostile native assignment no longer excludes an unowned ZDO merely because its passive server instance exists. Fresh server-origin, zero-owner-revision persistent Hostile Mobs retain their existing server owner through the existing initial lease; no duplicate owner write is made. Creation order, terrain/type gates, Awake, attack/readiness protection and unload/reset cleanup remain active. There is no new polling loop, spawn proxy, client protocol or handoff RPC.
+
+Native IL proves a separate limitation: SpawnSystem requires a local player and creates new ZDOs on the creating client, whose session is the initial owner. Client-created spawns and existing nonzero owners keep guarded handoffs. This server-only build does not eliminate the creator-first ownership of those spawns. See docs/INITIAL-MOB-LOAD-PATHS.md for confirmed paths, scope and exclusions.
+
+The old-source reproduction fails at the created/unowned selector. Corrected combat tests pass 1,925 assertions on CLR and embedded Valheim Mono; controller/router tests pass 29,905 assertions. All 29 final verification groups pass on DLL SHA256 8138DA6833885DC8333BFA2AC2BBC77D423AE1B67CDFA9F67FDD66AD2A3A4AB8. Actual native/FGN combat IL checks pass 180 contracts for FiresGhettoNetworking 1.5.36 and 182 for 1.5.53/1.5.65 and the PUP 1.0.36 reference. The actual-native forced-prefix audit passes on the same DLL. The native hook audit permits exactly the new CreateObject prefix alongside the previous 55 core targets. All 55 config values remain identical to 1.0.55. These are managed/native-contract tests, not live Unity/PhysX or multiplayer tests. No installed profiles, publication or Git push are changed.
+
+Historical validation below applies to its own versions.
+
+---
+# TooManyLags 1.0.55 initial-mob assignment candidate
+
+Integrates the separately reviewed 1.0.51 initial-mob candidate into the verified 1.0.54 priority/field-batching baseline. The 1.0.54 grid schedulers, send-priority hook, camera and interaction/readiness protocol remain unchanged. The reverted 1.0.50 field-pool/future-job-skip changes and shelved packet-catchup prototype are not reintroduced.
+
+Only native first assignments of eligible unowned mobs select a different target owner. Tamed defaults use the existing interactive/mob-default settings, saved tame/use/follow/health state and scene-scoped prefab traits; settled player-grid ownership still wins. Tamed actors do not enter the stationary pre-instantiation object/harvest path. Existing active owners and subsequent actor handoffs retain the original loading/use/follow/riding guards.
+
+Hostile initial defaults require ServerOwnedMobsByDefault, AI ownership and active dedicated Server-Side Simulation. They reuse the already installed native owner-write wrapper. An initial lease in the existing table keeps the new server owner until the normal scene creates the actor; AI Awake/deferred target observation adopts it into normal target ownership. Existing balance/scene/unload paths clear departed, stale or invalid leases. No fake actor, early creation, physics-state writer, readiness bypass for later transfers, new per-frame loop or new handoff RPC is added. Instantiated/existing-owner Hostile Mobs, bosses, friendly magic summons and held/possessed creatures retain existing handling. Settings and client protocol are unchanged.
+
+Focused controller/router tests pass 29,891 assertions, including native assignment before readiness, both tamed-default settings, retained server ownership without repeated jobs/writes, settled player/overlap ownership and all category/use/follow/summon/native-active-owner exclusions. Focused combat tests exercise the production source on both CLR and embedded Valheim Mono; final counts and full native verification are recorded below when complete. Native IL audits require exactly one existing owner write, original creation gates and deferred target observation. These are managed/native-contract tests, not a live Unity/PhysX or multiplayer test.
+
+
+The delayed-greeting audit reproduced another first-owner gap in the earlier isolated candidate: a ready native player with an unfinished FiresGhettoNetworking greeting still received ownership first. Initial assignment and retention now use native ready-player loading areas, without requiring an eligible FGN recipient. The previous helper that mixed these two purposes is removed. Loaded non-boss server defaults also remain server-owned while native loading players exist but no compatible recipient is ready. Actual player handoffs keep Candidate, participation, readiness and attack checks unchanged; no loading player still releases the mob normally. Tests cover pending greetings before and after actor creation, a target becoming compatible, readiness still blocking that later transfer, idle zero-repeat-write/collision work and unready/far/non-finite loading references.
+All 29 final verification groups pass on DLL SHA256 394B21ABB1C3F54595130C234EF79C8337EC1ECE02122F06ABA9604EB3ED626C. Combat tests pass 1,891 assertions on both CLR and embedded Valheim Mono. Actual native/FGN IL checks pass 175 contracts for FiresGhettoNetworking 1.5.36 and 177 for 1.5.53/1.5.65 and the PUP 1.0.36 reference. The separate actual-native forced-prefix priority audit passes on the same DLL. All 55 config values and the client protocol remain unchanged. No live multiplayer test was performed. Server-only update; no installed profile changes, publication or Git push requested.
+
+Historical validation below applies to its own versions.
+
+---
+# TooManyLags 1.0.54 field-batching candidate
+
+Based strictly on the local 1.0.53 priority candidate. Changes are limited to AuthorityGrid, PlayerSimulation/AuthorityGrid, AuthorityController and plugin version metadata. All 1.0.53 priority rules remain; the 1.0.50 policy-pool and future-job-skip changes remain reverted. No additional early-mob or client packet-catchup prototype is included.
+
+Shared field priority is calculated once per batch for fields containing multiple loaded objects; singleton fields bypass the cache. Changed-field scheduling calculates its common wait once and avoids the redundant pending-set lookup. Final native owner writes, live target reads and object-specific safeguards retain their existing paths. No handoff quota, new deadline, timer or RPC is introduced. Stable fields with no pending work add no object scan.
+
+The node references its existing loaded-object bucket. Movement updates that reference; removal clears it. Priority scratch lists clear flags and references before native callbacks and after packet classification, including exceptions. Buckets are removed through the existing unload path. There is no new historical cell/owner map. Additional storage is one bucket reference per loaded node and small per-loaded-field/scratch state.
+
+Focused scheduling tests pass 8,269 assertions per simulation mode; forced-prefix tests pass 2,019. Full-controller/grid fixtures pass 29,829 assertions, including scoped packet cache reuse, unrelated native slots, zero extra writes/RPCs and world teardown. The differential audit passes 40,000 event steps in each simulation mode: baseline and candidate binary traces match exactly, SHA256 16494C79B5EAAA326175E6337A1D06A37DAA292539772B7981AF93D020F57716. This includes both retention modes, twelve players, guard blocking, replies, callbacks, mobile nodes, clock rollback and changing delays.
+
+The CLR scheduling benchmark reports about 8–22% less scheduling time for 4,096 pending objects across 1–64 fields. At one object per field it reports about 3–5% overhead (approximately 0.005–0.011 ms for 4,096 jobs). The singleton bypass avoids the rejected first draft's 22–24% sparse-case regression. All benchmark Apply counts/traces match. These numbers exclude Unity, the actual server Mono runtime, transport and live multiplayer latency; no server/FPS improvement or fix for the reported intermittent delay is established. See docs/FIELD-BATCHING-AUDIT.md and the reproducible audit/benchmark scripts.
+
+All 29 final verification groups pass on DLL SHA256 0CBDCD8170E876A1EC65344C37FA4D9652E08FC2212329E927765F7C032E982F. The separate actual-native forced-prefix audit passes on the same DLL. Production diagnostics are compiled out; all 55 existing config values and the client protocol remain unchanged. No live multiplayer test was performed. Server-only update; no client/config replacement, publication or Git push requested.
+
+Historical notes below describe their own versions.
+
+---
+# TooManyLags 1.0.53 priority candidate
+
+All 29 final verification groups pass on DLL SHA256 50E54DEB61F2AE7891BFE60D11A2ABDCFB35558B648E3483A42B449DA168ACA4. The separate forced-prefix native contract audit passes on that same DLL. No live multiplayer latency measurement is claimed.
+
+This isolated test starts from the 1.0.52 comparison source. The 1.0.50 field-pool and future-job-skip optimisations remain reverted. The separate early-mob candidate and packet-catchup prototype are not included. The only runtime additions beyond version metadata are coverage-tier work ordering and the dedicated server's native forced-prefix ordering.
+
+Pending jobs use four reused lanes: red, forward/orange, outer/yellow, then no live coverage. Tier comes from current contribution counts, not distance calculations, owner UID or a possibly equal delay. Every due lane runs in the same pass: there is no new count budget, time budget, timer or starvation. Existing deadlines, acceleration, replies, inventory, source-consent, text, refill, pickup, collision and use safeguards remain unchanged. Stable idle worlds with no pending jobs do not partition anything.
+
+The actual native AddForceSendZdos method prepends entries, which can invert enqueue order. The server-only prefix/postfix captures the number inserted by the original method and stably partitions only recognised TML entries in that prefix. Unrecognised forced entries keep their exact slots; the normal suffix, multiplicity and packet contents are untouched. A skipped original, another world or an inactive controller receives no priority work. There is no ownership write, serializer replacement, send-rate adjustment or new RPC in this hook. The inspected ValheimTune dirty-set path calls the same native method. Runtime priority is scoped to the TML entries; transport congestion and other mods can still affect delivery.
+
+The source comparison records six changed/added runtime files, including Plugin.cs metadata. All 55 config values and the client protocol remain unchanged. The priority tests exercise 2,048 due jobs per pass, red guards and future deadlines, callback-created/removed jobs, returning objects, both exit policies, shared fields, snapshot cleanup and teardown in both simulation modes (8,252 assertions each). Forced-prefix tests cover mixed managed/native slots, an untouched suffix, stable ordering, duplicates, exception cleanup and reentry (2,019 assertions). Full-controller fixtures also exercise the actual hook entry point, skipped originals, exact native slots, wrong-world/teardown isolation and zero extra writes/RPCs.
+
+The native audit now requires exactly the newly added forced-prefix hook alongside all previous targets (55 rather than 54). It still validates every target and prefix/postfix parameter against the actual game; it does not permit an arbitrary additional patch. A separate actual-Cecil audit checks the prepend-only native mutation, both native callsites and the hook's original-skip contract. Final DLL and verification results are recorded in verification.json and bin/priority-audit/native-contract.json.
+
+Scratch collections release object references after each pass, including exceptions, and reuse peak capacity rather than retaining a history of cells or object IDs. No new persistent world-position or owner cache is added. Partitioning is linear and uses existing loaded-node/grid indexes, without comparison sorting, component scans or distance checks. The first native-audit attempt stopped on the old exact target count; the audit was extended only for the verified new hook and rerun successfully. This is not a live latency benchmark, and the source audit does not establish the cause of the reported intermittent delay.
+
+See docs/HANDOFF-PRIORITY-AND-LIMITS.md for the distinction between object safety retries, FiresGhettoNetworking's separate creature-balancing quota and native/networking-mod send budgets. Server update only; no client or config replacement. No publication or Git push is part of this test build.
+
+Historical comparison and release notes below apply to their own versions.
+
+---
+# TooManyLags 1.0.52 comparison candidate: 1.0.50 without its grid optimisations
+
+Isolated from the released 1.0.50 source (5810f651afd80cd42e4056a332fe6428fb218b62). AuthorityGrid, PlayerSimulation/AuthorityGrid and AuthorityController use the exact pre-optimisation 1.0.49 source (fb71a241cd08ea8ede6a270110b68385dd83c49b), restoring the original job traversal and return-on-exit allocation behaviour. Version metadata and the comparison notice are updated. The .48 production-counter/logging changes remain. This is a deliberate A/B build, not a claim that the removed optimisations caused the reported delay.
+
+The 1.0.50 simulation startup dispatcher/flag fix and 1.0.49 CommunityPatch coordination remain unchanged. No inventory, source-consent, pickup, refill, text, collision, camera, grid footprint, timer, default setting, protocol, ownership or network-send rule is relaxed or replaced. The separately prepared 1.0.51 early-mob-assignment candidate and the unfinished client packet-catch-up prototype are not included.
+
+Server-only replacement; no client or config update is needed. This candidate may allocate and traverse pending jobs more often, especially with KeepOwnershipOnCellExit=false, as requested for comparison. Existing field decisions and deadlines are intended to remain identical. Live multiplayer latency comparison remains outstanding; publication/push are not part of this build request.
+
+The dedicated legacy scheduling suite verifies the restored behaviour rather than asserting that removed optimisations still exist. The native load-reply regression measures actual Apply attempts instead of the removed PendingVisits instrumentation. It still requires prompt authenticated readiness wake-up, with the original direct NotBefore update.
+
+All 29 verification groups pass on comparison DLL SHA256 6B8A568A0A294DEEB3149C9670A175121F22D709930E06596F2E33B3CBAF70E7. The legacy scheduling checks pass 21 assertions in each simulation mode, including direct readiness wake-up, due guarded work, original return-on-exit allocation and unload cleanup. All 55 saved/default config values match the 1.0.50 baseline.
+
+An independent 40,000-event trace with up to twelve players, both exit policies, directional/full grids, replies, clock rollback, callback-created work and changed delays is byte-identical between 1.0.47, 1.0.50 and this comparison source: SHA256 750FF13780F2FEBA2D977B64E168687ADA4CEDC69A16B5CE5E479BCD7728D7F5. This establishes managed scheduling equivalence for those inputs, not the absence of a live multiplayer issue. A complete comparison of the 79 runtime C# files finds changes only in the three deliberately restored files and the plugin version metadata. Native audits, inventory, loading, combat, camera, text, pickup, optional PUP and CommunityPatch regressions remain passing. Detailed results are in verification.json.
+Historical release notes below describe their own versions and are not claims about this comparison candidate.
+
+---
 # TooManyLags - FiresGhettoNetworking Addon 1.0.50 hotfix
 
 All 29 final release verification groups pass against DLL SHA256 `C1ABC33FAA10D48C304574441590F8EBC69253F3289F95239A18F666AFB1FFCA`. The native audit passes with FiresGhettoNetworking 1.5.36, 1.5.41 and 1.5.65. It explicitly permits the new reflection writes only in the startup reconciliation function and rejects calls to that function outside session startup. The initial release-audit run stopped on its earlier, narrower reflection-write allowlist; that test rule was updated without changing runtime code, and the complete verification was rerun successfully. Exact inputs and results are recorded in `verification.json`.

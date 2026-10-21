@@ -25,7 +25,7 @@ namespace TooManyLags
         private readonly OwnershipCadence cadence;
         private readonly CompatibilityBridge compatibility;
         private readonly Action<Exception> fault, requestFault;
-        private readonly bool staticEnabled, staticGrid, defaultCoverage, defaultInteractives, defaultMobs, refillStations, keepOnExit;
+        private readonly bool staticEnabled, staticGrid, defaultCoverage, defaultInteractives, defaultMobs, defaultSpawners, refillStations, keepOnExit;
         private readonly float cellSize;
         private readonly int subdivisions;
         private readonly GridCoveragePattern pattern;
@@ -34,6 +34,8 @@ namespace TooManyLags
         private StaticBuildings statics;
         private readonly Dictionary<ZDOID, NativeNode> nodes = new Dictionary<ZDOID, NativeNode>();
         private readonly HashSet<NativeNode> loadingObjects = new HashSet<NativeNode>();
+        private readonly HandoffSendPriority<ZDO> sendPriority = new HandoffSendPriority<ZDO>();
+        private Func<ZDO, int> sendTier;
         private readonly List<NativeNode> retiringInitialObjects = new List<NativeNode>();
         private readonly HashSet<Vector2s> loadingCenters = new HashSet<Vector2s>(), nextLoadingCenters = new HashSet<Vector2s>();
         private readonly Dictionary<Cell, HashSet<NativeNode>> waitingFieldRequests = new Dictionary<Cell, HashSet<NativeNode>>();
@@ -69,6 +71,7 @@ namespace TooManyLags
             this.compatibility = compatibility; this.fault = fault; this.requestFault = requestFault; this.staticEnabled = staticEnabled;
             this.defaultInteractives = defaultInteractives; this.refillStations = refillStations;
             this.defaultMobs = defaultMobs && (kinds & Kinds.TamedAnimals) != 0;
+            defaultSpawners = defaultMobs;
             this.staticGrid = staticGrid; defaultCoverage = this.defaultMobs || (staticEnabled && staticGrid);
             this.keepOnExit = keepOnExit;
             this.cellSize = Cell.Subdivisions(cellSize) != 0 ? cellSize : 8f;
@@ -100,6 +103,20 @@ namespace TooManyLags
             return indexed != null;
         }
         internal void Poll(float now) { if (cadence.Due(now)) Tick(); }
+        internal void PrioritizeForced(ZDOMan source, List<ZDO> items, int inserted)
+        {
+            if (!active || failed || indexed == null || inserted < 2 || !ReferenceEquals(world, source)) return;
+            if (sendTier == null) sendTier = SendPriorityOf;
+            indexed.ClearPriorityBatch();
+            try { sendPriority.Apply(items, inserted, sendTier); }
+            finally { if (indexed != null) indexed.ClearPriorityBatch(); }
+        }
+        private int SendPriorityOf(ZDO data)
+        {
+            NativeNode node;
+            if (data == null || !nodes.TryGetValue(data.m_uid, out node) || node.Removed || !ReferenceEquals(node.Data, data)) return -1;
+            return indexed.BatchPriority(node);
+        }
         internal void ConfigureInterval(float interval) { cadence.Configure(interval); }
         internal void ConfigureOverlapCooldown(float seconds)
         {
@@ -370,7 +387,7 @@ namespace TooManyLags
                 // defaults not yet managed need the native-zone cache below.
                 // Vanilla checks the server UID against its own ref-pos; retain
                 // these defaults while a ready peer loads the area instead.
-                if ((defaultInteractives || staticEnabled) && data.GetOwner() == server && (!known || (node.Identity() && node.Controllable())) &&
+                if ((defaultInteractives || defaultMobs || defaultSpawners || staticEnabled) && data.GetOwner() == server && (!known || (node.Identity() && node.Controllable())) &&
                     NativeServerDefault(data) && DefaultArea(data.GetPosition()))
                 {
                     // Retaining the same owner performs no SetOwnerInternal
@@ -469,11 +486,28 @@ namespace TooManyLags
                 if (peer != null && peer.IsReady() && ZNetScene.InActiveArea(position, ZoneSystem.GetZone(peer.GetRefPos()))) { result = true; break; }
             defaultAreas.Add(zone, result); return result;
         }
+        internal void InitialMobLoad(ZDO data)
+        {
+            if (!(defaultInteractives || defaultMobs || defaultSpawners) || !active || failed || data == null ||
+                !ReferenceEquals(world, ZDOMan.instance) || !ReferenceEquals(scene, ZNetScene.instance)) return;
+            try
+            {
+                if (!data.IsValid() || !data.Persistent || data.GetOwner() != 0L || data.OwnerRevision == UInt16.MaxValue ||
+                    BakedObjects.IsBaked(data) || !Finite(data.GetPosition())) return;
+                bool spawner = defaultSpawners && catalog.NativeSpawnerDefault(data.GetPrefab(), scene);
+                if ((!spawner && (!(defaultInteractives || defaultMobs) || !catalog.NativeTamedDefault(data, scene))) ||
+                    !DefaultArea(data.GetPosition())) return;
+                // At CreateObject entry no actor has been initialized. A settled
+                // player field keeps precedence; only the server default is seeded.
+                if (spawner || NativeOwnerTarget(data, server) == server) data.SetOwner(server);
+            }
+            catch (Exception error) { Fail(error); }
+        }
         // This is only a target selector at vanilla's assignment write. Native
         // active-owner/area tests have already succeeded; no takeover RPC here.
         internal long NativeOwnerTarget(ZDO data, long nativeOwner)
         {
-            if (!(defaultInteractives || staticEnabled) || !active || failed || nativeOwner == 0 || !ReferenceEquals(world, ZDOMan.instance) ||
+            if (!(defaultInteractives || defaultMobs || defaultSpawners || staticEnabled) || !active || failed || nativeOwner == 0 || !ReferenceEquals(world, ZDOMan.instance) ||
                 !data.IsValid() || !data.Persistent || BakedObjects.IsBaked(data) || data.OwnerRevision == UInt16.MaxValue ||
                 !NativeServerDefault(data)) return nativeOwner;
             Vector3 position = data.GetPosition(); Cell cell;
@@ -481,6 +515,13 @@ namespace TooManyLags
             NativeNode node;
             bool known = nodes.TryGetValue(data.m_uid, out node) && ReferenceEquals(node.Data, data);
             if (known && (!node.Identity() || !node.Controllable() || node.UseProtected())) return nativeOwner;
+            // Fixed mob spawners follow the mob default, independently of animal
+            // categories and player fields. Native active-owner tests and the
+            // existing identity/position/use checks remain ahead of this selector.
+            if (defaultSpawners && catalog.NativeSpawnerDefault(data.GetPrefab(), scene)) return server;
+            // Mobile actors keep their normal guarded handoff path. Only an
+            // unowned animal may use this native first-assignment selector.
+            if (data.GetOwner() != 0L && catalog.NativeTamedDefault(data, scene)) return nativeOwner;
             if (refillStations && catalog.NativeRefillDefault(data.GetPrefab(), scene)) return server;
             if (catalog.NativeWorldDefault(data.GetPrefab(), scene)) return server;
             if (!staticGrid && catalog.NativeDefaultKind(data.GetPrefab(), scene) == Kinds.StaticBuildings) return server;
@@ -525,7 +566,7 @@ namespace TooManyLags
         internal string OwnerStatus(long requester, string prefabFilter = null)
         {
             var output = new StringBuilder("SERVER owner status: active=" + IsActive + "; defaultInteractives=" + defaultInteractives +
-                "; defaultMobs=" + defaultMobs + "; keepOnExit=" + keepOnExit + "; permanentRefills=" + refillStations + "; destinationProtocol=" + (DestinationLoaded != null) + "; " + compatibility.State());
+                "; defaultMobs=" + defaultMobs + "; defaultSpawners=" + defaultSpawners + "; keepOnExit=" + keepOnExit + "; permanentRefills=" + refillStations + "; destinationProtocol=" + (DestinationLoaded != null) + "; " + compatibility.State());
             bool filtered = !String.IsNullOrWhiteSpace(prefabFilter);
             if (filtered && prefabFilter.Length > 100) return output.Append("\nPrefab filter must be at most 100 characters.").ToString();
             if (!ReferenceEquals(world, ZDOMan.instance) || !network || !scene || indexed == null || catalog == null)
@@ -696,8 +737,10 @@ namespace TooManyLags
         }
         private bool NativeServerDefault(ZDO data)
         {
+            if (defaultSpawners && catalog.NativeSpawnerDefault(data.GetPrefab(), scene)) return true;
             Kinds kind = catalog.NativeDefaultKind(data.GetPrefab(), scene);
-            return kind != Kinds.None && (kind == Kinds.StaticBuildings ? staticEnabled : defaultInteractives);
+            return kind != Kinds.None ? (kind == Kinds.StaticBuildings ? staticEnabled : defaultInteractives) :
+                (defaultInteractives || defaultMobs) && catalog.NativeTamedDefault(data, scene);
         }
         private bool NeedsGrid(NativeNode node) { return node.TextOwner != 0 || (staticEnabled && node.Kind == Kinds.StaticBuildings) || (defaultMobs && node.Kind == Kinds.TamedAnimals) || !coarseEnabled || regions.ContainsZone(node.NativeZone); }
         private bool ProtectedTransfer(ZDO data)
@@ -908,7 +951,7 @@ namespace TooManyLags
                 if (!loadPending || loadTarget != target) return;
                 loadNext = 0;
                 if (Data.GetOwner() == loadOwner && Data.OwnerRevision == loadRevision && Data.GetPosition() == loadPosition &&
-                    DesiredOwner(owner.indexed.Grid.Owner(Cell)) == target) owner.indexed.Advance(this, Time.unscaledTime);
+                    DesiredOwner(owner.indexed.Grid.Owner(Cell)) == target) NotBefore = Math.Min(NotBefore, Time.unscaledTime);
             }
             internal void RejectAutomaticRequest(bool unreadyServer = false)
             { if (loadPending) CancelDestinationLoad(); Managed = false; WaitingForServer = unreadyServer; owner.WaitForFieldRequest(this); }

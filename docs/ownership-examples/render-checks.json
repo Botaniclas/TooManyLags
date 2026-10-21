@@ -1,0 +1,62 @@
+[
+  {
+    "file": "default-settings.gif",
+    "frames": 278,
+    "size": [
+      1080,
+      1268
+    ],
+    "bytes": 863962,
+    "duration_ms": 17250,
+    "server_overlap_ticks": 1102,
+    "retained_ticks": 5696,
+    "final_hold_ms": 3000,
+    "sha256": "2da67ef6937b2099a12cbc30d28a4dc2687ef0b617c8976d6d5223e14b8fc402",
+    "final_frame_matches_png": true
+  },
+  {
+    "file": "max-server-ownership-retained.gif",
+    "frames": 280,
+    "size": [
+      1080,
+      1268
+    ],
+    "bytes": 886467,
+    "duration_ms": 17250,
+    "server_overlap_ticks": 1106,
+    "retained_ticks": 5804,
+    "final_hold_ms": 3000,
+    "sha256": "ea29b15f5e286e0bb6cb706a7338d4dd0a2c90ea8cea9648c187f0b392eb34e2",
+    "final_frame_matches_png": true
+  },
+  {
+    "file": "max-server-ownership-return.gif",
+    "frames": 281,
+    "size": [
+      1080,
+      1268
+    ],
+    "bytes": 1013214,
+    "duration_ms": 17300,
+    "server_overlap_ticks": 1135,
+    "retained_ticks": 5421,
+    "final_hold_ms": 3000,
+    "sha256": "d76a9e79183d87b468a098828000dd2f11ab709b3710826221cf87e5db2de4e4",
+    "final_frame_matches_png": true
+  },
+  {
+    "file": "no-server-simulation.gif",
+    "frames": 278,
+    "size": [
+      1080,
+      1268
+    ],
+    "bytes": 860552,
+    "duration_ms": 17250,
+    "server_overlap_ticks": 0,
+    "retained_ticks": 5696,
+    "final_hold_ms": 3000,
+    "sha256": "a0b292a589c95d92b31e58aaff14db501a5a2675bebfc8586fd9fd0aa96d8135",
+    "final_frame_matches_png": true
+  }
+]

@@ -473,7 +473,7 @@ internal static class NativeReleaseAudit
     }
     private static void Targets(AssemblyDefinition authority, AssemblyDefinition native, Assembly runtime, Assembly game)
     {
-        int configTargets = 0;
+        int configTargets = 0, priorityTargets = 0, initialMobTargets = 0;
         foreach (TypeDefinition type in HandoffTargets(authority))
         {
             CustomAttribute patch = null;
@@ -510,6 +510,16 @@ internal static class NativeReleaseAudit
                     }
                 }
                 Check(owner != null && name != null, "Unrecognized declarative Harmony target");
+                if (type.FullName == "TooManyLags.HandoffSendPatch")
+                {
+                    Check(owner == "ZDOMan" && name == "AddForceSendZdos", "Send priority must use only the native forced-prefix seam");
+                    priorityTargets++;
+                }
+                if (type.FullName == "TooManyLags.InitialMobLoadPatch")
+                {
+                    Check(owner == "ZNetScene" && name == "CreateObject", "Initial mob load must use only native CreateObject entry");
+                    initialMobTargets++;
+                }
                 if (type.FullName == "TooManyLags.ConfigConnectionPatch" || type.FullName == "TooManyLags.ConfigShutdownPatch" || type.FullName == "TooManyLags.ConfigReadyPatch")
                 {
                     string expected = type.Name == "ConfigConnectionPatch" ? "OnNewConnection" : type.Name == "ConfigReadyPatch" ? "RPC_PeerInfo" : "Shutdown";
@@ -527,7 +537,7 @@ internal static class NativeReleaseAudit
                 PatchParameters(type, target); targets++;
             }
         }
-        Check(configTargets == 3 && targets == 54, "Unexpected Harmony target count: " + targets);
+        Check(configTargets == 3 && priorityTargets == 1 && initialMobTargets == 1 && targets == 56, "Unexpected Harmony target count: " + targets);
     }
     private static IEnumerable<TypeDefinition> HandoffTargets(AssemblyDefinition module)
     {

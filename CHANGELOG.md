@@ -1,5 +1,12 @@
 # Changelog
 
+**1.0.57**
+```
+- Assigns configured server defaults to eligible unowned mobs before server construction and preserves server ownership for server-created newborns. Existing owners, player grid claims and handoff guards remain protected. Server update only; existing clients and configs remain compatible.
+- Gives fixed mob spawners a server default with ServerOwnedMobsByDefault=true. Keeps native spawning checks and limits; ambient spawning stays native. Requires Server-Side Simulation.
+- Prioritises inner, forward and outer grid handoffs before server returns, including forced ownership updates, and reduces repeated field lookups in dense areas. Reverts 1.0.50's grid scheduling optimisations while keeping its loading fixes.
+```
+
 **1.0.50**
 ```
 - Fixes server zones and tamed animals never loading after automatically enabling FiresGhettoNetworking simulation with ValheimCommunityPatch installed. Restores the missing native simulation hooks; update the server and restart. No client update is required for this fix.

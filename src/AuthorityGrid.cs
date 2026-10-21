@@ -106,7 +106,7 @@ namespace TooManyLags
         private float lastTime, nextDue = Single.PositiveInfinity;
         private int deferredCells;
         internal int Rebuilds, NeighborReads, PlayerUpdates, TimerVisits;
-        internal int PolicyAllocations;
+        internal int PolicyAllocations, PriorityReads;
         // Test instrumentation is compiled out of the production DLL, including argument evaluation.
 #if TML_RELEASE
         [System.Diagnostics.Conditional("TML_TEST_METRICS")]
@@ -217,6 +217,15 @@ namespace TooManyLags
         { if (Single.IsNaN(value) || Single.IsInfinity(value)) return fallback; value %= 360f; return value < 0 ? value + 360f : value; }
         internal long Owner(Cell cell) { Policy p; return policies.TryGetValue(cell, out p) ? p.Owner : 0L; }
         internal long Candidate(Cell cell) { Policy p; return policies.TryGetValue(cell, out p) ? p.Candidate : 0L; }
+        // Current coverage, not owner or delay: shared red fields stay urgent,
+        // and only completely vacated fields are background return work.
+        internal int WorkPriority(Cell cell)
+        {
+            Count(ref PriorityReads, 1);
+            Policy p;
+            if (!policies.TryGetValue(cell, out p) || p.Count == 0) return 3;
+            return !directional ? 2 : p.FastCount != 0 ? 0 : p.ForwardCount != 0 ? 1 : 2;
+        }
         private float FieldWait(Policy policy)
         {
             if (!directional) return Delay;
@@ -324,7 +333,7 @@ namespace TooManyLags
                     SetDeferred(policy, true);
                 }
             }
-            if (policy.Count == 0 && policy.Owner == 0 && policies.Remove(cell) && reusable.Count < 1024)
+            if (policy.Count == 0 && policy.Owner == 0 && policies.Remove(cell) && discardVacant && reusable.Count < 1024)
             {
                 policy.Candidate = policy.Owner = policy.Uids = 0;
                 policy.Count = policy.FastCount = policy.ForwardCount = 0;
@@ -467,6 +476,7 @@ namespace TooManyLags
         internal bool Managed, Removed;
         internal long ManagedOwner;
         internal long ConfirmedFieldOwner;
+        internal AuthorityWorld.ObjectBucket IndexedBucket;
         internal float NotBefore;
         internal abstract long CurrentOwner { get; }
         // Done: safely applied/no-op. Pending: retry only this node next cycle.
@@ -480,24 +490,26 @@ namespace TooManyLags
     // Indexed work scheduling. Stable cells never enumerate their object lists.
     internal sealed class AuthorityWorld
     {
-        private sealed class ObjectBucket
+        internal sealed class ObjectBucket
         {
             internal readonly HashSet<AuthorityNode> Nodes = new HashSet<AuthorityNode>();
             internal long Target;
             internal int Unconfirmed;
+            internal bool PriorityCached;
+            internal int Priority;
         }
         internal readonly AuthorityGrid Grid;
         private readonly Dictionary<Cell, ObjectBucket> buckets = new Dictionary<Cell, ObjectBucket>();
         private readonly HashSet<AuthorityNode> pending = new HashSet<AuthorityNode>();
-        private readonly List<AuthorityNode> scratch = new List<AuthorityNode>();
+        private readonly List<ObjectBucket> priorityBuckets = new List<ObjectBucket>();
+        private readonly List<AuthorityNode>[] work = {
+            new List<AuthorityNode>(), new List<AuthorityNode>(),
+            new List<AuthorityNode>(), new List<AuthorityNode>() };
         private readonly bool keepOnExit;
         private readonly long server;
-        // Conservative earliest object deadline. A stale earlier value only
-        // permits one extra pass; new jobs/replies can never be delayed by it.
-        private float lastTime, nextWork = Single.PositiveInfinity;
+        private float lastTime;
         internal int Attempts;
         internal int SkippedCells;
-        internal int PendingVisits;
         // Test instrumentation is compiled out of the production DLL, including argument evaluation.
 #if TML_RELEASE
         [System.Diagnostics.Conditional("TML_TEST_METRICS")]
@@ -512,6 +524,7 @@ namespace TooManyLags
             node.Removed = false;
             ObjectBucket bucket = Bucket(node.Cell);
             if (!bucket.Nodes.Add(node)) return;
+            node.IndexedBucket = bucket;
             node.ConfirmedFieldOwner = 0;
             if (bucket.Target != 0) bucket.Unconfirmed++;
             if (keepOnExit) Grid.Forget(node.Cell);
@@ -528,6 +541,7 @@ namespace TooManyLags
             Detach(node);
             node.Cell = next;
             ObjectBucket bucket = Bucket(next); bucket.Nodes.Add(node);
+            node.IndexedBucket = bucket;
             node.ConfirmedFieldOwner = 0;
             if (bucket.Target != 0) bucket.Unconfirmed++;
             if (keepOnExit) Grid.Forget(next);
@@ -552,22 +566,11 @@ namespace TooManyLags
             // retry a previously refused object without replaying the old job.
             if (!node.Removed) { Invalidate(node); Queue(node, now); }
         }
-        internal void Advance(AuthorityNode node, float at)
-        {
-            if (node.Removed) return;
-            node.NotBefore = Math.Min(node.NotBefore, at);
-            if (pending.Contains(node)) nextWork = Math.Min(nextWork, node.NotBefore);
-        }
         internal void Tick(List<GridPeer> peers, float now)
         {
             if (peers.Count == 0 && !Grid.HasPeers && Grid.CachedCells == 0 && pending.Count == 0)
-            { Grid.Changes.Clear(); Grid.Accelerations.Clear(); nextWork = Single.PositiveInfinity; return; }
-            if (now < lastTime)
-            {
-                nextWork = Single.PositiveInfinity;
-                foreach (AuthorityNode node in pending)
-                { node.NotBefore = now + Grid.Wait(node.Cell); nextWork = Math.Min(nextWork, node.NotBefore); }
-            }
+            { Grid.Changes.Clear(); Grid.Accelerations.Clear(); return; }
+            if (now < lastTime) foreach (AuthorityNode node in pending) node.NotBefore = now + Grid.Wait(node.Cell);
             lastTime = now;
             Grid.Update(peers, now);
             foreach (Cell cell in Grid.Changes)
@@ -582,42 +585,67 @@ namespace TooManyLags
                 { Count(ref SkippedCells, 1); continue; }
                 bucket.Target = keepOnExit && target != server ? target : 0;
                 bucket.Unconfirmed = bucket.Target == 0 ? 0 : bucket.Nodes.Count;
+                bool haveWait = false; float fieldWait = 0f;
                 foreach (AuthorityNode node in bucket.Nodes)
                 {
                     node.ConfirmedFieldOwner = 0;
-                    if (!pending.Contains(node)) Queue(node, now);
+                    if (pending.Add(node)) node.NotBefore = now;
                     else if (Grid.Directional)
-                    { node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(cell)); nextWork = Math.Min(nextWork, node.NotBefore); }
+                    {
+                        if (!haveWait) { fieldWait = Grid.Wait(cell); haveWait = true; }
+                        node.NotBefore = Math.Min(node.NotBefore, now + fieldWait);
+                    }
                 }
             }
-            if (pending.Count == 0) { nextWork = Single.PositiveInfinity; return; }
-            // Coverage, sparse renewals and field accelerations have already
-            // run. Only a set containing exclusively future jobs may sleep.
-            if (now < nextWork && Grid.Accelerations.Count == 0) return;
-            nextWork = Single.PositiveInfinity;
-            scratch.Clear(); foreach (AuthorityNode node in pending) scratch.Add(node);
-            foreach (AuthorityNode node in scratch)
+            if (pending.Count == 0) return;
+            // Four reusable lanes avoid sorting and per-object distance checks.
+            // Snapshot first: native callbacks may add/remove pending jobs.
+            ClearPriorityBatch();
+            try
             {
-                Count(ref PendingVisits, 1);
-                if (node.Removed || !pending.Contains(node)) continue;
-                if (Grid.Accelerations.Count != 0 && Grid.Accelerations.Contains(node.Cell))
-                    node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(node.Cell));
-                if (now < node.NotBefore) { nextWork = Math.Min(nextWork, node.NotBefore); continue; }
-                Count(ref Attempts, 1);
-                ApplyResult result = node.Apply(Grid.Owner(node.Cell));
-                if (result != ApplyResult.Pending) pending.Remove(node);
-                if (result == ApplyResult.Dropped) node.Managed = false;
-                else if (result == ApplyResult.Done && keepOnExit && !node.Removed) Confirm(node);
-                // A callback may have retired this job. Keeping its earlier
-                // deadline is harmless and avoids another set lookup per retry.
-                if (result == ApplyResult.Pending)
-                    nextWork = Math.Min(nextWork, node.NotBefore);
+                // The bucket reference avoids a dictionary lookup per node.
+                // This batch ends before any native/mod callback can run.
+                foreach (AuthorityNode node in pending) work[BatchPriority(node)].Add(node);
             }
-            scratch.Clear();
+            finally { ClearPriorityBatch(); }
+            try
+            {
+                // Red, forward, outer, then vacated/default ownership. Every
+                // due lane runs this pass: no new quota, timer or starvation.
+                foreach (List<AuthorityNode> lane in work) foreach (AuthorityNode node in lane)
+                {
+                    if (node.Removed || !pending.Contains(node)) continue;
+                    if (Grid.Accelerations.Count != 0 && Grid.Accelerations.Contains(node.Cell))
+                        node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(node.Cell));
+                    if (now < node.NotBefore) continue;
+                    Count(ref Attempts, 1);
+                    ApplyResult result = node.Apply(Grid.Owner(node.Cell));
+                    if (result != ApplyResult.Pending) pending.Remove(node);
+                    if (result == ApplyResult.Dropped) node.Managed = false;
+                    else if (result == ApplyResult.Done && keepOnExit && !node.Removed) Confirm(node);
+                }
+            }
+            finally { foreach (List<AuthorityNode> lane in work) lane.Clear(); }
         }
         internal void Dismiss(AuthorityNode node) { Invalidate(node); pending.Remove(node); node.Managed = false; }
-        private void Queue(AuthorityNode node, float at)
-        { node.NotBefore = at; pending.Add(node); nextWork = Math.Min(nextWork, at); }
+        internal int BatchPriority(AuthorityNode node)
+        {
+            ObjectBucket bucket = node.IndexedBucket;
+            // A singleton has no repeated field work to amortise the cache.
+            if (bucket == null || bucket.Nodes.Count == 1) return Grid.WorkPriority(node.Cell);
+            if (!bucket.PriorityCached)
+            {
+                bucket.Priority = Grid.WorkPriority(node.Cell); bucket.PriorityCached = true;
+                priorityBuckets.Add(bucket);
+            }
+            return bucket.Priority;
+        }
+        internal void ClearPriorityBatch()
+        {
+            foreach (ObjectBucket bucket in priorityBuckets) bucket.PriorityCached = false;
+            priorityBuckets.Clear();
+        }
+        private void Queue(AuthorityNode node, float at) { node.NotBefore = at; pending.Add(node); }
         private void Invalidate(AuthorityNode node)
         {
             if (!keepOnExit) return;
@@ -640,6 +668,7 @@ namespace TooManyLags
         {
             ObjectBucket bucket;
             if (!buckets.TryGetValue(node.Cell, out bucket) || !bucket.Nodes.Remove(node)) return;
+            node.IndexedBucket = null;
             bool unconfirmed = bucket.Target != 0 && node.ConfirmedFieldOwner != bucket.Target;
             if (unconfirmed) bucket.Unconfirmed--;
             node.ConfirmedFieldOwner = 0;

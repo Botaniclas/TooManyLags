@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+public sealed class SpawnArea : UnityEngine.MonoBehaviour { }
+public sealed class CreatureSpawner : UnityEngine.MonoBehaviour { }
+public sealed class SpawnSystem : UnityEngine.MonoBehaviour { }
 public sealed class Chair : UnityEngine.MonoBehaviour, Interactable { }
 public sealed class Barber : UnityEngine.MonoBehaviour, Interactable { }
 public sealed class Bed : UnityEngine.MonoBehaviour, Interactable { }

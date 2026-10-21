@@ -7,11 +7,11 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.50.0")]
+[assembly: AssemblyVersion("1.0.57.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.50")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.57")]
     [BepInDependency(FgnId)]
     [BepInDependency(CommunityPatchSceneCompatibility.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(PupId, BepInDependency.DependencyFlags.SoftDependency)]
@@ -20,7 +20,7 @@ namespace TooManyLags
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.50", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.57", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
         internal static NativePup Native;
         internal static bool Diagnostics;
@@ -73,7 +73,7 @@ namespace TooManyLags
             bool refillStations = Config.Bind("02 - Default Ownership and Overrides", "ServerOwnedRefillStations", false,
                 "Server only; restart required. Keep enabled refill stations server-owned, even inside player fields: smelters, cooking/fire stations, fermenters, shield generators and turrets. false: grid rules with 1 second of protection, renewed by each observed refill. Ignored with NoServerSideSimulation=true.").Value;
             bool defaultMobs = Config.Bind("02 - Default Ownership and Overrides", "ServerOwnedMobsByDefault", false,
-                "Server only; restart required. Give idle tamed animals a server default outside player fields, even when the interactive default is off. Hostile Mobs without a player target use guarded server handoffs (requires EnableAIOwnership); player targets keep normal target ownership. Friendly magic summons, bosses and active riding/following stay excluded. Requires Server-Side Simulation; can increase server CPU usage.").Value;
+                "Server only; restart required. Give idle tamed animals a server default outside player fields, even when the interactive default is off. Fixed mob spawners also default to the server and stay outside the grid; ambient spawning stays native. Hostile Mobs without a player target use guarded server handoffs (requires EnableAIOwnership); player targets keep normal target ownership. Friendly magic summons, bosses and active riding/following stay excluded. Requires Server-Side Simulation; can increase server CPU usage.").Value;
             float cellSize = Config.Bind("04 - Grid Settings", "GridCellSizeMeters", 4f, new ConfigDescription(
                 "Server only; restart required. Defaults should work well. Larger grids are recommended for poor connections: they give handoffs more lead time, covering more objects. Cell size in metres: 4, 6.4, 8 or 16; 4 requires a rounded grid. Does not change vanilla/PUP loading distances.",
                 new AcceptableValueList<float>(4f, 6.4f, 8f, 16f))).Value;
@@ -482,6 +482,17 @@ namespace TooManyLags
         {
             try { return Plugin.Controller == null ? owner : Plugin.Controller.NativeOwnerTarget(data, owner); }
             catch (Exception error) { Plugin.Report("Initial server assignment retained native ownership: " + error.GetBaseException().Message); return owner; }
+        }
+    }
+    [HarmonyPatch(typeof(ZNetScene), "CreateObject")]
+    internal static class InitialMobLoadPatch
+    {
+        [HarmonyPrefix]
+        private static void Prefix(ZDO zdo)
+        {
+            if (zdo == null || zdo.GetOwner() != 0L) return;
+            if (Plugin.Controller != null) Plugin.Controller.InitialMobLoad(zdo);
+            FgnCombatOwnership.InitialMobLoad(zdo);
         }
     }
     [HarmonyPatch(typeof(ZNetScene), "AddInstance")]

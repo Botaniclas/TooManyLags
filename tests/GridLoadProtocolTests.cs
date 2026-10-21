@@ -109,14 +109,14 @@ internal static partial class IntegrationTests
             var readinessNode=controller.RequestNode(door.m_uid,"UseDoor".GetStableHashCode());
             var scheduling=(AuthorityWorld)typeof(AuthorityController).GetField("indexed",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(controller);
             readinessNode.NotBefore=10f;scheduling.Received(readinessNode,.7f);Tick(.705f);
-            int waitingVisits=scheduling.PendingVisits;Tick(.706f);
-            Check("future native load job sleeps before its proof reply",scheduling.PendingVisits==waitingVisits&&door.GetOwner()==99);
+            int waitingVisits=scheduling.Attempts;Tick(.706f);
+            Check("future native load job waits for its original deadline",scheduling.Attempts==waitingVisits&&door.GetOwner()==99);
             GridReceive(first,GridClientReply(serverPeer,sent[1],true));
             // The retained request wakes the next frame; it never writes inside the RPC.
             Check("proof reply alone makes no owner write",door.GetOwner()==99);
             Time.unscaledTime=.71f;controller.Poll(.71f);
             Check("valid destination world proof resumes exact static handoff",door.GetOwner()==1&&GridCacheCount()==0);
-            Check("authenticated native load reply bypasses the old object deadline",scheduling.PendingVisits==waitingVisits+1&&readinessNode.NotBefore<10f);
+            Check("authenticated native load reply bypasses the old object deadline without a scheduler sleep gate",scheduling.Attempts==waitingVisits+1&&readinessNode.NotBefore<10f);
             int calls=sent.Count;for(int i=0;i<1000;i++)Tick(1+i*.05f);
             Check("settled object creates no repeated load queries",sent.Count==calls);
             uint minimum;Check("post-write delivery still requires new recipient revision",controller.TryRecipientState(door,1,out minimum));

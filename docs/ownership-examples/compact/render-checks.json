@@ -1,0 +1,34 @@
+[
+  {
+    "file": "default-settings.gif",
+    "width": 380,
+    "height": 438,
+    "bytes": 295490,
+    "final_hold_ms": 3000,
+    "sha256": "7f49af81a2890f26def93023d2366f88d6b49c4ffda581aac1b7cf1a707cfb33"
+  },
+  {
+    "file": "max-server-ownership-retained.gif",
+    "width": 380,
+    "height": 438,
+    "bytes": 301766,
+    "final_hold_ms": 3000,
+    "sha256": "df3b21e8219d8f6a182d1f1a4f749ede7fa61c82fb4109888a72c8f2a47ff74a"
+  },
+  {
+    "file": "max-server-ownership-return.gif",
+    "width": 380,
+    "height": 438,
+    "bytes": 339484,
+    "final_hold_ms": 3000,
+    "sha256": "2437a6a3b55482ecaef731ed933a87354ca2bec1a7e14ec888ddedcb976dbe6b"
+  },
+  {
+    "file": "no-server-simulation.gif",
+    "width": 380,
+    "height": 438,
+    "bytes": 294182,
+    "final_hold_ms": 3000,
+    "sha256": "78956bab9b493292affa33e2f27dc5ec900822a07f0bfdd099f92fbf438db137"
+  }
+]

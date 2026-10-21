@@ -6,7 +6,7 @@
     {
       "file": "FgnCombatOwnership.cs",
       "source_sha256": "1EEEA58FF57EBBB0E8CC3A271A45D2D43C82BE94D97AEE1B579C6C87CBD70C14",
-      "import_sha256": "F4200F708A7D03AEE0918BE9CE7617F8E61543719E67D42516B656C5EED3A18E",
+      "import_sha256": "731F499A459B13C90F066E5C657C2DDEB211862ED7BB63B273F3EA8A01C1D743",
       "namespace_branding_protocol_only": false,
       "additional_changes": [
         "Config section/descriptions/default adapted for required FGN and 09 - AI Mob Ownership.",
@@ -21,7 +21,12 @@
         "1.0.26 adds optional server-owned idle Hostile Mobs through existing target reports and guarded FGN handoffs; loaded-only lifecycle tracking supports solo sessions. Existing player targets, readiness, attacks, consent, caps, possession/friendly/boss exclusions and vanilla region release remain protected. Stable server defaults skip collider readiness work; disabled mode retains its previous behavior.",
         "1.0.27 identifies managed target handoffs, revalidates the target on the source owner, serializes pending commits across target changes and owner replication, and removes the six-second rejection lock only for authenticated managed replies. Existing attack-end revalidation, native vetoes, high-ping decision, caps, exclusions and readiness remain active. Protocol 4 requires matching client/server support; legacy peers retain native FiresGhettoNetworking.",
         "1.0.28 enables bosses in the existing FiresGhettoNetworking scan. The optional two-player server rule evaluates only authoritative player-target changes; weak decisions survive same-target handoffs. Identified source commits bypass only the native boss veto. All other vetoes, readiness, caps and target validation remain. Protocol 5 requires matching clients and server.",
-        "Unreleased config layout migration moves AI entries to 03 - AI Mob Ownership and default ownership overrides to 02 - Default Ownership and Overrides. No executable combat or handoff behavior changes."
+        "Unreleased config layout migration moves AI entries to 03 - AI Mob Ownership and default ownership overrides to 02 - Default Ownership and Overrides. No executable combat or handoff behavior changes.",
+        "1.0.55 integrates the previously isolated initial-mob assignment candidate into the 1.0.54 priority/field-batching baseline. Only unowned, uninstantiated eligible Hostile Mobs use the configured server default at the existing native owner write. Initial leases reuse AI Awake/deferred target observation and balance/lifecycle cleanup. Existing actors, active owners, readiness/attack guards, caps, friendly/boss/possession exclusions and no-simulation behavior retain their guarded paths; no new physics hook or RPC.",
+        "1.0.55 initial-only assignment/retention uses ready native peer loading areas without waiting for the FGN greeting. Later live player target handoffs still require the unchanged matched-peer/capability/readiness checks; no owner is stolen and no new RPC is introduced.",
+        "1.0.55 keeps an existing non-boss server-default lease while native players still load the area but the FGN greeting/eligible recipient is not ready. Targeted player transfers keep Candidate unchanged; departure with no native loading peer still releases ownership.",
+        "1.0.56 seeds eligible unowned mobs at native server CreateObject entry before normal construction, accepts passive unowned created actors at native assignment, and retains current-server-origin zero-revision newborn Hostile Mobs through the existing initial lease. Client-created spawns and all existing owners keep guarded handoffs; no client protocol, spawn proxy, physics loop or attack/readiness bypass is added.",
+        "1.0.57 updates the shared ServerOwnedMobsByDefault description to include fixed native SpawnArea/CreatureSpawner roots. Executable combat, target, lease and handoff code is unchanged from 1.0.56; spawner defaults reuse the existing controller native/pre-construction paths, not the actor-target policy."
       ]
     },
     {

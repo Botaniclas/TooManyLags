@@ -239,6 +239,7 @@ internal static partial class FgnCombatTests
         NativeReadinessTests();
         FriendlyCreatureTests();
         DefaultMobTests();
+        InitialMobDefaults();
         IdentifiedHandoffTests(); BossTargetTests();
         Console.WriteLine("PASS: "+count+" production FGN combat/target/lease/runtime-transpiler assertions; managed doubles, not live Unity/transport.");
     }
@@ -305,6 +306,143 @@ internal static partial class FgnCombatTests
         registry=(System.Collections.IDictionary)service.GetField("defaultLoaded",flags).GetValue(null);Assert(registry.Count==0,"default off allocates no actor record");
         Set("serverDefaultsConfigured",true);ZDOMan.Session=1;ZNet.instance.Dedicated=false;Call("DefaultLoadedPostfix",mob,view);
         Assert(registry.Count==0,"client does not run server default tracking");
+        Setup();FgnCombatOwnership.Stop();
+    }
+    private static ZNetView UncreatedHostile()
+    {
+        Setup();Set("serverDefaultsConfigured",true);
+        var view=ZNetScene.instance.FindInstance(mob);
+        ZNetScene.instance.Views.Remove(mob);ZNetScene.instance.Prefabs[mob.Prefab]=view.gameObject;
+        mob.SetOwner(0);mob.OwnerWrites=0;Call("RemoveWatch",mob.m_uid);
+        ZNetScene.instance.Ready=false;return view;
+    }
+    private static void InitialMobDefaults()
+    {
+        var loadedView=UncreatedHostile();mob.Created=true;
+        Call("NativeSetOwner",mob,1L);
+        Assert(mob.GetOwner()==100,"an already created unowned ZDO still receives the native server default");
+        loadedView=UncreatedHostile();mob.Created=true;ZNetScene.instance.Views.Add(mob,loadedView);
+        Call("NativeSetOwner",mob,1L);
+        Assert(mob.GetOwner()==100,"an unowned live server actor must not get a temporary native player owner");
+        loadedView=UncreatedHostile();int initialAreas=ZNetScene.instance.AreaCalls;
+        FgnCombatOwnership.InitialMobLoad(mob);
+        Assert(mob.GetOwner()==100&&mob.OwnerWrites==1&&ZNetScene.instance.FindInstance(mob)==null,
+            "CreateObject entry seeds only the owner, before native construction");
+        FgnCombatOwnership.InitialMobLoad(mob);
+        Assert(mob.OwnerWrites==1&&ZNetScene.instance.AreaCalls==initialAreas&&NativePup.Checks==0&&old.m_rpc.Sent==0,
+            "repeated construction entry adds no writes, readiness work or source RPC");
+        mob.Created=true;ZNetScene.instance.Views.Add(mob,loadedView);Call("AiAwakePostfix",ai);
+        Assert(FgnCombatOwnership.ShouldOverride(mob.m_uid),"pre-construction server owner adopts the normal deferred AI policy");
+        foreach(int excluded in new[]{0,1,2,3,4,5})
+        {
+            loadedView=UncreatedHostile();
+            if(excluded==0)mob.SetOwner(1);
+            if(excluded==1)Set("serverDefaultsConfigured",false);
+            if(excluded==2)FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=false;
+            if(excluded==3)loadedView.GetComponent<Character>().Team=Character.Faction.Players;
+            if(excluded==4)mob.Held=true;
+            if(excluded==5)ZNet.instance.Dedicated=false;
+            long before=mob.GetOwner();int ownerWrites=mob.OwnerWrites;
+            FgnCombatOwnership.InitialMobLoad(mob);
+            Assert(mob.GetOwner()==before&&mob.OwnerWrites==ownerWrites,"construction prefix retains existing owner/mode/friendly/use exclusion "+excluded);
+        }
+        foreach(int excluded in new[]{-1,0,1,2,3,4,5,6})
+        {
+            loadedView=UncreatedHostile();ZDOMan.instance.Data.Remove(mob.m_uid);
+            mob.m_uid=new ZDOID(100,77);ZDOMan.instance.Data.Add(mob.m_uid,mob);
+            mob.SetOwner(100);mob.OwnerRevision=0;mob.OwnerWrites=0;mob.Created=true;
+            ZNetScene.instance.Views.Add(mob,loadedView);
+            if(excluded==0)mob.OwnerRevision=1;
+            if(excluded==1){ZDOMan.instance.Data.Remove(mob.m_uid);mob.m_uid=new ZDOID(1,77);ZDOMan.instance.Data.Add(mob.m_uid,mob);}
+            if(excluded==2)loadedView.GetComponent<Character>().Boss=true;
+            if(excluded==3)mob.Set(ZDOVars.s_tamed,1);
+            if(excluded==4)mob.Persistent=false;
+            if(excluded==5)mob.SetFloat(ZDOVars.s_health,0);
+            if(excluded==6)mob.Held=true;
+            Call("DefaultLoadedPostfix",mob,loadedView);
+            var bornLeases=(System.Collections.IDictionary)service.GetField("managed",flags).GetValue(null);
+            Assert(bornLeases.Count==(excluded<0?1:0)&&mob.OwnerWrites==0,
+                "only a fresh current-server origin can retain its existing first owner without a write "+excluded);
+            if(excluded<0)
+            {
+                Call("NativeSetOwner",mob,1L);
+                Assert(mob.GetOwner()==100&&mob.OwnerWrites==0,"native area pass cannot give a newborn server actor to a player first");
+                Call("AiAwakePostfix",ai);
+                Assert(FgnCombatOwnership.ShouldOverride(mob.m_uid),"newborn server actor enters normal target ownership after Awake");
+            }
+        }
+        var view=UncreatedHostile();int areas=ZNetScene.instance.AreaCalls;
+        Call("NativeSetOwner",mob,1L);
+        var leases=(System.Collections.IDictionary)service.GetField("managed",flags).GetValue(null);
+        Assert(mob.GetOwner()==100&&mob.OwnerWrites==1&&leases.Count==1,"native first assignment directly selects server without an actor");
+        Assert(ZNetScene.instance.AreaCalls==areas&&NativePup.Checks==0&&old.m_rpc.Sent==0,"first assignment adds no collision scan or source handoff");
+        for(int i=0;i<12;i++){Call("NativeSetOwner",mob,3L);Call("BalancePostfix",true);}
+        Assert(mob.GetOwner()==100&&mob.OwnerWrites==1&&leases.Count==1&&ZNetScene.instance.AreaCalls==areas,"early lease survives slow creation without repeated ownership writes or readiness work");
+        mob.Created=true;ZNetScene.instance.Views.Add(mob,view);Call("DefaultLoadedPostfix",mob,view);Call("AiAwakePostfix",ai);
+        Assert(FgnCombatOwnership.ShouldOverride(mob.m_uid),"own initial server actor joins existing target policy instead of foreign-policy exclusion");
+        FgnCombatOwnership.Observe(ai);ZDOID targetId;
+        Assert(FgnCombatOwnership.ReadTarget(mob,out targetId)&&targetId==target.m_characterID,"initial server actor reports actual player target through normal observation");
+        Assert(mob.GetOwner()==100,"loaded target observation still respects unready server handoff guard");
+        ZNetScene.instance.Ready=true;bool moved;Handle(out moved);
+        Assert(moved&&mob.GetOwner()==target.m_uid,"normal guarded target handoff follows initial server assignment");
+
+        view=UncreatedHostile();
+        foreach(ZNetPeer peer in ZNet.instance.Peers)peer.Matched=false;
+        Call("NativeSetOwner",mob,1L);
+        Assert(mob.GetOwner()==100&&mob.OwnerWrites==1,"unfinished FGN greeting does not create a temporary native player owner");
+        for(int i=0;i<3;i++){Call("NativeSetOwner",mob,3L);Call("BalancePostfix",true);}
+        Assert(mob.GetOwner()==100&&mob.OwnerWrites==1&&leases.Count==1,"initial server lease follows native loading areas while greetings are pending");
+        mob.Created=true;ZNetScene.instance.Views.Add(mob,view);Call("DefaultLoadedPostfix",mob,view);Call("AiAwakePostfix",ai);
+        ZNetScene.instance.Ready=true;FgnCombatOwnership.Observe(ai);Handle(out moved);
+        Assert(!moved&&mob.GetOwner()==100,"initial server assignment does not bypass later FGN recipient compatibility");
+        ai.Target=null;FgnCombatOwnership.Observe(ai);
+        areas=ZNetScene.instance.AreaCalls;int colliders=NativePup.Checks,writes=mob.OwnerWrites;
+        for(int i=0;i<20;i++)Handle(out moved);
+        Assert(mob.GetOwner()==100&&mob.OwnerWrites==writes&&ZNetScene.instance.AreaCalls==areas&&NativePup.Checks==colliders,
+            "idle default stays on server during greeting without repeated writes or collision proofs");
+        target.Matched=true;ai.Target=targetPlayer;ZNetScene.instance.Ready=false;FgnCombatOwnership.Observe(ai);
+        Assert(mob.GetOwner()==100,"confirmed client target still waits for existing server readiness protection");
+        ZNetScene.instance.Ready=true;Handle(out moved);
+        Assert(moved&&mob.GetOwner()==target.m_uid,"confirmed target receives normal ownership after a delayed greeting");
+
+        for(int unavailable=0;unavailable<3;unavailable++)
+        {
+            view=UncreatedHostile();
+            foreach(ZNetPeer peer in ZNet.instance.Peers)
+            {
+                peer.Matched=false;
+                if(unavailable==0)peer.Ready=false;
+                else peer.Ref=new Vector3(unavailable==1?1000000f:Single.NaN,0,100);
+            }
+            Call("NativeSetOwner",mob,1L);
+            Assert(mob.GetOwner()==1&&leases.Count==0,"initial server default requires a valid ready native loading area "+unavailable);
+        }
+
+        view=UncreatedHostile();Call("NativeSetOwner",mob,1L);ZNet.instance.Peers.Clear();FiresGhettoNetworkMod.CreatureOwnership.Candidates(ZNet.instance.Peers);
+        Call("BalancePostfix",true);Assert(mob.GetOwner()==0&&leases.Count==0,"departed players release an uncreated initial lease");
+        view=UncreatedHostile();Call("NativeSetOwner",mob,1L);Call("ClearDefaultLoaded");Assert(leases.Count==0,"scene shutdown clears initial-only records");
+        view=UncreatedHostile();Call("NativeSetOwner",mob,1L);Call("DefaultUnloadedPrefix",view);Assert(leases.Count==0,"reset before AI initialization clears its initial lease");
+        view=UncreatedHostile();Call("NativeSetOwner",mob,1L);mob.SetOwner(3);Call("NativeSetOwner",mob,2L);
+        Assert(mob.GetOwner()==2&&leases.Count==0,"changed owner/revision cannot inherit an early server pin");
+
+        foreach(int excluded in new[]{0,1,2,3,4,5,8,9,10,11,12,13})
+        {
+            view=UncreatedHostile();var actor=view.GetComponent<Character>();
+            if(excluded==0)Set("serverDefaultsConfigured",false);
+            if(excluded==1)FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=false;
+            if(excluded==2)actor.Team=Character.Faction.Players;
+            if(excluded==3)actor.Boss=true;
+            if(excluded==4)mob.Set(ZDOVars.s_tamed,1);
+            if(excluded==5)mob.Set(ZDOVars.s_user,1);
+            if(excluded==8)mob.Persistent=false;
+            if(excluded==9)mob.SetFloat(ZDOVars.s_health,0);
+            if(excluded==10)mob.SetOwner(3);
+            if(excluded==11)mob.Held=true;
+            if(excluded==12)FiresGhettoNetworkMod.CreatureOwnership.Enabled=false;
+            if(excluded==13)mob.OwnerRevision=UInt16.MaxValue;
+            Call("NativeSetOwner",mob,1L);
+            Assert(mob.GetOwner()==1&&leases.Count==0,"initial hostile retains native exclusion "+excluded);
+        }
         Setup();FgnCombatOwnership.Stop();
     }
     private static void NativeReadinessTests()

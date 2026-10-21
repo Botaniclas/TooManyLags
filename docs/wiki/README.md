@@ -1,5 +1,7 @@
 # Thunderstore Wiki pages
 
+The Configuration page follows the author's final supplied page. Make future changes directly in `01-Configuration.md`, preserving its layout and wording; do not regenerate it from earlier release copies. This index is not part of the published page.
+
 Copy each numbered Markdown file into a separate page in the package's Wiki tab:
 
 | File | Page title |

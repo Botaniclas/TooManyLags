@@ -34,6 +34,16 @@ White objects belong to the server; purple objects belong to the player in these
 
 [![Ownership while moving](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/grid-demo-2.gif)](https://github.com/user-attachments/assets/8555a985-7696-4cc6-865a-5115c3695f72)
 
+## Example settings
+
+The same three players explore a base in four modes. Cell colours show ownership; white means the server. CPU notes refer to simulation. Click a preview for the full-size animation. Settings are explained in the [Wiki](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_FGN_Addon/wiki).
+
+| Default settings — CPU: mostly clients | Max server ownership: keep — CPU: shared |
+|---|---|
+| [![Default settings](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/compact/default-settings.gif)](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/default-settings.gif) | [![Max server ownership, keep ownership](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/compact/max-server-ownership-retained.gif)](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/max-server-ownership-retained.gif) |
+| **Max server ownership: return — CPU: mostly server** | **No Server-Side Simulation — CPU: clients** |
+| [![Max server ownership, return on exit](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/compact/max-server-ownership-return.gif)](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/max-server-ownership-return.gif) | [![No Server-Side Simulation](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/compact/no-server-simulation.gif)](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/no-server-simulation.gif) |
+
 ## Configuration
 
 Defaults should work well. Find configuration, admin commands and compatibility details in the **[Thunderstore Wiki](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_FGN_Addon/wiki)**. Gameplay settings are configured on the server.

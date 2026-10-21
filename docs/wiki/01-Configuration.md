@@ -14,6 +14,44 @@ Set `AutoConfigureFiresGhettoNetworking=false` only if you configure the require
 **Server-Side Simulation adds CPU workload to the server.** For a weak or already overloaded server CPU, set `NoServerSideSimulation=true`. Objects and Hostile Mobs then stay player-owned; shared fields prefer the better-connected player. Server-owned buildings, default ownership and permanent station ownership are unavailable. Inventory, refilling and active-use safeguards remain; all clients need the mod for full handoffs. Shared interactions can still depend on the selected player's latency.
 
 
+
+#### Usefull settings demonstrated
+
+The colours show where supported objects are simulated:
+
+| Cell colour | Simulation runs on | Connection-related delay |
+|---|---|---|
+| Your player's colour | Your client | No latency, like Singleplayer. |
+| White | The server | Depends on your own connection. |
+| Another player's colour | Their client | Depend on both connections.  |
+
+TooManyLags prioritises local ownership whenever possible. Shared fields use the server; without Server-Side Simulation, they prefer the better-connected player.
+
+
+**Default settings** — `ServerOwnedInteractivesByDefault=false`, `KeepOwnershipOnCellExit=true`. Player 1 initially owns the base. Players 2 and 3 take ownership where their grids settle; overlapping fields use the server. Unvisited cells keep their initial owner, and vacated cells keep their last owner.
+
+![Default settings: Player 1 initially owns the base; arriving players claim their work areas and retain ownership along their routes. Overlaps use the server.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/default-settings.gif)
+
+
+
+**Max server ownership, ownership retained** — `ServerOwnedInteractivesByDefault=true`, `KeepOwnershipOnCellExit=true`. The same routes leave the same kind of ownership trails, but unvisited cells start and remain with the server. If all default-ownership options are enabled, static pieces outside the static grid also remain server-owned.
+
+![Max server ownership with retention: players take ownership along the same routes; unvisited cells and shared fields belong to the server.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/max-server-ownership-retained.gif)
+
+
+
+**Max server ownership, return on exit** — `ServerOwnedInteractivesByDefault=true`, `KeepOwnershipOnCellExit=false`. Vacated cells return to the server after the applicable transition period. Coverage includes the rear centre; the final view keeps player ownership around their current work areas rather than along their old routes.
+
+![Max server ownership without retention: vacated cells return to the server, leaving player ownership around the forge, storage and farm.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/max-server-ownership-return.gif)
+
+
+
+**Without Server-Side Simulation** — `NoServerSideSimulation=true`, `KeepOwnershipOnCellExit=true`. Objects remain player-owned, including shared fields. This example uses stable pings of 80 / 25 / 140 ms: Player 2 has a meaningful connection advantage and takes shared cells. Small ping differences can retain the current candidate to avoid unnecessary transfers.
+
+![No Server-Side Simulation example: the same routes retain player ownership; shared cells favour the better-connected player instead of the server.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/no-server-simulation.gif)
+
+
+
 ## Server configuration
 
 Clients follow the server when connecting;
@@ -69,28 +107,6 @@ Common static setups:
 This setting concerns fully vacated fields. With the default directional grid, when one player leaves an overlap but another stays, the remaining player's inner/red fields can transfer automatically; outer fields wait for that player's next movement or camera-coverage change.
 
 Vanilla region unloading and ownership release still apply. Keeping ownership does not keep distant areas loaded forever.
-
-#### Ownership examples: three players in the same base
-
-All four animations use the same **50 x 50-cell** base and five-minute player paths. Player 1 starts at the forge; Players 2 and 3 arrive, explore their work areas along different irregular routes, keep moving during their meeting, then return to the forge, storage and farm. The result shows how ownership spreads and remains divided after extended movement.
-
-**Colours show the owners of grid-managed objects; small outlines show each player's active grid.** Static pieces without `UseGridForStaticBuildings` are not represented: their ownership follows the separate static setting. For this illustration, all shown areas stay loaded and no object is in use. The 4-metre `Rounded7x7` grid and default transition timers are shown at twenty times normal speed, followed by a 3-second final hold; actual network delivery and active-use protection can add delays.
-
-**Default settings** — `ServerOwnedInteractivesByDefault=false`, `KeepOwnershipOnCellExit=true`. Player 1 initially owns the base. Players 2 and 3 take ownership where their grids settle; overlapping fields use the server. Unvisited cells keep their initial owner, and vacated cells keep their last owner.
-
-![Default settings: Player 1 initially owns the base; arriving players claim their work areas and retain ownership along their routes. Overlaps use the server.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/default-settings.gif)
-
-**Max server ownership, ownership retained** — `ServerOwnedInteractivesByDefault=true`, `KeepOwnershipOnCellExit=true`. The same routes leave the same kind of ownership trails, but unvisited cells start and remain with the server. If all default-ownership options are enabled, static pieces outside the static grid also remain server-owned.
-
-![Max server ownership with retention: players take ownership along the same routes; unvisited cells and shared fields belong to the server.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/max-server-ownership-retained.gif)
-
-**Max server ownership, return on exit** — `ServerOwnedInteractivesByDefault=true`, `KeepOwnershipOnCellExit=false`. Vacated cells return to the server after the applicable transition period. Coverage includes the rear centre; the final view keeps player ownership around their current work areas rather than along their old routes.
-
-![Max server ownership without retention: vacated cells return to the server, leaving player ownership around the forge, storage and farm.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/max-server-ownership-return.gif)
-
-**Without Server-Side Simulation** — `NoServerSideSimulation=true`, `KeepOwnershipOnCellExit=true`. Objects remain player-owned, including shared fields. This example uses stable pings of 80 / 25 / 140 ms: Player 2 has a meaningful connection advantage and takes shared cells. Small ping differences can retain the current candidate to avoid unnecessary transfers.
-
-![No Server-Side Simulation example: the same routes retain player ownership; shared cells favour the better-connected player instead of the server.](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/ownership-examples/no-server-simulation.gif)
 
 
 
@@ -176,7 +192,7 @@ The **Object Categories** section at the bottom enables or disables broad groups
 
 ## Optional PUP FPS compatibility
 
-`EnablePupCompatibility=true` in section `02 - PUP FPS Compatibility` adds the built-in collision/stability guards when PUP FPS is present. No separate BotanicPupPatch is needed. Without the required mods, or when a separate PupPatch is detected, the embedded module stays completely inactive. Configure this switch locally on each installation and restart; see **Compatibility** for details.
+`EnablePupCompatibility=true`  adds the built-in collision/stability guards when PUP FPS is present. No separate BotanicPupPatch is needed. Without the required mods, or when a separate PupPatch is detected, the embedded module stays completely inactive. Configure this switch locally on each installation and restart; see **Compatibility** for details.
 
 
 

@@ -14,11 +14,12 @@ class NativeAudit
         {
             using (var addon = AssemblyDefinition.ReadAssembly(args[0]))
             using (var native = AssemblyDefinition.ReadAssembly(args[1]))
+            using (var unity = AssemblyDefinition.ReadAssembly(args[2]))
             {
                 var types = addon.MainModule.Types.SelectMany(Types).ToArray();
                 var methods = types.SelectMany(t => t.Methods).Where(m => m.HasBody).ToArray();
                 var calls = methods.SelectMany(m => m.Body.Instructions).Select(i => i.Operand as MethodReference).Where(m => m != null).ToArray();
-                Check(addon.Name.Version.ToString(3) == "1.0.10", "Verified patch version");
+                Check(addon.Name.Version.ToString(3) == "1.0.12", "Verified patch version");
                 Check(!addon.MainModule.AssemblyReferences.Any(a => a.Name.Contains("PUP") || a.Name.Contains("Ghetto") || a.Name.Contains("BotanicServer") || a.Name.Contains("BotanicPup")), "Optional standalone client");
                 foreach (var method in methods)
                 foreach (var ins in method.Body.Instructions)
@@ -32,20 +33,20 @@ class NativeAudit
                     if (t == "ZNetView") Check(n == "IsValid" || n == "GetZDO", "No native-view write/RPC");
                     Check(t != "UnityEngine.Collider" && t != "UnityEngine.Rigidbody", "No physics/collider calls");
                     if (t == "UnityEngine.Transform") Check(!n.StartsWith("set_"), "No position/rotation/scale writes");
-                    if (t == "UnityEngine.GameObject") Check(n.StartsWith("get_"), "No native GO mutation");
+                    if (t == "UnityEngine.GameObject") Check(n.StartsWith("get_") || n == "GetComponent" || n == "GetComponentsInChildren" || n == "GetComponentInChildren", "Read-only native GO access");
                     if (t == "UnityEngine.Renderer")
                     {
-                        Check(n.StartsWith("get_") || n == "GetSharedMaterials", "No renderer enable/material/property block mutations");
-                        if (n == "set_sharedMaterials") Check(method.DeclaringType.FullName == "BotanicOwnerDebug.NativeColours" && (method.Name == "Apply" || method.Name == "Restore"), "Only guarded material slot assignments");
+                        Check(n.StartsWith("get_") || n == "GetSharedMaterials" || (n == "set_sharedMaterials" && method.DeclaringType.Name == "PresentationPaint"), "Only camera-scoped presentation material slots may change");
+                        if (n == "set_sharedMaterials") Check(method.DeclaringType.Name == "PresentationPaint" && (method.Name == "Apply" || method.Name == "Restore"), "Only guarded camera-local material assignments");
                     }
                     Check(t != "UnityEngine.Graphics", "No regular Graphics submissions");
-                    if (t == "UnityEngine.Rendering.CommandBuffer") Check(n == ".ctor" || n == "set_name" || n == "Clear" || n == "Release" || n == "DrawRenderer", "Only native renderer reference draw; no matrices/meshes/targets/blits");
-                    Check(!(t == "UnityEngine.SkinnedMeshRenderer" && n == "BakeMesh"), "No pose baking");
-                    Check(!(t == "UnityEngine.Mesh" && n == ".ctor"), "No duplicate meshes");
+                    if (t == "UnityEngine.Rendering.CommandBuffer") Check(n == ".ctor" || n == "set_name" || n == "Clear" || n == "Release" || n == "DrawRenderer", "Only native/frozen flat draws; no target/blit changes");
+                    Check(!(t == "UnityEngine.SkinnedMeshRenderer" && n == "BakeMesh"), "No CPU skinning or snapshot scale conversion");
+                    Check(!(t == "UnityEngine.Mesh" && (n == ".ctor" || n.StartsWith("set_"))), "No mesh allocation or mutation");
                     Check(!(t == "UnityEngine.Material" && n == "CopyPropertiesFromMaterial"), "No recurring native property copies");
                     Check(!(t == "UnityEngine.Object" && (n == "Instantiate" || n == "DontDestroyOnLoad")), "No object/prefab clones");
                     Check(!(n == "InvokeRPC" || t == "ZRpc" || t == "ZRoutedRpc"), "No network RPC");
-                    if (t == "UnityEngine.Object" && n == "Destroy") Check(method.DeclaringType.FullName == "BotanicOwnerDebug.NativeColours" && (method.Name == "Clear" || method.Name == "Sweep"), "Only own material clone disposal");
+                    if (t == "UnityEngine.Object" && n == "Destroy") Check((method.DeclaringType.FullName == "BotanicOwnerDebug.NativeColours" && (method.Name == "Clear" || method.Name == "Sweep")) || (method.DeclaringType.Name == "PresentationDraw" && method.Name == "Dispose"), "Only owned materials/snapshot destruction");
                 }
                 var hooks = types.Single(t => t.Name == "DebugHooks");
                 foreach (string name in new[] { "Before", "After" })
@@ -58,7 +59,10 @@ class NativeAudit
                 Check(calls.Any(m => m.DeclaringType.FullName == "UnityEngine.Material" && m.Name == ".ctor" && m.Parameters.Count == 1 && m.Parameters[0].ParameterType.FullName == "UnityEngine.Shader"), "Only shared owned flat materials");
                 Check(!calls.Any(m => m.DeclaringType.FullName == "UnityEngine.Material" && m.Name == ".ctor" && m.Parameters.Count == 1 && m.Parameters[0].ParameterType.FullName == "UnityEngine.Material"), "No source material clones");
                 Check(calls.Count(m => m.DeclaringType.FullName == "UnityEngine.Rendering.CommandBuffer" && m.Name == "DrawRenderer") == 1, "Single native renderer draw site");
-                Check(!calls.Any(m => m.Name == "SetViewProjectionMatrices" || m.Name == "get_localToWorldMatrix" || m.Name == "BakeMesh" || m.Name == "DrawMesh"), "No raw geometry/pose/matrix path");
+                Check(!calls.Any(m => m.Name == "SetViewProjectionMatrices"), "Camera projection remains native");
+                var draw = methods.Single(m => m.DeclaringType.Name == "DebugView" && m.Name == "Draw");
+                Check(draw.Body.Instructions.Any(i => i.Operand is MethodReference && ((MethodReference)i.Operand).DeclaringType.Name == "PresentationPaint" && ((MethodReference)i.Operand).Name == "Apply"), "Transient bridge uses actual native renderer material slots");
+                Check(draw.Body.Instructions.Any(i => i.Operand is FieldReference && ((FieldReference)i.Operand).Name == "Presenting"), "Snapshot work gated by per-entry bridge state");
                 Check(calls.Any(m => m.Name == "UnpatchSelf") && !calls.Any(m => m.Name == "UnpatchAll"), "Only own hooks removed");
                 var strings = methods.SelectMany(m => m.Body.Instructions).Where(i => i.OpCode.Code == Code.Ldstr).Select(i => (string)i.Operand).ToArray();
                 Check(!strings.Contains("_EmissionColor") && !strings.Contains("_EMISSION") && strings.Contains("Hidden/Internal-Colored") && !strings.Contains("Standard"), "PUP flat shader, no PBR/emission");
@@ -67,6 +71,11 @@ class NativeAudit
                 Check(calls.Where(m => m.DeclaringType.FullName == "UnityEngine.Material" && m.Name == "SetColor").All(m => m.Parameters[0].ParameterType.FullName == "System.Int32"), "Only cached colour property ID");
                 var generic = methods.SelectMany(m => m.Body.Instructions).Select(i => i.Operand as GenericInstanceMethod).Where(m => m != null).SelectMany(m => m.GenericArguments).Select(t => t.FullName).ToArray();
                 Check(generic.Contains("Piece") && generic.Contains("WearNTear") && generic.Contains("Character") && generic.Contains("Player"), "Native building/mob scope with explicit player exclusion");
+                Check(generic.Contains("IDestructible") && generic.Contains("UnityEngine.Rigidbody"), "Destructible and physical network-root capability checks");
+                Check(native.MainModule.Types.Single(t => t.Name == "IDestructible").IsInterface, "Native destructible capability is an interface");
+                foreach(string name in new[]{"TreeBase","TreeLog","MineRock","MineRock5","Destructible"})
+                    Check(native.MainModule.Types.Single(t => t.Name == name).Interfaces.Any(i => i.InterfaceType.FullName == "IDestructible"), "Native destructible scope: " + name);
+                Check(!calls.Any(m => m.DeclaringType.FullName == "IDestructible"), "Never invoke damage or other destructive gameplay");
                 var playerType = native.MainModule.Types.Single(t => t.Name == "Player");
                 bool isCharacter = false;
                 for (var parent = playerType.BaseType; parent != null; )
@@ -96,9 +105,34 @@ class NativeAudit
                 Check(native.MainModule.Types.Single(t => t.Name == "Container").Fields.Single(f => f.Name == "m_rootObjectOverride").FieldType.FullName == "ZNetView", "Native container root ownership override contract");
                 Check(methods.SelectMany(m => m.Body.Instructions).Any(i => (i.Operand as TypeReference) != null && ((TypeReference)i.Operand).FullName == "Interactable"), "Filter detects real interaction capability");
                 Check(!calls.Any(m => m.DeclaringType.FullName == "Interactable"), "Read-only capability detection never calls gameplay interaction");
-                Check(calls.Any(m => m.DeclaringType.FullName == "BotanicOwnerDebug.DisplayModes" && m.Name == "Current") && calls.Any(m => m.DeclaringType.FullName == "BotanicOwnerDebug.DisplayModes" && m.Name == "Next"), "Production plugin uses tested four-state cycle");
-                Check(strings.Contains("InteractiveObjectsOnly") && strings.Contains("MobsOnly") && strings.Contains("Mode: "), "Config filter and current mode display are present");
+                Check(!calls.Any(m => m.DeclaringType.FullName == "BotanicOwnerDebug.DisplayModes"), "F10 no longer cycles or activates overlay");
+                foreach (string key in new[] { "Interactive", "Static", "DestructionPhysics", "TamedMobs", "HostileMobs", "LooseItems", "TmlMobTestPhases" })
+                    Check(strings.Contains(key), "Independent menu config: " + key);
+                Check(calls.Any(m => m.Name == "Window" && m.DeclaringType.FullName == "UnityEngine.GUI") &&
+                    calls.Any(m => m.Name == "Toggle") && calls.Any(m => m.Name == "HorizontalSlider"), "Menu has category switches and live radius control");
+                Check(!addon.MainModule.AssemblyReferences.Any(a => a.Name == "TooManyLags" || a.Name == "EasySpawner"), "TML and EasySpawner remain optional");
+                foreach (string hook in new[] { "MenuInputHooks", "MenuCursorHooks", "MenuScrollHooks" })
+                    Check(types.Single(t => t.Name == hook).Methods.Any(m => m.Name == "After"), "Owned menu input hook: " + hook);
                 var plugin = types.Single(t => t.Name == "Plugin");
+                var renderHook = types.Single(t => t.Name == "RenderHooks");
+                var afterRender = renderHook.Methods.Single(m => m.Name == "After");
+                Check(afterRender.ReturnType.FullName == "System.Void" && afterRender.Parameters.Count == 1 &&
+                    afterRender.Parameters[0].ParameterType.FullName == "UnityEngine.Camera" &&
+                    !afterRender.Parameters.Any(p => p.ParameterType.IsByReference), "Strongly typed read-only camera postfix without object-array arguments");
+                Check(!plugin.Methods.Any(m => m.Name == "LateUpdate") && plugin.Methods.Any(m => m.Name == "Render" &&
+                    m.Body.Instructions.Any(i => i.Operand is MethodReference && ((MethodReference)i.Operand).Name == "Draw")),
+                    "Production submission no longer runs before final camera pose");
+                Check(renderHook.CustomAttributes.Any(a => a.AttributeType.Name == "HarmonyPatch" &&
+                    a.ConstructorArguments.Any(v => v.Value is string && (string)v.Value == "FireOnPreRender")),
+                    "Render postfix targets dispatcher rather than order-dependent event subscription");
+                var camera = unity.MainModule.Types.Single(t => t.FullName == "UnityEngine.Camera");
+                var dispatch = camera.Methods.Single(m => m.Name == "FireOnPreRender");
+                Check(dispatch.IsStatic && dispatch.HasBody && dispatch.ReturnType.FullName == "System.Void" &&
+                    dispatch.Parameters.Count == 1 && dispatch.Parameters[0].ParameterType.FullName == "UnityEngine.Camera",
+                    "Installed Unity has expected managed camera dispatcher signature");
+                Check(dispatch.Body.Instructions.Any(i => i.Operand is FieldReference && ((FieldReference)i.Operand).Name == "onPreRender") &&
+                    dispatch.Body.Instructions.Any(i => i.Operand is MethodReference && ((MethodReference)i.Operand).Name == "Invoke"),
+                    "Native dispatcher actually invokes final-pose listeners before postfix");
                 Check(!plugin.Methods.Single(m => m.Name == "Update").Body.Instructions.Any(i => (i.Operand as MethodReference) != null && ((MethodReference)i.Operand).Name == "GetComponentsInChildren"), "Permanent Update contains no model scans");
                 System.Console.WriteLine("PASS: " + checks + " actual-DLL/native-contract assertions.");
             }
@@ -106,4 +140,6 @@ class NativeAudit
         catch (Exception e) { System.Console.Error.WriteLine(e); Environment.Exit(1); }
     }
 }
+
+
 

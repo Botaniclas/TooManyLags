@@ -9,11 +9,17 @@ namespace BotanicOwnerDebug
     {
         internal static bool Eligible(ZNetView view)
         {
-            if (!view || !view.m_persistent || view.m_distant || view.GetComponentInParent<Player>()) return false;
+            if (!view || !view.m_persistent || view.GetComponentInParent<Player>()) return false;
             ItemDrop item = view.GetComponentInParent<ItemDrop>();
             if (item && item.GetComponent<ZNetView>() != view) return false;
-            if (view.GetComponent<Character>()) return true;
-            return !view.GetComponentInParent<Character>() && (view.GetComponent<Piece>() || view.GetComponent<WearNTear>() || Interactive(view));
+            if (view.GetComponent<Character>()) return !view.m_distant;
+            if (view.GetComponentInParent<Character>()) return false;
+            // Own network root only: stationary damageable world objects and
+            // dynamic bodies (e.g. fallen logs). Native distant trees are valid
+            // here; unrelated distant proxies remain excluded. Never call any
+            // destructible/physics method or inspect velocities every frame.
+            bool world = view.GetComponent<IDestructible>() != null || view.GetComponent<Rigidbody>();
+            return world || (!view.m_distant && (view.GetComponent<Piece>() || view.GetComponent<WearNTear>() || Interactive(view)));
         }
         internal static bool Interactive(ZNetView view)
         {
@@ -24,7 +30,7 @@ namespace BotanicOwnerDebug
             {
                 if (!component || !(component is Interactable)) continue;
                 Container container = component as Container;
-                ZNetView owner = container && container.m_rootObjectOverride ? container.m_rootObjectOverride : component.GetComponentInParent<ZNetView>();
+                ZNetView owner = container && container.m_rootObjectOverride ? container.m_rootObjectOverride : component.GetComponentInParent<ZNetView>(true);
                 if (owner == view) return true;
             }
             return false;

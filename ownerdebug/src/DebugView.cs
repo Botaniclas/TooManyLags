@@ -11,11 +11,14 @@ namespace BotanicOwnerDebug
     internal sealed class DebugView : IDisposable
     {
         private struct Surface { internal int Index, Cull; }
-        private sealed class Part { internal Renderer Renderer; internal Entry Entry; internal Surface[] Surfaces; }
+        private sealed class Part { internal Renderer Renderer; internal Entry Entry; internal Surface[] Surfaces; internal PresentationPaint Paint; }
         private sealed class Entry
         {
             internal ZDO Data; internal ZNetView View; internal OwnerKey Owner; internal bool Mob, Interactive, Live;
             internal int CheckedFrame;
+            internal int Category, Phase;
+            internal Character Actor;
+            internal bool Presenting;
             internal readonly HashSet<Renderer> Parts = new HashSet<Renderer>();
         }
         private readonly Harmony hooks = new Harmony(Plugin.Id);
@@ -25,6 +28,9 @@ namespace BotanicOwnerDebug
         private readonly Dictionary<Renderer, Part> interactiveParts = new Dictionary<Renderer, Part>();
         private readonly Dictionary<Renderer, Part> mobParts = new Dictionary<Renderer, Part>();
         private bool interactiveOnly, mobsOnly;
+        private int categories = -1;
+        private bool testMode;
+        private readonly List<PresentationPaint> presentationPaint = new List<PresentationPaint>();
         private readonly HashSet<ZDOID> changed = new HashSet<ZDOID>(), models = new HashSet<ZDOID>();
         private readonly List<ZDOID> retiredEntries = new List<ZDOID>();
         private readonly List<Renderer> retiredParts = new List<Renderer>();
@@ -50,7 +56,12 @@ namespace BotanicOwnerDebug
             DynamicMethod read = new DynamicMethod("BotanicDebugInstances", registry.FieldType, new[] { typeof(ZNetScene) }, typeof(DebugView).Module, true);
             ILGenerator il = read.GetILGenerator(); il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldfld, registry); il.Emit(OpCodes.Ret);
             instances = (Func<ZNetScene, Dictionary<ZDO, ZNetView>>)read.CreateDelegate(typeof(Func<ZNetScene, Dictionary<ZDO, ZNetView>>));
-            try { hooks.CreateClassProcessor(typeof(DebugHooks)).Patch(); }
+            try
+            {
+                hooks.CreateClassProcessor(typeof(DebugHooks)).Patch();
+                hooks.CreateClassProcessor(typeof(RenderHooks)).Patch();
+                hooks.CreateClassProcessor(typeof(RenderRestoreHooks)).Patch();
+            }
             catch { hooks.UnpatchSelf(); throw; }
         }
         private bool Context()
@@ -83,7 +94,13 @@ namespace BotanicOwnerDebug
             if (!byView.TryGetValue(view, out id)) return;
             byView.Remove(view); changed.Remove(id); models.Remove(id);
             if (entries.TryGetValue(id, out entry) && ReferenceEquals(entry.View, view))
-            { foreach (Renderer part in entry.Parts) { parts.Remove(part); interactiveParts.Remove(part); mobParts.Remove(part); } entries.Remove(id); }
+            { foreach (Renderer part in entry.Parts) ReleasePart(part); entries.Remove(id); }
+        }
+        private void ReleasePart(Renderer renderer)
+        {
+            Part part;
+            if (parts.TryGetValue(renderer, out part) && part.Paint != null) part.Paint.Dispose();
+            parts.Remove(renderer); interactiveParts.Remove(renderer); mobParts.Remove(renderer);
         }
         internal void Changed(ZDO data)
         { if (data != null && world != null && ReferenceEquals(world, ZDOMan.instance) && entries.ContainsKey(data.m_uid)) changed.Add(data.m_uid); }
@@ -96,6 +113,8 @@ namespace BotanicOwnerDebug
         { return entry.View && entry.View.IsValid() && ReferenceEquals(entry.View.GetZDO(), entry.Data) && entry.Data.IsValid() && ReferenceEquals(world.GetZDO(id), entry.Data); }
         private void Scan(Entry entry)
         {
+            entry.Category = TmlDebug.Category(entry.View);
+            entry.Actor = entry.View.GetComponent<Character>();
             entry.Interactive = !entry.Mob && BuildingVisuals.Interactive(entry.View);
             Character rootActor = entry.View.GetComponent<Character>(); seen.Clear();
             ItemDrop rootItem = entry.View.GetComponent<ItemDrop>();
@@ -125,12 +144,12 @@ namespace BotanicOwnerDebug
                 if (entry.Mob) mobParts[renderer] = part; else mobParts.Remove(renderer);
             }
             retiredParts.Clear(); foreach (Renderer part in entry.Parts) if (!seen.Contains(part)) retiredParts.Add(part);
-            foreach (Renderer part in retiredParts) { parts.Remove(part); interactiveParts.Remove(part); mobParts.Remove(part); entry.Parts.Remove(part); }
+            foreach (Renderer part in retiredParts) { ReleasePart(part); entry.Parts.Remove(part); }
             seen.Clear(); retiredParts.Clear(); surfaces.Clear();
         }
         private OwnerKey Resolve(ZDO data)
         { return OwnerKey.Resolve(data != null && data.IsValid() && ReferenceEquals(world.GetZDO(data.m_uid), data), data == null ? 0 : data.GetOwner(), server); }
-        private void Refresh()
+        private void Refresh(int seed)
         {
             names.Clear(); Legend.Clear(); var used = new HashSet<OwnerKey>();
             foreach (ZNet.PlayerInfo player in network.GetPlayerList())
@@ -144,7 +163,9 @@ namespace BotanicOwnerDebug
                     continue;
                 }
                 long uid = player.m_characterID.UserID; names[uid] = name;
-                used.Add(OwnerKey.Resolve(true, uid, server));
+                OwnerKey online = OwnerKey.Resolve(true, uid, server);
+                OwnerColour.Get(online, seed);
+                used.Add(online);
             }
             used.Add(OwnerKey.Resolve(true, server, server)); used.Add(OwnerKey.Resolve(true, 0, server)); used.Add(OwnerKey.Resolve(false, 0, server));
             retiredEntries.Clear();
@@ -152,7 +173,8 @@ namespace BotanicOwnerDebug
             {
                 Entry entry = pair.Value;
                 if (!Valid(pair.Key, entry)) { retiredEntries.Add(pair.Key); continue; }
-                if (mobsOnly ? entry.Mob : !interactiveOnly || entry.Mob || entry.Interactive) used.Add(entry.Owner);
+                if (!testMode && (categories >= 0 ? (entry.Category & categories) != 0 :
+                    mobsOnly ? entry.Mob : !interactiveOnly || entry.Mob || entry.Interactive)) used.Add(entry.Owner);
                 // Vanilla buildings keep their registered model variants.
                 // Only a few moving/equipped mobs get a seconds fallback scan.
                 if (entry.Mob) Scan(entry);
@@ -200,35 +222,93 @@ namespace BotanicOwnerDebug
             try { if (camera && old != null) camera.RemoveCommandBuffer(CameraEvent.BeforeImageEffects, old); }
             finally { camera = null; if (old != null) old.Release(); }
         }
-        internal void Draw(int seed, float strength, float distance, bool onlyInteractive = false, bool onlyMobs = false)
+        internal void Draw(int seed, float strength, float distance, bool onlyInteractive = false, bool onlyMobs = false,
+            Camera renderingCamera = null, int selectedCategories = -1, bool test = false)
         {
+            RestorePresentation();
+            Camera next = Camera.main;
+            if (renderingCamera && !ReferenceEquals(renderingCamera, next))
+            {
+                // A former main camera may render before its replacement.
+                // Remove its stale pass without rebuilding other cameras.
+                if (ReferenceEquals(renderingCamera, camera)) Detach();
+                return;
+            }
             PaintedCount = 0; if (!Context()) { Clear(); return; }
-            Camera next = Camera.main; if (!next) { Detach(); return; }
+            if (!next) { Detach(); return; }
+            if (categories != selectedCategories || testMode != test) { categories = selectedCategories; testMode = test; nextRefresh = 0; }
             if (interactiveOnly != onlyInteractive || mobsOnly != onlyMobs) { interactiveOnly = onlyInteractive; mobsOnly = onlyMobs; nextRefresh = 0; }
             Attach(next); commands.Clear(); maxDistance = distance * distance; colours.Configure(seed, strength); frame++;
-            UpdateEntries(); if (Time.unscaledTime >= nextRefresh) Refresh();
+            UpdateEntries(); if (Time.unscaledTime >= nextRefresh) Refresh(seed);
             GeometryUtility.CalculateFrustumPlanes(camera, planes); Vector3 position = camera.transform.position;
-            foreach (Part part in (mobsOnly ? mobParts : interactiveOnly ? interactiveParts : parts).Values)
+            foreach (Part part in (testMode || mobsOnly ? mobParts : interactiveOnly ? interactiveParts : parts).Values)
             {
+                if (!testMode && categories >= 0 && !part.Entry.Mob && (part.Entry.Category & categories) == 0) continue;
                 Renderer renderer = part.Renderer;
                 // PUP-disabled originals stop here without material/model work.
                 if (!renderer || !renderer.enabled || part.Surfaces.Length == 0 || renderer.forceRenderingOff || !renderer.gameObject.activeInHierarchy || !renderer.isVisible || renderer.shadowCastingMode == ShadowCastingMode.ShadowsOnly) continue;
                 Bounds bounds = renderer.bounds; int layer = renderer.gameObject.layer;
                 if ((camera.cullingMask & (1 << layer)) == 0 || (bounds.center - position).sqrMagnitude > maxDistance || !GeometryUtility.TestPlanesAABB(planes, bounds)) continue;
                 Entry entry = part.Entry;
-                if (entry.CheckedFrame != frame) { entry.Live = Valid(entry.Data.m_uid, entry); entry.CheckedFrame = frame; }
+                if (entry.CheckedFrame != frame)
+                {
+                    entry.Live = Valid(entry.Data.m_uid, entry); entry.CheckedFrame = frame;
+                    if (categories >= 0 && entry.Actor) entry.Category = entry.Actor.IsTamed() ? DebugCategories.Tamed : DebugCategories.Hostile;
+                    entry.Phase = testMode && entry.Mob ? TmlDebug.Phase(entry.Data) : -1;
+                    entry.Presenting = entry.Mob && TmlDebug.Presenting(entry.Data);
+                }
                 if (!entry.Live) continue;
-                foreach (Surface surface in part.Surfaces) commands.DrawRenderer(renderer, colours.Get(part.Entry.Owner, surface.Cull), surface.Index, 0);
+                if (testMode ? entry.Phase < 0 : categories >= 0 && (entry.Category & categories) == 0) continue;
+                OwnerKey paint = testMode && entry.Phase >= 2 ? new OwnerKey { Kind = (OwnerKind)((int)OwnerKind.OldOwner + entry.Phase) } : entry.Owner;
+                if (entry.Presenting)
+                {
+                    if (part.Paint == null) part.Paint = new PresentationPaint(renderer);
+                    presentationPaint.Add(part.Paint); part.Paint.Begin();
+                    foreach (Surface surface in part.Surfaces)
+                        part.Paint.Slot(surface.Index, colours.Get(paint, surface.Cull));
+                    part.Paint.Apply();
+                }
+                else foreach (Surface surface in part.Surfaces) commands.DrawRenderer(renderer, colours.Get(paint, surface.Cull), surface.Index, 0);
                 PaintedCount++;
             }
             colours.Sweep();
         }
         internal void Clear()
         {
+            RestorePresentation();
+            foreach (Part part in parts.Values) if (part.Paint != null) part.Paint.Dispose();
             Detach(); colours.Clear(); entries.Clear(); byView.Clear(); parts.Clear(); interactiveParts.Clear(); mobParts.Clear(); changed.Clear(); models.Clear(); retiredEntries.Clear(); retiredParts.Clear(); seen.Clear(); sourceMaterials.Clear(); surfaces.Clear(); names.Clear(); Legend.Clear();
             world = null; scene = null; network = null; server = 0; nextRefresh = 0; PaintedCount = 0;
         }
         public void Dispose() { try { hooks.UnpatchSelf(); } finally { Clear(); } }
+        internal void RestorePresentation()
+        {
+            try { foreach (PresentationPaint paint in presentationPaint) paint.Restore(); }
+            finally { presentationPaint.Clear(); }
+        }
+    }
+    // Unity invokes this managed dispatcher after pre-cull and before drawing.
+    // A postfix runs after every onPreRender listener, including late handoff
+    // bone presentation, regardless of listener registration order.
+    [HarmonyPatch(typeof(Camera), "FireOnPreRender")]
+    internal static class RenderHooks
+    {
+        [HarmonyPostfix, HarmonyPriority(Priority.Last)]
+        private static void After(Camera __0)
+        {
+            Plugin plugin = Plugin.Instance;
+            if (!ReferenceEquals(plugin, null)) plugin.Render(__0);
+        }
+    }
+    [HarmonyPatch(typeof(Camera), "FireOnPostRender")]
+    internal static class RenderRestoreHooks
+    {
+        [HarmonyPrefix, HarmonyPriority(Priority.First)]
+        private static void Before()
+        {
+            Plugin plugin = Plugin.Instance;
+            if (!ReferenceEquals(plugin, null) && plugin.View != null) plugin.View.RestorePresentation();
+        }
     }
     [HarmonyPatch]
     internal static class DebugHooks

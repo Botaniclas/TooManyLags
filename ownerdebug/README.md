@@ -1,29 +1,79 @@
 # BotanicOwnerDebug
 
-An optional client-side ownership visualizer for Valheim. Colours buildings, dropped items and NPC mobs by their current network owner, with a live player legend. Useful for inspecting ownership distribution and transfers in multiplayer bases.
+See which player or server owns nearby objects in Valheim. BotanicOwnerDebug adds local ownership colours and a live player legend to help inspect multiplayer ownership and configure ownership mods.
 
-## What it's for
+**Client-side only.** BepInEx is required. TooManyLags and EasySpawner are optional; neither is required for normal ownership colours.
 
-Use BotanicOwnerDebug to identify object and mob owners, debug ownership transfers and configure ownership mods. Watch who owns nearby objects as players move around, then check whether your settings assign them to the intended player or server.
+## Quick start
 
-## How it works
+1. Install BepInEx and copy `BotanicOwnerDebug.dll` into `BepInEx/plugins/BotanicOwnerDebug/`.
+2. Join a world and press **F10** with game menus closed.
+3. Enable the categories you want and adjust **Radius**.
+4. Close the window with **F10**, **Escape**, or **Close**. The selected colours remain active.
 
-Press **F10** during gameplay, with menus closed, to cycle:
+Opening the menu does not enable colouring. All category switches start off and are saved independently. Use **All categories off** to clear them. If TML mob debug is enabled, switch it off too to stop that mode.
 
-**Mobs only → Mobs + interactive objects → All objects and mobs → Off**
+## Choose what to show
 
-The overlay starts off by default. The first press selects **Mobs only**.
+| Category | Objects shown |
+|---|---|
+| Truly interactive | Networked objects with interactions, such as doors, containers and workstations. |
+| Static: no destruction physics | Fixed buildings and world objects without a supported physical destruction successor, such as rocks and ore. |
+| Static: destruction physics | Supported physical objects and their fixed precursors, such as standing trees and fallen logs. |
+| Tamed mobs | Tamed NPC creatures; changes update live. |
+| Hostile / wild mobs | Untamed NPC creatures, including wild animals. |
+| Loose items | Dropped items with their own network object. |
 
-- **White:** server. **Dark grey:** unowned. **Bright colours:** players. **Blue-grey:** unknown owner.
-- Colours follow ownership changes and remain visible through other objects. The legend refreshes every second; network delivery can delay new player information.
-- The interactive filter includes dropped items and hides non-interactive pieces such as walls and floors. Both wild and tamed mobs remain visible.
-- Players, effects, transparent surfaces and PUP FPS clusters are excluded.
+Categories follow TooManyLags' policy when a compatible version is installed; standalone classification is also included. Players, projectiles, world markers, effects, transparent surfaces and PUP FPS clusters are excluded. Existing renderer and LOD visibility still apply.
 
-The overlay is local and leaves ownership, original materials and colliders unchanged. Active overlays add rendering work; turn them off after inspection.
+**Radius** accepts 10–1000 metres from the camera. Type a value or use the slider; valid changes apply immediately. The default is 200 metres.
+
+## Colours and legend
+
+- **White:** server.
+- **Purple, green, blue, yellow:** the first four assigned players, in random order without repetition.
+- **Additional colours:** later player assignments; twelve distinct colours are available before reuse.
+- **Dark grey:** unowned. **Blue-grey:** unknown owner.
+
+Player assignments remain fixed for the connection and may differ between clients or after reconnecting. The legend shows the current assignments and refreshes every second. Colours describe the current network owner, not the player who built an object.
+
+## Optional TooManyLags mob test
+
+When TooManyLags is installed, the menu also offers **TML mob debug**. This mode requires a compatible TML development build exposing phase diagnostics and its `ai_test` command. Normal ownership colours work without it. An older version without diagnostics shows the switch disabled.
+
+While enabled, this mode overrides category switches and colours **only the mob selected by `ai_test`**:
+
+| Phase | Colour |
+|---|---|
+| Old owner preparing the handoff | Its usual assigned owner colour. |
+| New owner / ordinary post-handoff presentation | Its usual assigned owner colour; server is white. |
+| Stretched fake playback, including endpoint waits | **Red** |
+| Final smoothing | **Orange** |
+
+The radius still applies. Turning this mode off restores your category selection. Red and orange are excluded from the first four player assignments. No additional network messages or simulation steps are created.
+
+## Configuration and upgrades
+
+Use the F10 menu for live changes. Settings are saved in `BepInEx/config/botanic.owner.debug.cfg`.
+
+| Setting | Default / purpose |
+|---|---|
+| `ToggleKey` | F10; opens or closes settings. |
+| `Categories` | Six independent switches, all off initially. |
+| `MaximumDistance` | 200 metres; adjustable from 10 to 1000. |
+| `ShowLegend` | On. |
+| `ColourStrength` | 1. |
+| `ColourSeed` | 1337; mixed into the connection-local player-colour shuffle. Changing it resets assignments. |
+| `TmlMobTestPhases` | Off; requires compatible TooManyLags diagnostics. |
+| `EnableLogs` | Off; logs optional overlay errors. |
+
+**Upgrading from 1.0.11:** F10 now opens settings instead of cycling display modes. The old `ShowOwnerColours`, `InteractiveObjectsOnly` and `MobsOnly` settings are no longer used. Select categories in the new menu; no config deletion is needed.
+
+The mod changes local rendering only, leaving ownership, gameplay and colliders unchanged. Original material assets are preserved. Colouring adds rendering work; turn it off when finished inspecting. No server installation is needed.
 
 ## Ownership in action
 
-These examples show BotanicOwnerDebug displaying ownership while [TooManyLags - FiresGhettoNetworking Addon](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_FGN_Addon/) manages the ownership grid. White objects belong to the server; purple objects belong to the player in these recordings.
+These earlier recordings show the ownership overlay alongside [TooManyLags](https://thunderstore.io/c/valheim/p/Botaniclas/TooManyLags_FGN_Addon/). White objects belong to the server; purple objects belong to the player in these examples. The recordings predate the F10 settings menu.
 
 **Ownership from above**
 
@@ -32,23 +82,3 @@ These examples show BotanicOwnerDebug displaying ownership while [TooManyLags - 
 **Ownership while moving**
 
 [![Ownership while moving](https://raw.githubusercontent.com/Botaniclas/TooManyLags/main/docs/grid-demo-2.gif)](https://github.com/user-attachments/assets/8555a985-7696-4cc6-865a-5115c3695f72)
-
-## Configuration
-
-Edit `BepInEx/config/botanic.owner.debug.cfg`, then restart the game. F10 updates the display and filter settings automatically.
-
-| Feature | Defaults and options |
-|---|---|
-| Display | `ShowOwnerColours`: off. `ToggleKey`: F10. First press shows mobs only. |
-| Filters | `InteractiveObjectsOnly` and `MobsOnly`; mobs-only takes priority. |
-| Legend | `ShowLegend`: on. Displays owner colours and player names. |
-| Range | `MaximumDistance`: 200 metres from the camera. |
-| Colours | `ColourStrength`: 1. `ColourSeed`: 1337; six distinct fixed colours, then six variants; stable per connection. The seed rotates the palette. |
-| Diagnostics | `EnableLogs`: off. |
-
-## Requirements and installation
-
-1. Install **BepInEx on your client**. Copy `BotanicOwnerDebug.dll` into `BepInEx/plugins/BotanicOwnerDebug/`.
-2. Start the game to generate the config. Press **F10** to show mobs, again to include interactive objects and dropped items, again for all objects and mobs, then again to turn the overlay off.
-
-No server installation is needed.

@@ -10,6 +10,7 @@ namespace UnityEngine.Rendering
  public enum CompareFunction { Always=8 }
  public enum RenderQueue { AlphaTest=2450 }
  public enum LightProbeUsage { Off }
+ public enum IndexFormat { UInt16, UInt32 }
  public enum CameraEvent { AfterImageEffects, BeforeImageEffects }
  public sealed class CommandBuffer
  {
@@ -17,10 +18,10 @@ namespace UnityEngine.Rendering
   public UnityEngine.Matrix4x4 View,Projection;
   public void Clear(){if(Released)throw new Exception("Released buffer reused.");Queued.Clear();}
   public void SetViewProjectionMatrices(UnityEngine.Matrix4x4 view,UnityEngine.Matrix4x4 projection){View=view;Projection=projection;}
-  public void DrawMesh(UnityEngine.Mesh mesh,UnityEngine.Matrix4x4 matrix,UnityEngine.Material material,int sub,int pass,UnityEngine.MaterialPropertyBlock block)
-  {if(pass!=0)throw new Exception("Only flat pass 0 allowed.");Queued.Add(new UnityEngine.Draw{Mesh=mesh,Colour=block.Colours[UnityEngine.Shader.PropertyToID("_Color")],Count=1,Instanced=false,ShaderPass=pass,ShaderName=material.Shader.name});}
+  public void DrawMesh(UnityEngine.Mesh mesh,UnityEngine.Matrix4x4 matrix,UnityEngine.Material material,int sub,int pass,UnityEngine.MaterialPropertyBlock block=null)
+  {if(pass!=0)throw new Exception("Only flat pass 0 allowed.");Queued.Add(new UnityEngine.Draw{Mesh=mesh,Material=material,MatrixMarker=matrix.Marker,RecordingMarker=matrix.Marker,Submesh=sub,Colour=material.GetColor(UnityEngine.Shader.PropertyToID("_Color")),Count=1,Instanced=false,ShaderPass=pass,ShaderName=material.Shader.name});}
   public void DrawRenderer(UnityEngine.Renderer renderer,UnityEngine.Material material,int sub,int pass)
-  {if(pass!=0)throw new Exception("Only flat pass 0 allowed.");Queued.Add(new UnityEngine.Draw{Renderer=renderer,Material=material,Submesh=sub,Count=1,Instanced=false,ShaderPass=pass,ShaderName=material.Shader.name});}
+  {if(pass!=0)throw new Exception("Only flat pass 0 allowed.");Queued.Add(new UnityEngine.Draw{Renderer=renderer,Material=material,Submesh=sub,Count=1,Instanced=false,ShaderPass=pass,ShaderName=material.Shader.name,RecordingMarker=renderer.localToWorldMatrix.Marker});}
   public void Release(){if(Released)throw new Exception("Double release.");Released=true;Queued.Clear();UnityEngine.Metrics.Releases++;}
  }
 }
@@ -45,6 +46,9 @@ namespace UnityEngine
   public GameObject Parent;
   public T Add<T>() where T:Component,new(){var c=new T();c.gameObject=this;Components.Add(c);return c;}
   public T Get<T>() where T:Component {return Components.OfType<T>().FirstOrDefault();}
+  public T GetComponent<T>() where T:class {return Components.OfType<T>().FirstOrDefault();}
+  public T[] GetComponentsInChildren<T>(bool inactive) where T:Component {return ChildrenGet<T>();}
+  public T GetComponentInChildren<T>(bool inactive) where T:Component {return ChildrenGet<T>().FirstOrDefault();}
   public T ParentGet<T>() where T:Component {for(var g=this;g!=null;g=g.Parent){var c=g.Get<T>();if(c)return c;}return null;}
   public T[] ChildrenGet<T>() where T:Component {Metrics.Scans++;var list=new List<T>();Collect(list);return list.ToArray();}
   void Collect<T>(List<T> list) where T:Component {list.AddRange(Components.OfType<T>());foreach(var c in Children)c.Collect(list);}
@@ -53,21 +57,30 @@ namespace UnityEngine
  public class Component:Object
  {
   public GameObject gameObject; public Transform transform {get{return gameObject.transform;}}
-  public T GetComponent<T>() where T:Component {return gameObject.Get<T>();}
+  public T GetComponent<T>() where T:class {return gameObject.Components.OfType<T>().FirstOrDefault();}
   public T GetComponentInParent<T>() where T:Component {return gameObject.ParentGet<T>();}
+  public T GetComponentInParent<T>(bool inactive) where T:Component {return gameObject.ParentGet<T>();}
   public T[] GetComponentsInChildren<T>(bool inactive) where T:Component {return gameObject.ChildrenGet<T>();}
  }
  public class MonoBehaviour:Component {}
- public class Transform {public Vector3 position;}
+ public class Rigidbody:Component {}
+ public class Joint:Component {}
+ public class Transform {public Vector3 position;public Quaternion rotation;public Vector3 SkinWorldScale=Vector3.one;public Matrix4x4 localToWorldMatrix;}
+ public struct Quaternion {public int Marker;}
  public struct Vector3
  {
   public float x,y,z; public Vector3(float x,float y,float z){this.x=x;this.y=y;this.z=z;}
   public float sqrMagnitude {get{return x*x+y*y+z*z;}}
+  public static Vector3 one {get{return new Vector3(1,1,1);}}
   public static Vector3 operator-(Vector3 a,Vector3 b){return new Vector3(a.x-b.x,a.y-b.y,a.z-b.z);}
  }
  public struct Bounds {public Vector3 center,size;public bool Visible;public bool Contains(Vector3 p){return Math.Abs(p.x-center.x)<=size.x*.5f&&Math.Abs(p.y-center.y)<=size.y*.5f&&Math.Abs(p.z-center.z)<=size.z*.5f;}}
  public struct Plane {}
- public struct Matrix4x4 {public int Marker;}
+ public struct Matrix4x4
+ {
+  public int Marker;public Vector3 Scale,Translation;public Quaternion Rotation;
+  public static Matrix4x4 TRS(Vector3 p,Quaternion r,Vector3 s){return new Matrix4x4{Marker=r.Marker,Translation=p,Rotation=r,Scale=s};}
+ }
  public struct Color
  {
   public float r,g,b,a;public Color(float r,float g,float b,float a){this.r=r;this.g=g;this.b=b;this.a=a;}
@@ -88,10 +101,10 @@ namespace UnityEngine
  public class MeshFilter:Component {public Mesh sharedMesh;}
  public class SkinnedMeshRenderer:Renderer
  {
-  public Mesh sharedMesh;
-  public void BakeMesh(Mesh target,bool scale){if(ReferenceEquals(target,sharedMesh))throw new Exception("Mutated native mesh.");target.subMeshCount=sharedMesh.subMeshCount;Metrics.Bakes++;Metrics.LastBake=target;}
+  public Mesh sharedMesh;public int BoneMarker;
+  public void BakeMesh(Mesh target,bool scale){if(ReferenceEquals(target,sharedMesh))throw new Exception("Mutated native mesh.");target.subMeshCount=sharedMesh.subMeshCount;target.PoseMarker=BoneMarker;target.BakedScale=scale?transform.SkinWorldScale:Vector3.one;target.BakedWithScale=scale;Metrics.Bakes++;Metrics.LastBake=target;}
  }
- public class Mesh:Object {public int subMeshCount=1;public void MarkDynamic(){}}
+ public class Mesh:Object {public int subMeshCount=1,PoseMarker;public bool BakedWithScale;public Vector3 BakedScale;public Rendering.IndexFormat indexFormat;public void MarkDynamic(){}}
  public class Shader:Object
  {
   public bool isSupported=true;public static bool MissingColour;
@@ -125,11 +138,15 @@ namespace UnityEngine
  }
  public class Camera:Component
  {
+  public delegate void CameraCallback(Camera camera);
+  public static CameraCallback onPreRender;
+  [MethodImpl(MethodImplOptions.NoInlining)]private static void FireOnPreRender(Camera camera){if(onPreRender!=null)onPreRender(camera);}
   public static Camera main;public int cullingMask=-1;public Matrix4x4 worldToCameraMatrix=new Matrix4x4{Marker=1},projectionMatrix=new Matrix4x4{Marker=2};
   public readonly List<Rendering.CommandBuffer> Buffers=new List<Rendering.CommandBuffer>();public int Added,Removed;
   public void AddCommandBuffer(Rendering.CameraEvent stage,Rendering.CommandBuffer buffer){if(stage!=Rendering.CameraEvent.BeforeImageEffects||Buffers.Contains(buffer))throw new Exception("Wrong/duplicate camera hook.");Buffers.Add(buffer);Added++;}
   public void RemoveCommandBuffer(Rendering.CameraEvent stage,Rendering.CommandBuffer buffer){if(Buffers.Remove(buffer))Removed++;}
-  public void RenderDebug(){foreach(var b in Buffers)foreach(var source in b.Queued){var draw=source;if(draw.Renderer){var skin=draw.Renderer as SkinnedMeshRenderer;draw.Mesh=skin?skin.sharedMesh:draw.Renderer.GetComponent<MeshFilter>().sharedMesh;draw.MatrixMarker=draw.Renderer.localToWorldMatrix.Marker;draw.Colour=draw.Material.GetColor(Shader.PropertyToID("_Color"));}Graphics.Draws.Add(draw);}}
+  [MethodImpl(MethodImplOptions.NoInlining)]private static void FireOnPostRender(Camera camera){}
+  public void RenderDebug(){FireOnPreRender(this);foreach(var b in Buffers)foreach(var source in b.Queued){var draw=source;if(draw.Renderer){var skin=draw.Renderer as SkinnedMeshRenderer;draw.Mesh=skin?skin.sharedMesh:draw.Renderer.GetComponent<MeshFilter>().sharedMesh;draw.MatrixMarker=draw.Renderer.localToWorldMatrix.Marker;draw.Colour=draw.Material.GetColor(Shader.PropertyToID("_Color"));}Graphics.Draws.Add(draw);}FireOnPostRender(this);}
  }
  public static class SystemInfo {public static bool supportsInstancing=true;}
  public static class Time {public static float unscaledTime;}
@@ -139,7 +156,7 @@ namespace UnityEngine
   public static void CalculateFrustumPlanes(Camera camera,Plane[] planes){}
   public static bool TestPlanesAABB(Plane[] planes,Bounds bounds){return bounds.Visible;}
  }
- public struct Draw {public Mesh Mesh;public Renderer Renderer;public Material Material;public int Submesh,MatrixMarker;public Color Colour;public int Count,ShaderPass;public bool Instanced;public string ShaderName;}
+ public struct Draw {public Mesh Mesh;public Renderer Renderer;public Material Material;public int Submesh,MatrixMarker,RecordingMarker;public Color Colour;public int Count,ShaderPass;public bool Instanced;public string ShaderName;}
  public static class Graphics
  {
   public static readonly List<Draw> Draws=new List<Draw>();
@@ -168,11 +185,26 @@ public class ZDO
  public ushort OwnerRevision {get{return revision;}[MethodImpl(MethodImplOptions.NoInlining)]set{revision=value;}}
 }
 public interface Interactable {}
+public interface IDestructible {}
+public class Destructible:UnityEngine.MonoBehaviour,IDestructible { public float m_ttl; public UnityEngine.GameObject m_spawnWhenDestroyed; }
+public class TreeBase:UnityEngine.MonoBehaviour,IDestructible { public UnityEngine.GameObject m_logPrefab; }
+public class MineRock:UnityEngine.MonoBehaviour,IDestructible {}
+public class MineRock5:UnityEngine.MonoBehaviour,IDestructible {}
+public class TreeLog:UnityEngine.MonoBehaviour,IDestructible {}
+public class ModDestructible:UnityEngine.MonoBehaviour,IDestructible {}
 public class TestInteractable:UnityEngine.MonoBehaviour,Interactable {}
 public class Container:UnityEngine.MonoBehaviour,Interactable { public ZNetView m_rootObjectOverride; }
 public class Piece:UnityEngine.MonoBehaviour {}
-public class WearNTear:UnityEngine.MonoBehaviour {}
-public class Character:UnityEngine.MonoBehaviour {}
+public class WearNTear:UnityEngine.MonoBehaviour { public bool m_staticPosition = true; }
+public class Character:UnityEngine.MonoBehaviour { public bool Tamed; public bool IsTamed(){return Tamed;} }
+public class BaseAI:UnityEngine.MonoBehaviour {}
+public class Projectile:UnityEngine.MonoBehaviour {}
+public class Ship:UnityEngine.MonoBehaviour {}
+public class Vagon:UnityEngine.MonoBehaviour {}
+public class SpawnArea:UnityEngine.MonoBehaviour {}
+public class CreatureSpawner:UnityEngine.MonoBehaviour {}
+public class SpawnSystem:UnityEngine.MonoBehaviour {}
+public class ZSyncTransform:UnityEngine.MonoBehaviour { public bool m_syncPosition=true,m_syncRotation=true,m_syncBodyVelocity=true; }
 public class Humanoid:Character {}
 public class Player:Humanoid {}
 public class VisEquipment:UnityEngine.MonoBehaviour
@@ -216,5 +248,46 @@ namespace BotanicOwnerDebug
  public class Plugin:UnityEngine.MonoBehaviour
  {
   internal const string Id="botanic.owner.debug";internal static Plugin Instance;internal DebugView View;
+  internal Action<UnityEngine.Camera> RenderAction;
+  internal void Render(UnityEngine.Camera camera){if(RenderAction!=null)RenderAction(camera);}
  }
 }
+namespace TooManyLags
+{
+ public static class OwnerDebugApi
+ {
+  public static ZDO Selected; public static int CurrentPhase;
+  public static int Category(ZNetView view){return BotanicOwnerDebug.DebugCategories.Classify(view);}
+  public static int Phase(ZDO data){return ReferenceEquals(data,Selected)?CurrentPhase:-1;}
+ }
+}
+public class Door:UnityEngine.MonoBehaviour,Interactable {}
+public class Chair:UnityEngine.MonoBehaviour,Interactable {}
+public class Barber:UnityEngine.MonoBehaviour,Interactable {}
+public class Bed:UnityEngine.MonoBehaviour,Interactable {}
+public class CraftingStation:UnityEngine.MonoBehaviour,Interactable {}
+public class StationExtension:UnityEngine.MonoBehaviour,Interactable {}
+public class Smelter:UnityEngine.MonoBehaviour,Interactable {}
+public class CookingStation:UnityEngine.MonoBehaviour,Interactable {}
+public class Fireplace:UnityEngine.MonoBehaviour,Interactable {}
+public class Beehive:UnityEngine.MonoBehaviour,Interactable {}
+public class SapCollector:UnityEngine.MonoBehaviour,Interactable {}
+public class PrivateArea:UnityEngine.MonoBehaviour,Interactable {}
+public class MapTable:UnityEngine.MonoBehaviour,Interactable {}
+public class WispSpawner:UnityEngine.MonoBehaviour,Interactable {}
+public class ItemStand:UnityEngine.MonoBehaviour,Interactable {}
+public class ArmorStand:UnityEngine.MonoBehaviour,Interactable {}
+public class Sign:UnityEngine.MonoBehaviour,Interactable {}
+public class TeleportWorld:UnityEngine.MonoBehaviour,Interactable {}
+public class Fermenter:UnityEngine.MonoBehaviour,Interactable {}
+public class Incinerator:UnityEngine.MonoBehaviour,Interactable {}
+public class Trap:UnityEngine.MonoBehaviour,Interactable {}
+public class Turret:UnityEngine.MonoBehaviour,Interactable {}
+public class ShieldGenerator:UnityEngine.MonoBehaviour,Interactable {}
+public class Pickable:UnityEngine.MonoBehaviour,Interactable {}
+public class PickableItem:UnityEngine.MonoBehaviour,Interactable {}
+public class Feast:UnityEngine.MonoBehaviour,Interactable {}
+public class OfferingBowl:UnityEngine.MonoBehaviour,Interactable {}
+public class ShipControlls:UnityEngine.MonoBehaviour,Interactable {}
+public class Teleport:UnityEngine.MonoBehaviour,Interactable {}
+public class Vegvisir:UnityEngine.MonoBehaviour,Interactable {}

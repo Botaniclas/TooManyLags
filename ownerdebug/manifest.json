@@ -1,8 +1,8 @@
 {
   "name": "BotanicOwnerDebug",
-  "version_number": "1.0.10",
+  "version_number": "1.0.12",
   "website_url": "",
-  "description": "See who owns buildings, dropped items and mobs to debug and configure ownership mods. F10 cycles mobs only, mobs and interactive objects, all buildings, dropped items and mobs, then off. Includes owner colours and a live player legend.",
+  "description": "Client-side ownership colours for mobs, buildings, world objects and dropped items. F10 settings menu with category switches, live radius and a player legend. Optional TooManyLags test-phase colours.",
   "dependencies": [
     "denikson-BepInExPack_Valheim-5.4.2351"
   ]

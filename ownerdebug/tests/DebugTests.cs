@@ -19,6 +19,7 @@ class DebugTests
         ZNet.instance = new GameObject().Add<ZNet>(); ZDOMan.instance = new ZDOMan();
         Camera.main = new GameObject().Add<Camera>(); Camera.main.transform.position = new Vector3(0, 0, -10);
         Time.unscaledTime = 0; Graphics.Draws.Clear(); Shader.MissingColour = false; next = 0;
+        TmlDebug.Bind(null);
     }
     static Material Solid() { return new Material(new Shader { name = "Custom/Piece" }); }
     static ZNetView Spawn(long owner, Material source, bool mob)
@@ -39,10 +40,94 @@ class DebugTests
         Check(Graphics.Draws.Any(d => Equal(d.Colour, new Color(rgb.R, rgb.G, rgb.B, 1))), "Live owner colour " + owner);
     }
     [MethodImpl(MethodImplOptions.NoInlining)] static void ForeignPostfix() { foreignCalls++; }
+    static void RenderTiming()
+    {
+        foreach (bool listenerFirst in new[] { true, false })
+        {
+            Reset();
+            var mob = Spawn(77, Solid(), true);
+            var skin = mob.GetComponent<Renderer>();
+            int poses = 0;
+            Camera.CameraCallback present = delegate(Camera current)
+            { poses++; skin.localToWorldMatrix = new Matrix4x4 { Marker = 100 + poses }; };
+            if (listenerFirst) Camera.onPreRender += present;
+            var debug = Start();
+            if (!listenerFirst) Camera.onPreRender += present;
+            Plugin.Instance.RenderAction = delegate(Camera current) { debug.Draw(1337, 1f, 200f, false, false, current); };
+            try
+            {
+                var first = Camera.main;
+                Check(first.Buffers.Count == 0, "No old-pose commands queued before camera presentation");
+                first.RenderDebug();
+                Check(Graphics.Draws.Count == 1 && Graphics.Draws[0].RecordingMarker == 101 &&
+                    Graphics.Draws[0].MatrixMarker == 101, "Overlay queues after all final-pose listeners regardless of registration order");
+                Check(Graphics.Draws[0].Renderer == skin && Metrics.Bakes == 0, "Late submission preserves native skin reference without baking");
+                var buffer = first.Buffers.Single();
+                int scans = Metrics.Scans, reads = Metrics.MaterialReads, owners = Metrics.OwnerReads;
+                Graphics.Draws.Clear(); first.RenderDebug();
+                Check(Graphics.Draws.Count == 1 && Graphics.Draws[0].RecordingMarker == 102 && first.Buffers.Single() == buffer,
+                    "Repeated camera rendering refreshes commands without accumulating draws or buffers");
+                Check(Metrics.Scans == scans && Metrics.MaterialReads == reads && Metrics.OwnerReads == owners,
+                    "Final render preparation adds no stable hierarchy/material/owner scan");
+                int painted = debug.PaintedCount;
+                var other = new GameObject().Add<Camera>(); Graphics.Draws.Clear(); other.RenderDebug();
+                Check(Graphics.Draws.Count == 0 && other.Buffers.Count == 0 && debug.PaintedCount == painted &&
+                    Metrics.Scans == scans && Metrics.MaterialReads == reads && Metrics.OwnerReads == owners,
+                    "Secondary camera does no main-camera overlay work");
+                var foreign = new CommandBuffer(); first.AddCommandBuffer(CameraEvent.BeforeImageEffects, foreign);
+                Camera.main = new GameObject().Add<Camera>(); first.RenderDebug();
+                Check(buffer.Released && first.Buffers.Count == 1 && first.Buffers[0] == foreign,
+                    "Former main camera cannot draw stale overlay while waiting for replacement camera");
+                Graphics.Draws.Clear(); Camera.main.RenderDebug();
+                Check(Graphics.Draws.Count == 1 && Graphics.Draws[0].RecordingMarker == 105 && Camera.main.Buffers.Count == 1,
+                    "New main camera receives its current presented pose");
+                debug.Dispose(); Plugin.Instance.View = null;
+                Graphics.Draws.Clear(); int before = poses; Camera.main.RenderDebug();
+                Check(poses == before + 1 && Graphics.Draws.Count == 0 && Camera.main.Buffers.Count == 0 &&
+                    first.Buffers.Contains(foreign), "Disable removes only own render hook/buffer and preserves pose listeners and foreign buffers");
+                foreign.Release();
+            }
+            finally { Camera.onPreRender -= present; debug.Dispose(); Plugin.Instance.View = null; }
+        }
+    }
+    static void WorldScope()
+    {
+        foreach(Type type in new[]{typeof(Destructible),typeof(TreeBase),typeof(MineRock),typeof(MineRock5),typeof(TreeLog),typeof(ModDestructible),typeof(Rigidbody)})
+        foreach(bool distant in new[]{false,true})
+        {
+            Reset();var source=Solid();var native=Spawn(77,source,false);var root=native.gameObject;
+            root.Components.Remove(native.GetComponent<Piece>());var capability=(Component)Activator.CreateInstance(type);capability.gameObject=root;root.Components.Add(capability);
+            native.m_distant=distant;var debug=Start();Tick(debug,0);
+            Check(Graphics.Draws.Count==1,"World/physical network root is visible in All: "+type.Name);Colour(77);
+            native.Data.SetOwnerInternal(78);Tick(debug,.01f);Colour(78);
+            var renderer=root.Get<Renderer>();renderer.localToWorldMatrix=new Matrix4x4{Marker=123};Tick(debug,.02f);
+            Check(Graphics.Draws.Single().MatrixMarker==123,"Physical overlay follows the native renderer transform");
+            Tick(debug,.03f,true);Check(Graphics.Draws.Count==0,"Non-interactive world/physics stays outside interaction filter");
+            Tick(debug,.04f,false,true);Check(Graphics.Draws.Count==0,"World/physics stays outside mobs-only filter");
+            int scans=Metrics.Scans,reads=Metrics.MaterialReads;
+            for(int i=0;i<25;i++)Tick(debug,1+i);
+            Check(scans==Metrics.Scans&&reads==Metrics.MaterialReads,"World roots add no idle hierarchy or material scans");
+            Check(source.Alive&&renderer.SourceMaterials.Single()==source,"World root keeps its original material");
+            native.ResetZDO();Tick(debug,30);
+            Check(Graphics.Draws.Count==0&&debug.TrackedCount==0,"World/physical unload cleans its render registry");
+        }
+        Reset();var parent=Spawn(77,Solid(),false);parent.gameObject.Components.Remove(parent.GetComponent<Piece>());
+        var child=new GameObject();parent.gameObject.Child(child);child.Add<Rigidbody>();
+        var scope=Start();Tick(scope,0);Check(Graphics.Draws.Count==0,"Unrelated child physics does not qualify its parent network root");
+        Reset();var player=Spawn(77,Solid(),false);player.gameObject.Add<Player>();player.gameObject.Add<Rigidbody>();player.gameObject.Add<Destructible>();
+        scope=Start();Tick(scope,0);Check(Graphics.Draws.Count==0,"Player remains excluded even with world/physical capabilities");
+        Reset();var world=Spawn(77,Solid(),false);world.gameObject.Components.Remove(world.GetComponent<Piece>());world.gameObject.Add<TreeLog>();
+        var effect=new GameObject();world.gameObject.Child(effect);effect.Add<MeshFilter>().sharedMesh=new Mesh();
+        var effectRenderer=effect.Add<MeshRenderer>();effectRenderer.SourceMaterials.Clear();effectRenderer.SourceMaterials.Add(new Material(new Shader{name="Custom/ParticleGlow"}));
+        scope=Start();Tick(scope,0);Check(Graphics.Draws.Count==1,"World effects stay excluded");
+        world.gameObject.Get<Renderer>().enabled=false;Tick(scope,.01f);Check(Graphics.Draws.Count==0,"Hidden world mesh is never drawn");
+    }
     static void Main()
     {
         try
         {
+            RenderTiming();
+            WorldScope();
             DisplayMode mode = DisplayMode.Off;
             for (int cycle = 0; cycle < 3; cycle++)
             {
@@ -64,6 +149,30 @@ class DebugTests
             Check(white.R == 1 && white.G == 1 && white.B == 1, "Server always white");
             OwnerColour.Reset();
             var fixedColours = new System.Collections.Generic.List<Rgb>();
+            foreach (int testSeed in new[] { 0, 1, 2, 1337, -1, int.MinValue, int.MaxValue })
+            {
+                OwnerColour.Reset();
+                var firstFour = new System.Collections.Generic.List<Rgb>();
+                Rgb playback = OwnerColour.Get(new OwnerKey { Kind = OwnerKind.Playback }, testSeed);
+                Rgb correction = OwnerColour.Get(new OwnerKey { Kind = OwnerKind.Correction }, testSeed);
+                for (long player = 101; player < 105; player++)
+                {
+                    Rgb rgb = OwnerColour.Get(OwnerKey.Resolve(true, player, 1), testSeed);
+                    Check((rgb.R == .55f && rgb.G == 0 && rgb.B == 1) || (rgb.R == 0 && rgb.G == 1 && rgb.B == 0) ||
+                        (rgb.R == 0 && rgb.G == 0 && rgb.B == 1) || (rgb.R == 1 && rgb.G == 1 && rgb.B == 0),
+                        "First four players use requested purple/green/blue/yellow pool for every seed");
+                    Check(!firstFour.Any(c => c.R == rgb.R && c.G == rgb.G && c.B == rgb.B), "Shuffled player colours have no duplicates");
+                    Check(!(rgb.R == playback.R && rgb.G == playback.G && rgb.B == playback.B) &&
+                        !(rgb.R == correction.R && rgb.G == correction.G && rgb.B == correction.B), "First four players exclude red/orange phases");
+                    firstFour.Add(rgb);
+                }
+                for (long player = 101; player < 105; player++)
+                {
+                    Rgb same = OwnerColour.Get(OwnerKey.Resolve(true, player, 1), testSeed), before = firstFour[(int)player-101];
+                    Check(same.R == before.R && same.G == before.G && same.B == before.B, "Random assignment remains stable within connection");
+                }
+            }
+            OwnerColour.Reset();
             for (long id = 1000; id < 1012; id++)
             {
                 Rgb c = OwnerColour.Get(OwnerKey.Resolve(true, id, 1), 1337);
@@ -280,9 +389,116 @@ class DebugTests
             debug.Dispose(); Plugin.Instance.View = null;
             Check(UnityEngine.Object.Destroyed.All(o => o is Material && o.name == "BotanicOwnerDebugPaint"), "Only owned paint materials ever destroyed");
             Check(Metrics.Assignments == 0 && Metrics.Copies == 0 && Metrics.Bakes == 0, "Whole suite never writes renderer bindings, clones sources or bakes skins");
+            CategoriesAndPhases();
+            FrozenPresentation();
             System.Console.WriteLine("PASS: " + checks + " flat-renderer ownership/lifecycle assertions.");
         }
         catch (Exception e) { System.Console.Error.WriteLine(e); Environment.Exit(1); }
+    }
+
+    static void CategoriesAndPhases()
+    {
+        Reset();
+        var interactive = Spawn(77, Solid(), false); interactive.gameObject.Add<TestInteractable>();
+        var fixedStatic = Spawn(77, Solid(), false); fixedStatic.gameObject.Add<WearNTear>();
+        var physics = Spawn(77, Solid(), false); physics.gameObject.Add<Rigidbody>(); physics.gameObject.Add<ZSyncTransform>();
+        var tame = Spawn(77, Solid(), true); tame.GetComponent<Character>().Tamed = true;
+        var wild = Spawn(77, Solid(), true);
+        var loose = Spawn(77, Solid(), false); loose.gameObject.Add<ItemDrop>();
+        var views = new[] { interactive, fixedStatic, physics, tame, wild, loose };
+        for (int i = 0; i < views.Length; i++) Check(DebugCategories.Classify(views[i]) == 1 << i, "Exact category bit " + i);
+        var tree = Spawn(77, Solid(), false).gameObject.Add<TreeBase>(); tree.m_logPrefab = physics.gameObject;
+        Check(DebugCategories.Classify(tree.GetComponent<ZNetView>()) == 4, "Standing tree classified by physical destruction successor");
+        var chain = new GameObject(); var chainView = chain.Add<ZNetView>(); var destructible = chain.Add<Destructible>(); destructible.m_spawnWhenDestroyed = physics.gameObject;
+        tree.m_logPrefab = chain;
+        Check(DebugCategories.Classify(tree.GetComponent<ZNetView>()) == 4, "Recursive destruction successor follows TML physics policy");
+        destructible.m_spawnWhenDestroyed = chain;
+        Check(DebugCategories.Classify(tree.GetComponent<ZNetView>()) == 2, "Cyclic successor terminates safely and tree remains static");
+        var child = new GameObject(); tree.gameObject.Child(child); child.Add<Rigidbody>();
+        Check(DebugCategories.Classify(tree.GetComponent<ZNetView>()) == 0, "Static with child body cannot enter fixed static bucket");
+        var projectile = Spawn(77, Solid(), false); projectile.gameObject.Add<Projectile>();
+        Check(DebugCategories.Classify(projectile) == 0, "Persistent projectiles excluded");
+        var marker = new GameObject(); var markerView = marker.Add<ZNetView>(); marker.Add<Vegvisir>();
+        Check(DebugCategories.Classify(markerView) == 0, "Pure world markers remain outside interactive owner category");
+        marker.Add<Door>();
+        Check(DebugCategories.Classify(markerView) == 1, "Specific interactive function takes priority over auxiliary world marker");
+        var nested = new GameObject(); fixedStatic.gameObject.Child(nested); nested.Add<ZNetView>(); nested.Add<TestInteractable>();
+        Check(DebugCategories.Classify(fixedStatic) == 0, "Nested network identity cannot contaminate fixed category");
+        // Restore simple fixed object for one-filter-at-a-time draw checks.
+        fixedStatic.gameObject.Children.Clear();
+        var debug = Start();
+        for (int i = 0; i < 6; i++)
+        {
+            Graphics.Draws.Clear(); debug.Draw(1337, 1, 200, false, false, null, 1 << i); Camera.main.RenderDebug();
+            Check(Graphics.Draws.Count == 1 && Graphics.Draws[0].Renderer == views[i].GetComponent<Renderer>(), "Independent category draw " + i);
+        }
+        Graphics.Draws.Clear(); debug.Draw(1337, 1, 200, false, false, null, 0); Camera.main.RenderDebug();
+        Check(Graphics.Draws.Count == 0, "All categories off draws nothing");
+        tame.GetComponent<Character>().Tamed = false;
+        Graphics.Draws.Clear(); debug.Draw(1337, 1, 200, false, false, null, DebugCategories.Hostile); Camera.main.RenderDebug();
+        Check(Graphics.Draws.Count == 2, "Live tame-state change updates without hierarchy scan");
+        wild.GetComponent<Renderer>().bounds = new Bounds { center = new Vector3(0, 0, 100), Visible = true };
+        Graphics.Draws.Clear(); debug.Draw(1337, 1, 20, false, false, null, DebugCategories.Hostile); Camera.main.RenderDebug();
+        Check(Graphics.Draws.Count == 1, "Radius decrease takes effect next render");
+        Graphics.Draws.Clear(); debug.Draw(1337, 1, 200, false, false, null, DebugCategories.Hostile); Camera.main.RenderDebug();
+        Check(Graphics.Draws.Count == 2, "Radius increase takes effect next render");
+        Check(!TmlDebug.Installed && !TmlDebug.Supported, "No TML: mode unavailable without dependency");
+        TmlDebug.Bind(typeof(TooManyLags.OwnerDebugApi).Assembly);
+        Check(TmlDebug.Installed && TmlDebug.Supported, "Optional typed API binds once");
+        TooManyLags.OwnerDebugApi.Selected = wild.Data;
+        for (int phase = 0; phase < 4; phase++)
+        {
+            wild.Data.SetOwnerInternal(phase == 0 ? 77 : phase == 1 ? 1 : 55);
+            TooManyLags.OwnerDebugApi.CurrentPhase = phase;
+            Graphics.Draws.Clear(); debug.Draw(1337, 1, 200, false, false, null, 0, true);
+            Color nativeColour = wild.GetComponent<Renderer>().SourceMaterials[0].GetColor(colour);
+            Camera.main.RenderDebug();
+            Rgb rgb = OwnerColour.Get(phase >= 2 ? new OwnerKey { Kind = (OwnerKind)((int)OwnerKind.OldOwner + phase) } : OwnerKey.Resolve(true, wild.Data.Owner, 1), 1337);
+            Check(phase < 2 ? Graphics.Draws.Count == 1 && Graphics.Draws[0].Renderer == wild.GetComponent<Renderer>() && Equal(Graphics.Draws[0].Colour, new Color(rgb.R,rgb.G,rgb.B,1)) :
+                Graphics.Draws.Count == 0 && Equal(nativeColour, new Color(rgb.R,rgb.G,rgb.B,1)), "Only selected ai_test mob uses native owner/phase colour " + phase);
+        }
+        TooManyLags.OwnerDebugApi.Selected = null;
+        Graphics.Draws.Clear(); debug.Draw(1337, 1, 200, false, false, null, 63, true); Camera.main.RenderDebug();
+        Check(Graphics.Draws.Count == 0, "Test stops: unrelated mobs and objects remain uncoloured");
+        debug.Dispose(); Plugin.Instance.View = null;
+    }
+    static void FrozenPresentation()
+    {
+        Reset(); var mob=Spawn(77,Solid(),true); var skin=mob.GetComponent<SkinnedMeshRenderer>();
+        Material original=skin.SourceMaterials[0]; var transparent=new Material(new Shader{name="Custom/Particle"});
+        skin.SourceMaterials.Add(transparent);
+        var propObject=new GameObject(); mob.gameObject.Child(propObject);
+        var prop=propObject.Add<MeshRenderer>(); propObject.Add<MeshFilter>().sharedMesh=new Mesh();
+        Material originalProp=prop.SourceMaterials[0];
+        TmlDebug.Bind(typeof(TooManyLags.OwnerDebugApi).Assembly);
+        TooManyLags.OwnerDebugApi.Selected=mob.Data; TooManyLags.OwnerDebugApi.CurrentPhase=2;
+        var debug=Start(); int bakes=Metrics.Bakes;
+        debug.Draw(1337,1,200,false,false,null,DebugCategories.Hostile);
+        Check(Camera.main.Buffers.Single().Queued.Count==0,"Active bridge uses native draw, no displaced second geometry");
+        Material paint=skin.SourceMaterials[0];
+        Check(paint!=original && prop.SourceMaterials[0]!=originalProp,"Both native skin and rigid attachment get camera-local colour");
+        Check(skin.SourceMaterials[1]==transparent,"Non-tintable effect material remains native");
+        Check(Metrics.Bakes==bakes,"No skin baking or scale conversion during bridge");
+        Camera.main.RenderDebug();
+        Check(skin.SourceMaterials[0]==original && prop.SourceMaterials[0]==originalProp,"Camera post-render restores original native materials");
+        debug.Draw(1337,1,200,false,false,null,DebugCategories.Hostile);
+        Check(skin.SourceMaterials[0]==paint,"Next render reuses colour material");
+        var foreign=Solid(); skin.SourceMaterials[0]=foreign;
+        debug.RestorePresentation();
+        Check(skin.SourceMaterials[0]==foreign && prop.SourceMaterials[0]==originalProp,"Cleanup preserves foreign material updates while restoring own slots");
+        debug.Draw(1337,1,200,false,false,null,DebugCategories.Hostile);
+        debug.Remove(mob);
+        Check(skin.SourceMaterials[0]==foreign && prop.SourceMaterials[0]==originalProp,"Root retirement restores active paint");
+        debug.Dispose(); Plugin.Instance.View=null;
+        Check(original.Alive && originalProp.Alive && transparent.Alive && foreign.Alive,"Native and foreign materials survive debug lifetime");
+        using(var scope=new PresentationPaint(skin))
+        {
+            scope.Begin(); scope.Slot(0,paint); scope.Apply();
+            skin.SourceMaterials.Add(originalProp);
+            scope.Restore();
+            Check(skin.SourceMaterials.Count==3 && skin.SourceMaterials[0]==foreign && skin.SourceMaterials[2]==originalProp,"Changed slot count preserves new foreign slots");
+            scope.Restore();
+        }
     }
 }
 

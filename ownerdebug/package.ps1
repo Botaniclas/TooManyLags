@@ -1,4 +1,4 @@
-param([string]$Version='1.0.10')
+param([string]$Version='1.0.12')
 $ErrorActionPreference='Stop'
 $output=Join-Path (Split-Path (Split-Path $PSScriptRoot)) 'outputs'
 $release=Join-Path $PSScriptRoot 'release-thunderstore'
@@ -7,6 +7,13 @@ $dll=Join-Path $PSScriptRoot 'bin\BotanicOwnerDebug.dll'
 $verification=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Raw|ConvertFrom-Json
 if($manifest.version_number -ne $Version -or [Reflection.AssemblyName]::GetAssemblyName($dll).Version.ToString(3) -ne $Version){throw 'Version mismatch.'}
 if($verification.dll_sha256 -ne (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash){throw 'DLL differs from verified build.'}
+if($verification.version -ne $Version -or !$verification.tests.all_passed){throw 'Matching successful verification receipt required.'}
+foreach($source in $verification.source_sha256.PSObject.Properties){
+ if((Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $source.Name) -Algorithm SHA256).Hash -ne $source.Value){throw ('Verified input changed: '+$source.Name)}
+}
+$zip=Join-Path $output ('BotanicOwnerDebug-'+$Version+'.zip')
+$sourceZip=Join-Path $output ('BotanicOwnerDebug-'+$Version+'-source.zip')
+if((Test-Path -LiteralPath $zip) -or (Test-Path -LiteralPath $sourceZip)){throw 'Versioned output already exists; preserve it and choose a new version.'}
 New-Item -ItemType Directory -Force -Path $release,$output|Out-Null
 Copy-Item -LiteralPath $dll -Destination $release -Force
 foreach($name in @('README.md','CHANGELOG.md','manifest.json','icon.png')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $release -Force}
@@ -16,10 +23,9 @@ $reports=Join-Path $output 'Others'
 New-Item -ItemType Directory -Force -Path $reports|Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'VALIDATION.md') -Destination (Join-Path $reports ('BotanicOwnerDebug-'+$Version+'-validation.md')) -Force
 $files=@('BotanicOwnerDebug.dll','README.md','CHANGELOG.md','manifest.json','icon.png')|ForEach-Object{Join-Path $release $_}
-$zip=Join-Path $output ('BotanicOwnerDebug-'+$Version+'.zip')
 Compress-Archive -LiteralPath $files -DestinationPath $zip -Force
-$sources=@('src','tests','README.md','CHANGELOG.md','VALIDATION.md','manifest.json','icon.png','build.ps1','test.ps1','test-native.ps1','package.ps1','thunderstore.toml','verification.json')|ForEach-Object{Join-Path $PSScriptRoot $_}
-Compress-Archive -LiteralPath $sources -DestinationPath (Join-Path $output ('BotanicOwnerDebug-'+$Version+'-source.zip')) -Force
+$sources=@('src','tests','docs','README.md','CHANGELOG.md','VALIDATION.md','manifest.json','icon.png','build.ps1','test.ps1','test-native.ps1','package.ps1','thunderstore.toml','verification.json')|ForEach-Object{Join-Path $PSScriptRoot $_}
+Compress-Archive -LiteralPath $sources -DestinationPath $sourceZip -Force
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive=[IO.Compression.ZipFile]::OpenRead($zip)
 try{
@@ -30,3 +36,5 @@ try{
  if($packed -ne $verification.dll_sha256){throw 'Packaged DLL differs from validated build.'}
 }finally{$archive.Dispose()}
 Get-ChildItem -LiteralPath $output -Filter 'BotanicOwnerDebug*'|Select-Object Name,Length
+
+

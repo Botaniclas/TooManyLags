@@ -7,11 +7,11 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
-[assembly: AssemblyVersion("1.0.57.0")]
+[assembly: AssemblyVersion("2.0.0.0")]
 
 namespace TooManyLags
 {
-    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "1.0.57")]
+    [BepInPlugin(Id, "TooManyLags - FiresGhettoNetworking Addon", "2.0.0")]
     [BepInDependency(FgnId)]
     [BepInDependency(CommunityPatchSceneCompatibility.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(PupId, BepInDependency.DependencyFlags.SoftDependency)]
@@ -20,9 +20,8 @@ namespace TooManyLags
     [BepInIncompatibility("botanic.server.authority")]
     public sealed class Plugin : BaseUnityPlugin
     {
-        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "1.0.57", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
+        internal const string Id = "botanic.toomanylags.fgnaddon", Version = "2.0.0", FgnId = "com.Fire.FiresGhettoNetworkMod", PupId = "com.pup.instancecombiner.safe";
         internal static AuthorityController Controller;
-        internal static NativePup Native;
         internal static bool Diagnostics;
         private static Plugin instance;
         private Harmony harmony;
@@ -37,6 +36,7 @@ namespace TooManyLags
         private bool autoConfigureFgn;
         private bool gridProtocol;
         private bool configuredAI;
+        private bool mobVisualBridge;
         private bool sessionStarted;
         private IDisposable clientOverrides;
         private IDisposable communityPatchCompatibility;
@@ -58,15 +58,17 @@ namespace TooManyLags
             bool defaultInteractives = Config.Bind("01 - Simulation Settings", "ServerOwnedInteractivesByDefault", false,
                 "Server only; restart required. Simulation settings and exit retention only distribute CPU load between server and clients. They do not affect perceived latency. true: server default for managed interactions/idle tamed animals; false: vanilla default. Requires Server-Side Simulation.").Value;
             bool buildings = Config.Bind("01 - Simulation Settings", "ServerOwnedStaticBuildingsByDefault", false,
-                "Server only; restart required. true: server default for eligible non-interactive building pieces; false: vanilla default. UseGridForStaticBuildings lets nearby clients share their simulation. Requires Server-Side Simulation.").Value;
+                "Server only; restart required. true: server default for eligible non-interactive buildings and fixed world objects; false: vanilla default. PhysicsObjects separately controls movable world props and sources of physical successors. UseGridForStaticBuildings lets nearby clients share static simulation. Requires Server-Side Simulation.").Value;
             bool staticGrid = Config.Bind("01 - Simulation Settings", "UseGridForStaticBuildings", false,
-                "Server only; restart required. Include eligible static building pieces in the existing grid, independently of ServerOwnedStaticBuildingsByDefault. That setting selects the default outside player fields; empty fields follow KeepOwnershipOnCellExit. Overlaps use the server. PUP FPS is optional; baked clusters are excluded. Requires Server-Side Simulation.").Value;
+                "Server only; restart required. Include eligible non-interactive buildings and fixed world objects in the grid, independently of ServerOwnedStaticBuildingsByDefault. That setting selects the default outside player fields; empty fields follow KeepOwnershipOnCellExit. PhysicsObjects uses interactive rules instead. PUP FPS clusters stay excluded; PUP FPS is optional. Requires Server-Side Simulation.").Value;
             bool enabled = Config.Bind("00 - General", "Enabled", true, "Server only; restart required. Enable TooManyLags for this server session. Clients follow the server; their local value is ignored. Handoff safeguards are always active with Server-Side Simulation. Later sections contain tuned defaults; adjust only when needed.").Value;
             bool enableAI = Config.Bind("03 - AI Mob Ownership", "EnableAIOwnership", true,
                 "Server only; restart required. Enable target-based Hostile Mob ownership. Clients follow the server; their local value is ignored. Attacks block transfers until attack end.").Value;
+            bool visualHandoff = Config.Bind("03 - AI Mob Ownership", "EnableMobHandoffVisualBridge", true,
+                "Server only; restart required. Continue native enemy simulation locally during ownership handoffs, replay the recording more slowly, then blend into the new owner's simulation at matching progress. Nearby compatible observers can share the recording. Hitboxes, nameplates and attached effects follow the displayed enemy. Preview attacks are visual only. Timing adapts to latency and owner simulation speed; late updates can require waiting. Update server and all clients together. false: native presentation.").Value;
             bool noSimulation = Config.Bind("01 - Simulation Settings", "NoServerSideSimulation", false,
                 "Server only; restart required. Recommended for dedicated servers with a weak or already overloaded CPU. true: disable FiresGhettoNetworking Server-Side Simulation and keep simulation on players; shared fields prefer the player with lower latency. Functionality is limited: no server ownership, and server-owned building/default/refill options are ignored. false: full Server-Side Simulation mode.").Value;
-            logs = Config.Bind("09 - Logs", "EnableLogs", false, "Local to this server/client. Live console: tml_config EnableLogs true/false. Enable diagnostic messages and status commands. Off skips diagnostic work; startup failures are always reported.").Value;
+            logs = Config.Bind("09 - Logs", "EnableLogs", false, "Local to this server/client. Live console: tml_config EnableLogs true/false. Enables on-demand status commands, without continuous informational logging. Off skips optional diagnostic work; real errors and warnings are always reported.").Value;
             Diagnostics = logs;
             bool pupCompatibilityEnabled = Config.Bind("08 - PUP FPS Compatibility", "EnablePupCompatibility", true,
                 "Local to this server/client; restart required. Built-in PUP FPS collision, building-stability and FiresGhettoNetworking handoff safeguards. Automatically inactive without the required mods or when a separate BotanicPupPatch supplies the guards. Inactive mode installs no guard hooks and does no runtime work. AI ownership remains controlled by section 03.").Value;
@@ -104,7 +106,7 @@ namespace TooManyLags
                 "Server only; live console supported. Check interval in seconds for movement and fallback heading. Received camera-coverage changes request an immediate pass. Only changed coverage requests fields; existing timers/handoffs also progress while standing.", new AcceptableValueRange<float>(.05f, 5f))).Value;
             if (Single.IsNaN(interval) || Single.IsInfinity(interval)) interval = .1f;
             ConfigEntry<bool> retention = Config.Bind("01 - Simulation Settings", "KeepOwnershipOnCellExit", true,
-                "Server only; restart required. true: keep vacated fields, gradually sharing CPU load between clients/server. false: return to server defaults; requires Server-Side Simulation and an interactive/static server default. false also keeps the full directional footprint. Native region release still applies.");
+                "Server only; restart required. true: keep vacated fields, gradually sharing CPU load between clients/server. false: return to server defaults; requires Server-Side Simulation and an interactive/static server default. false also keeps the full directional footprint. Ownership transfers use bandwidth; false can substantially increase traffic through extra server returns and later player claims, especially while moving through dense areas. Native region release still applies.");
             bool keepOnExit = retention.Value;
             Kinds kinds = Kinds.None;
             foreach (Kinds kind in Enum.GetValues(typeof(Kinds)))
@@ -119,6 +121,7 @@ namespace TooManyLags
             CameraHeading.Configure(cameraOverlap, cameraPrediction);
             ConfigLayout.Finish(Config);
             // Configuration ends here.
+            mobVisualBridge = visualHandoff;
             autoConfigureFgn = automaticFgn;
             PluginInfo pupGuard, pupPlugin, pupNetwork;
             bool externalPupGuard = (Chainloader.PluginInfos.TryGetValue("botanic.pup.patch", out pupGuard) && pupGuard.Instance) ||
@@ -132,6 +135,7 @@ namespace TooManyLags
             // Clients install only the startup/settings endpoint until the
             // authenticated dedicated server tells them which modules to use.
             if (!Application.isBatchMode || !enabled) return;
+            MobCollisionReadiness.Start(pupPlugin == null ? null : pupPlugin.Instance, pupCompatibilityEnabled);
             enabledMod = true;
             playerSimulation = noSimulation;
             if (!keepOnExit && !ConfigCommands.CanReturnOnExit(!playerSimulation, defaultInteractives, buildings))
@@ -179,10 +183,9 @@ namespace TooManyLags
                 PickableServerPatch.Rewrite(PatchProcessor.GetOriginalInstructions(AccessTools.Method(typeof(Pickable), "RPC_Pick")));
                 harmony = new Harmony(Id);
                 foreach (Type type in typeof(Plugin).Assembly.GetTypes())
-                    if (type.Namespace == typeof(Plugin).Namespace && type != typeof(ConfigConnectionPatch) && type != typeof(ConfigShutdownPatch) && type != typeof(ConfigReadyPatch) && Attribute.IsDefined(type, typeof(HarmonyPatch)))
+                    if (type.Namespace == typeof(Plugin).Namespace && type != typeof(PhysicsObjects.GainPatch) && type != typeof(ConfigConnectionPatch) && type != typeof(ConfigShutdownPatch) && type != typeof(ConfigReadyPatch) && Attribute.IsDefined(type, typeof(HarmonyPatch)))
                         harmony.CreateClassProcessor(type).Patch();
                 FgnRpcIntegration.Install(harmony, fgn.Instance.GetType().Assembly);
-                if (logs) Logger.LogInfo("TooManyLags grid ready: cellSize=" + cellSize + "; pattern=" + pattern + "; check=" + interval + "; cameraDirected=" + directional + "; inner=" + innerDelay + "; forward=" + forwardDelay + "; outer=" + outerDelay + "; fullGridDelay=" + delay + "; defaultInteractives=" + defaultInteractives + "; keepOnExit=" + keepOnExit + "; refillStations=" + refillStations + "; " + bridge.State());
             }
             catch (Exception error)
             {
@@ -210,19 +213,31 @@ namespace TooManyLags
             if (!enabledMod) return;
             InitializeOwnership(Config, configuredAI, false);
         }
+        private static void StopCombatState()
+        {
+#if TML_MOB_BRIDGE || TML_DEBUG_SYSTEM
+            MobBridgeProtocol.Stop();
+#endif
+            MobSourceHandoff.Stop(); MobObserverHandoff.Stop();
+            MobCombatState.Stop();
+            MobFlightHandoff.CombatTransfer = null;
+            MobFlightHandoff.CombatTransferred = null;
+            PlayerSimulation.LocalAgent.CombatForward = null;
+        }
         private void InitializeOwnership(ConfigFile runtimeConfig, bool requested, bool client)
         {
+            MobFlightHandoff.Start(networkPlugin.Instance.GetType().Assembly);
+            MobCombatState.Start(networkPlugin.Instance.GetType().Assembly);
+#if TML_MOB_BRIDGE || TML_DEBUG_SYSTEM
+            if (mobVisualBridge) MobBridgeProtocol.Start();
+#endif
+            MobFlightHandoff.CombatTransfer = MobCombatState.BeforeTransfer;
+            MobFlightHandoff.CombatTransferred = MobCombatState.CompleteTransfer;
+            PlayerSimulation.LocalAgent.CombatForward = MobCombatState.HandlesLateDamage;
             try { TextEditing.Protection.Start(); }
             catch (Exception error) { Report("Text editing protection unavailable: " + error.GetBaseException().Message); }
             // All plugin Awakes have completed: the optional combat module can
             // release its hooks before ours are installed, independent of load order.
-            try
-            {
-                PluginInfo pup;
-                Native = new NativePup(Chainloader.PluginInfos.TryGetValue(PupId, out pup) && pup.Instance ? pup.Instance : null);
-            }
-            catch (Exception error)
-            { Native = null; Logger.LogWarning("PUP readiness unavailable; AI server fallback stays blocked while PUP is present. " + error.GetBaseException().Message); }
             MobPolicyHandoff takeover = null;
             try
             {
@@ -238,7 +253,30 @@ namespace TooManyLags
                 catch (Exception error)
                 { allowed = false; Logger.LogWarning("TooManyLags mob takeover unavailable. " + error.GetBaseException().Message); }
                 FgnCombatOwnership.Install(runtimeConfig, networkPlugin.Instance.GetType().Assembly, networkPlugin.Metadata.Version, allowed && !playerSimulation);
+                if (FgnCombatOwnership.Enabled)
+                {
+                    MobSourceHandoff.CommitLocal = FgnCombatOwnership.SourceCommit;
+                    MobSourceHandoff.ValidateLocal = FgnCombatOwnership.SourceLocalReady;
+                    MobSourceHandoff.ResolveDestination = FgnCombatOwnership.SourceDestination;
+                    MobSourceHandoff.AcceptedServer = FgnCombatOwnership.SourceAccepted;
+                    MobSourceHandoff.PublishFinal = MobNativePublication.Send;
+                    MobSourceHandoff.RoundtripSeconds = null;
+                    if (mobVisualBridge) MobSourceHandoff.RoundtripSeconds = delegate(ZNetPeer peer) {
+#if TML_MOB_BRIDGE || TML_DEBUG_SYSTEM
+                        return peer == null ? 0f : MobBridgeLatency.Measure(peer, FgnCombatOwnership.Fgn);
+#else
+                        return peer == null || FgnCombatOwnership.Fgn == null ? 0f : FgnCombatOwnership.Fgn.Rtt(peer) / 1000f;
+#endif
+                    };
+                    MobHandoffVisual.LatencyWindow = MobSourceHandoff.PresentationWindow;
+                    MobSourceHandoff.PresentationTiming = MobHandoffVisual.TargetTiming;
+                    MobSourceHandoff.Start();
+                }
+                MobObserverHandoff.Start(mobVisualBridge);
                 FgnCombatStatus.Register();
+#if TML_DEBUG_SYSTEM
+                FgnSoloCombatTest.Register();
+#endif
                 if (!String.IsNullOrEmpty(FgnCombatOwnership.StartupError)) Logger.LogWarning("TooManyLags AI ownership inactive: " + FgnCombatOwnership.StartupError);
                 bool useMobs = allowed && (playerSimulation || FgnCombatOwnership.Enabled);
                 bool playerMobsReady = false;
@@ -271,19 +309,59 @@ namespace TooManyLags
         }
         private void Update()
         {
+#if TML_DEBUG_SYSTEM
+            SoloNetworkLatency.Poll();
+#endif
             if (!Application.isBatchMode) ServerSession.Poll();
             if (!enabledMod) return;
             if (camera != null && gridProtocol) GridHandoffs.Protocol.ClientHello();
             PlayerSimulation.Plugin.Poll();
             TextEditing.Protection.Poll();
+#if TML_DEBUG_SYSTEM
+            FgnSoloCombatTest.Poll();
+#endif
         }
         private void LateUpdate()
-        { if (gridProtocol) GridHandoffs.Protocol.FlushDeferred(); }
+        {
+            if (gridProtocol) GridHandoffs.Protocol.FlushDeferred();
+#if TML_MOB_BRIDGE || TML_DEBUG_SYSTEM
+            MobBridgeWarmup.Pump();
+            MobBridgeVisual.Tick();
+            MobBridgeProtocol.PollRate();
+            if (MobBridgeProtocol.HasActive) MobBridgeProtocol.Maintain();
+            MobBridgeCost.Flush();
+#endif
+            MobHandoffVisual.Tick(); MobObserverHandoff.Tick();
+        }
+        [System.Diagnostics.Conditional("TML_BRIDGE_DIAGNOSTICS")]
+        internal static void TestLog(string line)
+        {
+#if TML_BRIDGE_DIAGNOSTICS
+            if (instance) instance.Logger.LogInfo("MOB TEST: " + line);
+#endif
+        }
         internal static int SessionFlags()
         {
             if (!instance || !instance.enabledMod) return 0;
             bool mobs = FgnCombatOwnership.Enabled || (instance.playerSimulation && PlayerSimulation.Plugin.Local != null && PlayerSimulation.Plugin.Local.MobsEnabled);
             return (mobs ? 3 : 1) | (instance.autoConfigureFgn ? 0 : 4);
+        }
+        internal static int VisualSessionFlags()
+        { return SessionFlags() | (instance && instance.enabledMod && instance.mobVisualBridge ? 8 : 0); }
+        internal static void ApplyVisualSession(bool enabled)
+        {
+            if (instance && instance.enabledMod && instance.networkPlugin != null && instance.networkPlugin.Instance)
+            {
+#if TML_MOB_BRIDGE || TML_DEBUG_SYSTEM
+                if (enabled && MobBridgeProtocol.Prepare())
+                { MobHandoffVisual.Stop(); if (!MobBridgeProtocol.Started) MobBridgeProtocol.Start(); }
+                else
+                { MobBridgeProtocol.Stop(); MobHandoffVisual.Start(instance.networkPlugin.Instance.GetType().Assembly, enabled); }
+#else
+                MobHandoffVisual.Start(instance.networkPlugin.Instance.GetType().Assembly, enabled);
+#endif
+                MobObserverHandoff.Start(enabled);
+            }
         }
         internal static void ApplyServerSession(bool enabled, bool mobs, bool automaticFgn = true)
         {
@@ -317,11 +395,14 @@ namespace TooManyLags
         {
             if (!instance || Application.isBatchMode || (!instance.sessionStarted && !instance.enabledMod)) return;
             instance.enabledMod = instance.sessionStarted = false;
+            MobFlightHandoff.Stop();
+            StopCombatState();
+            MobHandoffVisual.Stop();
             TextEditing.Protection.Stop();
             GridHandoffs.Protocol.Stop(); instance.gridProtocol = false;
             FgnCombatOwnership.Stop(); PlayerSimulation.Plugin.Stop();
             if (instance.camera != null) instance.camera.Reset(true); instance.camera = null;
-            instance.Cleanup(); instance.harmony = null; Native = null;
+            instance.Cleanup(); instance.harmony = null;
             if (instance.clientOverrides != null) { instance.clientOverrides.Dispose(); instance.clientOverrides = null; }
             if (instance.clientTakeover != null)
             {
@@ -349,7 +430,7 @@ namespace TooManyLags
             return Single.IsNaN(interval) || Single.IsInfinity(interval) ? .05f : Math.Max(.05f, Math.Min(5f, interval));
         }
         internal static void InvalidateCamera() { if (instance && instance.camera != null) instance.camera.Reset(true); }
-        internal static void Warn(string message) { if (Diagnostics && instance) instance.Logger.LogWarning(message); }
+        internal static void Warn(string message) { if (instance) instance.Logger.LogWarning(message); }
         internal static void Report(string message) { if (instance) instance.Logger.LogWarning(message); }
         internal static string ConfigCommand(string command, bool server)
         {
@@ -367,8 +448,7 @@ namespace TooManyLags
                 try { status = Controller.OwnerStatus(peer, prefabFilter); }
                 catch (Exception error) { status = "SERVER owner status unavailable: " + error.GetBaseException().Message; }
             }
-            // No diagnostic collection or formatting before the explicit log opt-in.
-            if (instance) instance.Logger.LogInfo(status);
+            // Returned to the requesting console; never duplicated into logs.
             return status;
         }
         private T ConfigValue<T>(string section, string key)
@@ -383,7 +463,6 @@ namespace TooManyLags
             if (key == "EnableLogs")
             {
                 logs = Diagnostics = ConfigValue<bool>("09 - Logs", key);
-                if (options != null) options.Logs = logs;
                 if (logs)
                 {
                     FgnCombatStatus.Register();
@@ -435,7 +514,7 @@ namespace TooManyLags
                 case Kinds.Wards: name = "Wards"; break;
                 case Kinds.MapTables: name = "Cartography tables"; break;
                 case Kinds.Wisplights: name = "Wisp fountains"; break;
-                case Kinds.TamedAnimals: name = "Idle tamed animals; friendly magic summons excluded"; break;
+                case Kinds.TamedAnimals: name = "Idle tamed animals; guarded clients required. Attacks, riding/following and friendly magic summons remain protected"; break;
                 case Kinds.Containers: name = "Public chests and inventories"; break;
                 case Kinds.ItemStands: name = "Item and armour stands"; break;
                 case Kinds.Signs: name = "Signs"; break;
@@ -446,18 +525,23 @@ namespace TooManyLags
                 case Kinds.Defenses: name = "Traps and turrets"; break;
                 case Kinds.ShieldGenerators: name = "Shield generators"; break;
                 case Kinds.Pickables: name = "Pickable objects and feasts; excludes loose item drops"; break;
-                case Kinds.LooseItems: name = "Loose item drops. Leave enabled; disabling is normally not useful. false keeps native ownership. Native pickup takes priority over automatic grid transfers"; break;
+                case Kinds.LooseItems: name = "Loose item drops, including eggs. Uses the interactive default at native initial owner assignment. false keeps native ownership. Native pickup takes priority over automatic grid transfers"; break;
+                case Kinds.PhysicsObjects: name = "Networked world physics props and destructible sources of physical successors, such as trees/logs. Excludes projectiles, visual debris and ordinary loot. Grid transfers of non-interactable bodies require sleep at the owner; vacant-cell server returns do not. Native spawning retains creator ownership. Server-Side Simulation and updated clients required"; break;
                 case Kinds.Offerings: name = "Offering altars"; break;
                 case Kinds.Vehicles: name = "Idle carts and vehicle controls; FiresGhettoNetworking-simulated ships excluded"; break;
                 default: name = "Other compatible modded interactables"; break;
             }
             return (kind == Kinds.Doors ? "All categories below: server only; restart required. true: managed by TooManyLags; false: vanilla/FiresGhettoNetworking. Open inventories, refilling, riding, following and other active use remain protected.\n" : "") + name + ".";
         }
-        private void RuntimeFault(Exception error) { if (logs) Logger.LogWarning("TooManyLags grid inactive; native ownership retained. " + error.GetBaseException()); }
-        private void RequestFault(Exception error) { if (logs) Logger.LogWarning("Native object request failed; not replayed. " + error.GetBaseException()); }
+        private void RuntimeFault(Exception error) { Logger.LogWarning("TooManyLags grid inactive; native ownership retained. " + error.GetBaseException()); }
+        private void RequestFault(Exception error) { Logger.LogWarning("Native object request failed; not replayed. " + error.GetBaseException()); }
         private void Cleanup() { if (harmony != null) harmony.UnpatchSelf(); }
         private void OnDestroy()
         {
+            MobFlightHandoff.Stop();
+            StopCombatState();
+            MobHandoffVisual.Stop();
+            MobCollisionReadiness.Stop();
             if (communityPatchCompatibility != null) { communityPatchCompatibility.Dispose(); communityPatchCompatibility = null; }
             TextEditing.Protection.Stop();
             if (pupCompatibility != null) { pupCompatibility.Dispose(); pupCompatibility = null; }
@@ -468,7 +552,7 @@ namespace TooManyLags
             PlayerSimulation.Plugin.Stop();
             if (Controller != null) Controller.Reset(); Controller = null;
             if (camera != null) camera.Reset(true); camera = null;
-            Native = null; Cleanup(); if (ReferenceEquals(instance, this)) instance = null;
+            Cleanup(); if (ReferenceEquals(instance, this)) instance = null;
         }
     }
     [HarmonyPatch(typeof(ZDOMan), "ReleaseNearbyZDOS")]
@@ -583,4 +667,5 @@ namespace TooManyLags
         { return __runOriginal && (Plugin.Controller == null || !Plugin.Controller.Router.TryHandle(__instance, __0, false)); }
     }
 }
+
 

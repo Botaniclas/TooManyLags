@@ -10,8 +10,8 @@ namespace TooManyLags
     // source snapshots; a timer can query status, never steal or repeat a commit.
     internal sealed class FgnOwnerHandoff
     {
-        private const double RetrySeconds = 6.0;
         private const double SourceSyncSeconds = .5;
+        internal Action<ZDO> Rejected { get; set; }
         internal static Func<ZNetPeer, bool> CooperativeClient { get; set; }
         internal static Action<ZNetPeer, ZDOID, long, uint, long> IdentifiedSend { get; set; }
         internal static Action<ZNetPeer, ZDOID, long> IdentifiedStatus { get; set; }
@@ -23,7 +23,6 @@ namespace TooManyLags
             internal uint Revision;
             internal ZNetPeer Peer;
             internal ZRpc Rpc;
-            internal double RetryAt;
             internal bool InFlight;
             internal long Token;
             internal bool Reconciling;
@@ -149,10 +148,9 @@ namespace TooManyLags
                 stamp.Token != 0 || !data.m_uid.Equals(id) || !stamp.Id.Equals(id) ||
                 !System.Object.ReferenceEquals(rpc, stamp.Rpc) || !Current(data) ||
                 !Unchanged(data, stamp) || !Connected(stamp)) return;
-            // Known native vetoes are reached only after source IsOwner passed.
-            // Gameplay can run there; the grid policy keeps ownership reserved.
-            stamp.InFlight = false;
-            stamp.RetryAt = clock() + RetrySeconds;
+            // The source definitively refused this command. Release the
+            // transaction and let fresh grid coverage request another attempt.
+            Reject(data);
         }
 
         internal bool Observed(ZRpc rpc, ZDOID id, long token, bool processed,
@@ -169,10 +167,18 @@ namespace TooManyLags
                 observedOwner == stamp.Source && observedRevision == stamp.Revision;
             stamp.SourceBehind = present && Unchanged(data, stamp) && observedRevision < stamp.Revision;
             stamp.InFlight = false;
-            stamp.RetryAt = caughtUp ? clock() : clock() + RetrySeconds;
             stamp.Reconciling = present && (data.GetOwner() != observedOwner || data.OwnerRevision != observedRevision);
             stamp.StatusAt = clock() + (stamp.SourceBehind ? SourceSyncSeconds : 2);
+            // A processed no-commit with matching native state is terminal.
+            // State repair and a delayed successful receipt are not refusals.
+            if (!stamp.Reconciling && !caughtUp && Unchanged(data, stamp)) Reject(data);
             return true;
+        }
+
+        private void Reject(ZDO data)
+        {
+            pending.Remove(data);
+            if (Rejected != null) Rejected(data);
         }
 
         private void Probe(Stamp stamp)
@@ -247,7 +253,7 @@ namespace TooManyLags
         {
             double now = clock();
             if (stamp.InFlight) { Probe(stamp); return; }
-            if (stamp.Reconciling || stamp.RetryAt > now || !DestinationReady(stamp.Target)) return;
+            if (stamp.Reconciling || !DestinationReady(stamp.Target)) return;
             if (identified != null)
             {
                 if (nextToken == Int64.MaxValue) return;

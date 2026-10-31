@@ -10,7 +10,7 @@ namespace TooManyLags
     // phase and other mods' unreplicated local actions are not extra-protected.
     internal sealed class NativeInventoryHandoff
     {
-        internal const float RequestTimeoutSeconds = 5f;
+        internal const float RequestTimeoutSeconds = 2f;
         internal const float RetryDelaySeconds = 2f;
 
         private sealed class Request
@@ -103,6 +103,14 @@ namespace TooManyLags
             return request.Awaiting && !(request.Granted && Committed(request));
         }
 
+        // Expiry is not a refusal: the source may have committed while its
+        // reply/state is still in transit. Local-use parking cannot forget it.
+        internal bool Reserved(ZDO data)
+        {
+            Request request;
+            return Find(data, out request) && !(request.Granted && Committed(request));
+        }
+
         // A receipt identifies this exact source->server native revision, even
         // when its OpenResponse has not arrived. Preserve the live response
         // window; only a settled, idle server receipt can retire after expiry.
@@ -125,8 +133,8 @@ namespace TooManyLags
                 (owner == server && request.Data.OwnerRevision == request.Revision);
         }
 
-        // True only for a matching, still-outstanding native refusal. Callers
-        // may discard that automatic request without changing ordinary retries.
+        // True only for a matching native refusal without an owner receipt.
+        // The caller parks this object until a fresh coverage request.
         internal bool Response(Container container, long sender, bool granted)
         {
             if (!container) return false;
@@ -141,14 +149,20 @@ namespace TooManyLags
             // useful when its exact native owner receipt is still current; this
             // does not re-pin the chest or authorize an unobserved ownership write.
             if (request.Granted) return false;
+            if (!granted)
+            {
+                // A delayed refusal cannot cancel an observed native commit
+                // or its half-import. No timer may resurrect a clear refusal.
+                if (Committed(request) || Transitioning(request)) return false;
+                request.Awaiting = false; requests.Remove(data.m_uid); return true;
+            }
             if (!request.Awaiting)
             {
-                if (granted && Committed(request)) request.Granted = true;
+                if (Committed(request)) request.Granted = true;
                 return false;
             }
-            if (granted) request.Granted = true;
-            else { request.Awaiting = false; request.RetryAt = Time.unscaledTime + RetryDelaySeconds; }
-            return !granted;
+            request.Granted = true;
+            return false;
         }
 
         private bool Find(ZDO data, out Request request)
@@ -176,7 +190,12 @@ namespace TooManyLags
         private void Expire(Request request, float now)
         {
             if (request.Awaiting && !(request.Granted && Committed(request)) && now >= request.Deadline)
-            { request.Awaiting = false; request.RetryAt = now + RetryDelaySeconds; }
+            {
+                // No answer: the next existing policy evaluation may retry.
+                // Explicit denials are discarded; uncertain send errors retain
+                // their separate delay.
+                request.Awaiting = false; request.RetryAt = now;
+            }
         }
 
         private static bool Identity(ZDO data, ZNetView view, Container container)

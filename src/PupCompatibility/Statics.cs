@@ -35,7 +35,7 @@ namespace TooManyLags.PupCompatibility
                 state.Owner != data.GetOwner() || state.Revision != data.OwnerRevision;
             bool ready = false;
             try { ready = native.SessionReady && Bounds.Ready(wear, native); }
-            catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Structural readiness pending: " + error.Message); }
+            catch (Exception error) { Plugin.Warn("Structural readiness pending: " + error.Message); }
             if (ready && (state.Pending || changed)) clear(wear);
             state.World = ZNet.instance; state.Data = data; state.Owner = data.GetOwner(); state.Revision = data.OwnerRevision; state.Pending = !ready;
             if (current.Wear == wear)

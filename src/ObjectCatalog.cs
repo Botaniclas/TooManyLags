@@ -14,7 +14,7 @@ namespace TooManyLags
         Fermenters = 131072, Incinerators = 262144, Defenses = 524288,
         ShieldGenerators = 1048576, Pickables = 2097152, Offerings = 4194304,
         Vehicles = 8388608, OtherInteractables = 16777216, WorldMarkers = 33554432,
-        StaticBuildings = 67108864, LooseItems = 134217728
+        StaticBuildings = 67108864, LooseItems = 134217728, PhysicsObjects = 268435456
     }
 
     internal sealed class ObjectCatalog
@@ -116,7 +116,10 @@ namespace TooManyLags
             GameObject prefab = scene.GetPrefab(hash); if (!prefab) return 0;
             Kinds kind = Classify(prefab);
             bool eligible = kind != Kinds.None && (kind & enabled) != 0 && kind != Kinds.TamedAnimals && kind != Kinds.Vehicles &&
-                Stationary(prefab, kind);
+                // A first native owner choice does not activate/migrate a body.
+                // Drops keep the separate non-stationary readiness/pickup path.
+                (kind == Kinds.LooseItems ? !prefab.GetComponent<ZNetView>().m_distant :
+                    Stationary(prefab, kind) || (kind == Kinds.PhysicsObjects && PhysicsObjects.Body(prefab)));
             if (eligible && kind == Kinds.Incinerators)
             {
                 Incinerator station = prefab.GetComponent<Incinerator>();
@@ -188,17 +191,20 @@ namespace TooManyLags
         // even though the real instance owns valid Interactable components.
         internal Kinds Instance(int hash, ZNetView view)
         {
-            if (!view || !view.IsValid() || !view.m_persistent || view.m_distant) return Kinds.None;
+            if (!view || !view.IsValid() || !view.m_persistent) return Kinds.None;
             Kinds kind;
-            if (prefabs.TryGetValue(hash, out kind)) return kind;
+            if (prefabs.TryGetValue(hash, out kind)) return view.m_distant && kind != Kinds.StaticBuildings && !(kind == Kinds.PhysicsObjects && PhysicsObjects.FixedSource(view.gameObject)) ? Kinds.None : kind;
             if (view.GetComponent<ItemDrop>()) looseDrops.Add(hash);
-            kind = Classify(view.gameObject); if ((kind & enabled) == 0 || kind == Kinds.WorldMarkers) kind = Kinds.None;
+            kind = Classify(view.gameObject); if ((kind & enabled) == 0 || kind == Kinds.WorldMarkers || (view.m_distant && kind != Kinds.StaticBuildings && !(kind == Kinds.PhysicsObjects && PhysicsObjects.FixedSource(view.gameObject)))) kind = Kinds.None;
             prefabs.Add(hash, kind); return kind;
         }
         internal static Kinds Classify(GameObject root)
         {
             ZNetView view = root.GetComponent<ZNetView>();
             if (!view || !view.m_persistent) return Kinds.None;
+            // Explicit, including modded persistent projectiles. TreeLog's
+            // IProjectile interface alone does not make it a flying projectile.
+            if (root.GetComponent<Projectile>()) return Kinds.None;
             // Keep moving item drops separate from stationary harvestables.
             if (root.GetComponent<ItemDrop>()) return Kinds.LooseItems;
             Character actor = root.GetComponent<Character>();
@@ -223,7 +229,11 @@ namespace TooManyLags
                 { for (Type current = type; current != null && kind == Kinds.None; current = current.BaseType) groups.TryGetValue(current, out kind); types.Add(type, kind); }
                 result |= kind;
             }
-            if (!interactive) return StaticBuildings.Safe(root, components) ? Kinds.StaticBuildings : Kinds.None;
+            if (!interactive)
+            {
+                if (PhysicsObjects.Eligible(root)) return Kinds.PhysicsObjects;
+                return StaticBuildings.Safe(root, components) ? Kinds.StaticBuildings : Kinds.None;
+            }
             // Local world interactions do not send requests to their ZDO owner.
             // Only their existing, persistent network root gets a server default;
             // do not manage an entire location or another child ZNetView.
@@ -260,6 +270,8 @@ namespace TooManyLags
         {
             var result = new Dictionary<Kinds, HashSet<int>>();
             Add(result, Kinds.Doors, "UseDoor"); Add(result, Kinds.Beds, "SetOwner");
+            Add(result, Kinds.StaticBuildings, "Hit"); // Native MineRock; replies and visual broadcasts stay native.
+            Add(result, Kinds.PhysicsObjects, "Hit");
             Add(result, Kinds.Beehives, "RPC_Extract"); Add(result, Kinds.SapCollectors, "RPC_Extract");
             Add(result, Kinds.Smelters, "RPC_AddOre", "RPC_AddFuel", "RPC_EmptyProcessed");
             Add(result, Kinds.CookingStations, "RPC_AddItem", "RPC_AddFuel", "RPC_RemoveDoneItem");

@@ -171,7 +171,7 @@ namespace TooManyLags.PlayerSimulation
                 for (int i = 0; i < count; i++) { batch.ReadPackage(ref packet); if (packet.Size() > 16384) return; Handle(c, c.Peer.m_uid, packet); }
                 Flush(c);
             }
-            catch (Exception error) { if (Plugin.Options.Logs) Plugin.Warn("Ignored invalid standalone packet: " + error.GetBaseException().Message); }
+            catch (Exception error) { Plugin.Warn("Ignored invalid standalone packet: " + error.GetBaseException().Message); }
         }
         private void Handle(Connection c, long uid, ZPackage packet)
         {

@@ -96,7 +96,7 @@ internal static class ConfigLayoutTests
 #if STANDALONE
                     45
 #else
-                    55
+                    57
 #endif
                     , "Template key count changed.");
                 Check(Read(defaults, "MovementRotationCheckIntervalSeconds") == "0.1", "Fresh movement interval differs.");

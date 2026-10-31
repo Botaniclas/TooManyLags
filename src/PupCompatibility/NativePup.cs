@@ -101,12 +101,12 @@ namespace TooManyLags.PupCompatibility
         internal bool ReadyPoint(Vector3 point, float radius)
         {
             try { return ReadyPointCore(point, radius); }
-            catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Native collision readiness pending: " + error.Message); return false; }
+            catch (Exception error) { Plugin.Warn("Native collision readiness pending: " + error.Message); return false; }
         }
         internal bool PreparedPoint(Vector3 point, float radius, bool nativeProved)
         {
             try { return ReadyPointCore(point, radius, false, nativeProved); }
-            catch (Exception error) { if (TooManyLags.Plugin.Diagnostics) Plugin.Warn("Native collision readiness pending: " + error.Message); return false; }
+            catch (Exception error) { Plugin.Warn("Native collision readiness pending: " + error.Message); return false; }
         }
         private bool ReadyPointCore(Vector3 point, float radius, bool prepare = true, bool nativeProved = false)
         {

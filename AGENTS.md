@@ -10,33 +10,26 @@
 - Authorized Thunderstore releases can use the encrypted local credential helper described in `../tools/thunderstore-cli/RELEASE-WORKERS.md`. Never print or copy tokens into chat, Git, packages or CLI arguments. A stored token does not authorize publication.
 - Publishing a version also authorizes pushing its source and finalized changelog to GitHub. Push as part of publication; keep ordinary development local unless the user requests a push. Do not create remote branches or pull requests without an explicit request.
 
+# Optional debug system
+
+- Local builds, verification and test packages default to debug. `build.ps1` defines `TML_DEBUG_SYSTEM` and writes `bin/debug-system/TooManyLags.dll`; `-DebugSystem` remains a compatible explicit spelling.
+- Debug builds also define `TML_BRIDGE_DIAGNOSTICS`: AI-test messages, bridge summaries, client diagnostic relay and scoped bridge measurements are enabled independently of EnableLogs. Release builds omit these calls, argument formatting and instrumentation; errors/warnings and explicit console responses remain.
+- Only `build.ps1 -Release` compiles without the test system, into `bin/TooManyLags.dll`. Keep test-only code behind its compile symbol. Native simulation bridge uses TML_MOB_BRIDGE in both variants; normal safeguards/visual smoothing/EnableLogs remain independent.
+- `verify.ps1` checks the debug development build. `verify.ps1 -Release` prepares and checks both modes, including normal-build omission, before publication. `package.ps1` defaults to debug; `package.ps1 -Release` requires a verified release receipt. The publish helper rejects debug packages/receipts.
+- Install one variant per endpoint. Do not publish without explicit user authorization; normal release publication also includes its Git push.
+
 # Changelogs for BotanicPupPatch and TooManyLags
 
-These rules apply only to BotanicPupPatch and TooManyLags projects, including versioned folders. Keep them when preparing a new version. Other projects retain their own rules.
-
-- Maintain a project-root `CHANGELOG.md` during work and before every release. Include it in the install and source ZIPs; include these instructions in the source ZIP.
-- Use English, matching the current READMEs. Format like ValheimCommunityPatch: `# Changelog`, newest version first, a bold version number, then a plain fenced block containing `-` bullets.
-- Keep entries short: usually 1–3 bullets, one or two sentences each. Avoid long nested lists and repeating the feature list from the README.
-- Write normal changelogs: new features, bug fixes and meaningful changes to gameplay or how the mod works, including performance, config, compatibility, dependencies and migrations. Include implementation details when they help explain a fix or integration change. Omit README/wording edits, guides, media, icons, validation reports, release chores and personal folder/build organization. Omit versions with no relevant changes rather than inventing an entry.
-- Lead with the observable change: the situation affected and what now happens. Use concrete verbs such as "Fixes", "Adds", "Reduces", "Removes" or "Restores". Avoid vague "improvements" and "optimizations".
-- Include concise technical detail when another modder needs it: affected mod/API, relevant dependency version, config key/default, ownership/readiness rule, compatibility fallback or disabled overlap. Mark client/server scope when it matters.
-- Explicitly record removed behavior, changed defaults, dependencies and required migration actions. Do not hide these under "cleanup" or "performance".
-- Describe only changes verified from the source and relevant checks. Do not invent history, dates, performance measurements, bug guarantees or completed live multiplayer testing. Put detailed test results and implementation analysis in `VALIDATION.md`.
-- Keep drafts under **Unreleased**. Before publishing, move completed notes to the actual manifest version; remove empty draft sections from the published copy. Preserve earlier released entries and update notes relative to the previous version.
-- Changelog-only work does not require a plugin version bump, a DLL rebuild or modification of installed profiles. Do not rewrite old release archives merely to introduce the new format.
-
-Format:
-
-````markdown
-# Changelog
-
-**Unreleased**
-```
-- Confirmed change, stating the affected situation and resulting behavior.
-```
-
-**X.Y.Z**
-```
-- User-visible fix or feature; add a short compatibility/config detail when relevant.
-```
-````
+- Maintain English CHANGELOG.md in project root and include it in install/source ZIPs.
+- From 2.0 onward, use Markdown version headings, a short user-facing introduction
+  when useful, and concise feature/fix bullets. No fenced changelog block for new entries.
+- Focus on player-visible outcomes. Use config keys only when they help users find
+  the relevant option. Keep implementation and validation details in VALIDATION.md.
+- Future versions should be brief. 2.0.0 is an intentional longer overview of the
+  rebuilt internals; a short nested list for the simulation bridge is appropriate.
+- Include required client/server updates, changed defaults and removed behavior.
+- Do not promise bug-free gameplay, zero teleports, exact prediction of arbitrary
+  player inputs or live performance measurements without supporting evidence.
+- Keep unreleased drafts under Unreleased; use the actual version when preparing
+  its package. Preserve historical released entries and archived packages.
+- Release preparation does not authorize publishing, installing or pushing.

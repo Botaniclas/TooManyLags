@@ -65,6 +65,11 @@ internal static partial class IntegrationTests
         var fgn=new FiresGhettoNetworkMod.FiresGhettoNetworkMod();
         controller=new AuthorityController(kinds,2,new CompatibilityBridge(fgn),delegate{failures++;},statics,delegate{failures++;},checkIntervalSeconds,defaultInteractives,refillStations,cellSize,pattern,keepOnExit,directional,innerDelay,outerDelay,forwardDelay,overlapCooldown,defaultMobs,staticGrid);
         Plugin.Controller=controller;
+        AuthorityController.TamedClient=delegate { return true; };
+        AuthorityController.MobServerReady=null;
+#if !GRID_PROTOCOL
+        AuthorityController.BeginNetworkBatch=AuthorityController.EndNetworkBatch=AuthorityController.FlushNetworkBatch=null;
+#endif
     }
     private static void Tick(float now){Time.time=Time.unscaledTime=now;controller.Tick();Check("controller active",controller.IsActive&&failures==0);}
     private static ZNetPeer Peer(long uid,float x=0,float z=0)
@@ -122,16 +127,18 @@ internal static partial class IntegrationTests
     }
     private static void Inventories()
     {
-        Fresh(Kinds.Containers);Peer(1);Peer(7,64,0);var data=Object(typeof(Container));var view=ZNetScene.instance.FindInstance(data);var chest=view.GetComponent<Container>();int requests=0;
+        Fresh(Kinds.Containers);var player=Peer(1);Peer(7,64,0);var data=Object(typeof(Container));var view=ZNetScene.instance.FindInstance(data);var chest=view.GetComponent<Container>();int requests=0;
         view.OnInvoke=delegate(long target,string method,object[] args){Check("native public query",target==7&&method=="RPC_RequestOpen"&&(long)args[0]==0);requests++;};
         Tick(0);Tick(2);Check("no overwrite while source decides",requests==1&&data.GetOwner()==7&&data.Writes==0);
         controller.InventoryResponse(chest,7,false);Tick(3);Check("denied native request does not steal",data.GetOwner()==7);
-        Tick(4);Check("native denial retries after backoff",requests==2);
+        Tick(4);Check("elapsed time cannot replay a native inventory refusal",requests==1);
+        MovePeer(player,8);Tick(4.1f);Check("fresh covering movement retries a refused inventory",requests==2);
         data.SetOwner(99);controller.OwnerChanged(data);Tick(4.5f);Check("owner data alone cannot authorize onward transfer",data.GetOwner()==99);
         controller.InventoryResponse(chest,7,true);Tick(5);Check("ack and revision permit onward transfer",data.GetOwner()==1);
         data.Use=1;Peer(2,1,1);Tick(6);Tick(8);Check("replicated open flag protects already-open chest",data.GetOwner()==1);
         data.Use=0;view.OnInvoke=delegate(long target,string method,object[] args){requests++;};Tick(9);
-        Check("closing re-enables native source request",requests==3&&data.GetOwner()==1);
+        Check("closing alone does not replay the parked inventory request",requests==2&&data.GetOwner()==1);
+        MovePeer(player,0);Tick(9.1f);Check("fresh coverage after closing starts native source consent",requests==3&&data.GetOwner()==1);
         controller.Unregister(view);Check("unload cancels reservations",!controller.Inventory.Pending(data));
         Fresh(Kinds.Containers);Peer(1);Peer(7,64,0);data=Object(typeof(Container));view=ZNetScene.instance.FindInstance(data);view.GetComponent<Container>().m_privacy=Container.PrivacySetting.Private;
         Tick(0);Tick(2);Check("private container stays native",data.GetOwner()==7&&data.Writes==0);
@@ -148,6 +155,45 @@ internal static partial class IntegrationTests
             Fresh(Kinds.Containers);Peer(1);Peer(7,64,0);data=Object(typeof(Container));view=ZNetScene.instance.FindInstance(data);chest=view.GetComponent<Container>();Tick(0);Tick(2);
             Import(data,99,reverse);Check("completed native receipt pinned before ack",!controller.Persistent(data));
             controller.InventoryResponse(chest,7,true);Tick(3);Check("either native field order completes without extra delay",data.GetOwner()==1);
+        }
+    }
+    private static void NativeInventoryRejectionCells()
+    {
+        foreach(bool retain in new[]{false,true}) foreach(bool immediate in new[]{false,true})
+        {
+            Fresh(Kinds.Containers|Kinds.Doors,defaultInteractives:true,keepOnExit:retain,directional:true,checkIntervalSeconds:.05f);
+            var player=Peer(1);Peer(7,64);var owned=Object(typeof(Door),1,1,1);var data=Object(typeof(Container));
+            var view=ZNetScene.instance.FindInstance(data);var chest=view.GetComponent<Container>();int requests=0;bool grant=false;
+            view.OnInvoke=delegate
+            {
+                requests++;
+                if(grant) { Import(data,99,false);controller.InventoryResponse(chest,7,true); }
+                else if(immediate)controller.InventoryResponse(chest,7,false);
+            };
+            Tick(0);if(!immediate)controller.InventoryResponse(chest,7,false);
+            var node=controller.RequestNode(data.m_uid,"RPC_RequestOpen".GetStableHashCode());
+            Check("native refusal parks only the failed inventory and releases its transaction",requests==1&&node.WaitingForRequest&&!controller.TransferPending(data)&&Index().PendingCount==0&&data.GetOwner()==7);
+            Check("a partially owned inventory field cannot be remembered",owned.GetOwner()==1&&owned.Writes==0&&!Index().Grid.IsRemembered(node.Cell,1));
+            int attempts=controller.ScheduledAttempts;
+            for(int frame=1;frame<=200;frame++)Tick(frame*.1f);
+            Check("inventory refusal does no repeated work after two seconds or while idle",requests==1&&controller.ScheduledAttempts==attempts&&data.GetOwner()==7);
+            controller.DataChanged(data);controller.RequestFinished(node);Tick(20.1f);
+            Check("object state and request completion cannot replay a discarded inventory takeover",requests==1&&Index().Grid.RememberedCells==0);
+            MovePeer(player,2);Tick(20.2f);Check("unchanged movement cell cannot replay refusal",requests==1);
+            ZDOMan.instance.GetZDO(player.m_characterID).Yaw=90;Tick(20.3f);
+            Check("fresh heading retries despite an unchanged field target",requests==2&&owned.Writes==0&&!Index().Grid.IsRemembered(node.Cell,1));
+            if(!immediate)controller.InventoryResponse(chest,7,false);
+            grant=true;ZDOMan.instance.GetZDO(player.m_characterID).Yaw=180;Tick(20.4f);Tick(20.5f);
+            Check("one-second inventory refusal gate suppresses immediate fresh heading",requests==2&&node.WaitingForRequest);
+            Tick(21.4f);Check("gate expiry alone does not replay the suppressed request",requests==2);
+            ZDOMan.instance.GetZDO(player.m_characterID).Yaw=270;Tick(21.5f);Tick(21.6f);
+            Check("final native receipt certifies only the now fully owned field",requests==3&&data.GetOwner()==1&&owned.GetOwner()==1&&owned.Writes==0&&Index().Grid.IsRemembered(node.Cell,1)==retain);
+            grant=false;view.OnInvoke=delegate {requests++;controller.InventoryResponse(chest,7,false);};
+            data.SetOwner(7);controller.OwnerChanged(data);Tick(22);
+            Check("new refusal invalidates a formerly complete field",requests==4&&node.WaitingForRequest&&data.GetOwner()==7&&Index().Grid.RememberedCells==0);
+            controller.Unregister(view);
+            Check("unloading the only unconfirmed object permits the remaining complete field",!controller.TransferPending(data)&&Index().Grid.IsRemembered(node.Cell,1)==retain);
+            controller.Reset();Check("reset removes inventory rejection wait entries",!controller.IsActive);
         }
     }
     private static void StationsAndActors()
@@ -184,6 +230,8 @@ internal static partial class IntegrationTests
         ZDOMan.instance.MarkSent(1,door);
         Check("stable interaction stays on the native fast path",!controller.Router.TryHandle(ZRoutedRpc.instance,Request(door,"UseDoor",1),false)&&ZRoutedRpc.instance.Remote.Count==0);
         Time.unscaledTime=2.5f;stationNode.Refilled("RPC_AddFuel".GetStableHashCode());chest.Use=0;Tick(3);
+        Check("closed inventory stays parked without fresh coverage",inventoryQueries==0);
+        ZDOMan.instance.GetZDO(ZNet.instance.GetPeer(1).m_characterID).Yaw=90;Tick(3.1f);
         Check("closed inventory requests native consent instead of a forced owner write",inventoryQueries==1&&chest.GetOwner()==7&&chest.Writes==0);
         Check("renewed one-second refill lease is independent of the experimental mode",station.GetOwner()==7&&station.Writes==0);
     }
@@ -203,15 +251,61 @@ internal static partial class IntegrationTests
         ZRoutedRpc.instance.OnHandle=delegate{throw new InvalidOperationException("native handler failure");};bool thrown=false;
         try{controller.Router.TryHandle(ZRoutedRpc.instance,packet,false);}catch(InvalidOperationException){thrown=true;}
         Check("dispatch failure never replays or disables ownership",thrown&&controller.IsActive&&ZRoutedRpc.instance.Local.Count==2);
-        Fresh(Kinds.Doors);Peer(1);source=Peer(7,64,0);FiresGhettoNetworkMod.FgnVersionGate.Match=true;door=Object(typeof(Door));Tick(0);Tick(2);
+        Fresh(Kinds.Doors);var visitor=Peer(1);source=Peer(7,64,0);FiresGhettoNetworkMod.FgnVersionGate.Match=true;door=Object(typeof(Door));Tick(0);Tick(2);
         packet=Request(door,"UseDoor",7);Check("in-flight source transfer holds gameplay",controller.Router.TryHandle(ZRoutedRpc.instance,packet,false)&&ZRoutedRpc.instance.Remote.Count==0);
         controller.Cooperative.Result(new ZRpc(),door.m_uid,false,"held");controller.Router.Flush();Check("unrelated result cannot release route",ZRoutedRpc.instance.Remote.Count==0);
         controller.Cooperative.Result(source.m_rpc,door.m_uid,false,"held");ZDOMan.instance.MarkSent(7,door);controller.Router.Flush();
         Check("known source veto releases native call",ZRoutedRpc.instance.Remote.Count==1&&!controller.Cooperative.Pending(door));
-        Check("veto cooldown still pins native source ownership",!controller.Persistent(door));Tick(3);Check("veto cooldown sends no duplicate handoff",source.m_rpc.Calls==1);
-        Tick(8);Check("after veto cooldown new request enters flight",source.m_rpc.Calls==2&&controller.Cooperative.Pending(door));
+        Check("refused automatic transaction no longer pins native ownership",controller.Persistent(door));Tick(3);Check("refusal sends no duplicate handoff",source.m_rpc.Calls==1);
+        Tick(8);Check("elapsed six seconds cannot retry a refused field",source.m_rpc.Calls==1&&!controller.Cooperative.Pending(door));
+        MovePeer(visitor,8);Tick(9);Check("new overlapping coverage retries without an extra veto timer",source.m_rpc.Calls==2&&controller.Cooperative.Pending(door));
         controller.Cooperative.Result(source.m_rpc,door.m_uid,true,"");Check("accepted reply cannot substitute for revision",controller.Cooperative.Pending(door)&&!controller.Cooperative.Received(door));
-        Import(door,1,true);Tick(9);Check("revision-first source commit settles after accepted result",door.GetOwner()==1&&!controller.Cooperative.Pending(door));
+        Import(door,1,true);Tick(10);Check("revision-first source commit settles after accepted result",door.GetOwner()==1&&!controller.Cooperative.Pending(door));
+    }
+    private static void CooperativeRejectionRequests()
+    {
+        foreach(bool retain in new[]{false,true}) foreach(bool identified in new[]{false,true}) foreach(bool immediate in new[]{false,true})
+        {
+            int sends=0;long token=0,oldToken=0;
+            FgnOwnerHandoff.CooperativeClient=delegate{return true;};
+            if(identified) FgnOwnerHandoff.IdentifiedSend=delegate(ZNetPeer peer,ZDOID id,long target,uint revision,long value)
+            {
+                sends++;token=value;
+                if(immediate)controller.Cooperative.Observed(peer.m_rpc,id,value,true,true,7,revision);
+            };
+            try
+            {
+                Fresh(Kinds.Doors,defaultInteractives:true,keepOnExit:retain,directional:true,checkIntervalSeconds:.1f);
+                var player=Peer(1);var source=Peer(7,64);FiresGhettoNetworkMod.FgnVersionGate.Match=true;
+                source.m_rpc.OnInvoke=delegate(string method,object[] args)
+                {
+                    sends++;
+                    if(immediate)controller.Cooperative.Result(source.m_rpc,(ZDOID)args[0],false,"held");
+                };
+                var owned=Object(typeof(Door),1,1,1);var door=Object(typeof(Door));Tick(0);oldToken=token;
+                if(!immediate)
+                {
+                    if(identified)Check("matching processed refusal accepted",controller.Cooperative.Observed(source.m_rpc,door.m_uid,token,true,true,7,door.OwnerRevision));
+                    else controller.Cooperative.Result(source.m_rpc,door.m_uid,false,"held");
+                }
+                Check("refusal parks only its object without a transfer or reserved transaction",sends==1&&door.GetOwner()==7&&door.Writes==0&&!controller.TransferPending(door)&&!controller.Cooperative.Reserved(door)&&controller.RequestNode(door.m_uid,"UseDoor".GetStableHashCode()).WaitingForRequest);
+                Check("one refused object prevents remembering its partially owned field",owned.GetOwner()==1&&owned.Writes==0&&!Index().Grid.IsRemembered(controller.RequestNode(door.m_uid,"UseDoor".GetStableHashCode()).Cell,1));
+                int attempts=controller.ScheduledAttempts;
+                for(int frame=1;frame<=100;frame++)Tick(frame*.1f);
+                Check("refused stationary field performs no repeated object work",sends==1&&controller.ScheduledAttempts==attempts);
+                controller.DataChanged(door);controller.RequestFinished(controller.RequestNode(door.m_uid,"UseDoor".GetStableHashCode()));Tick(10.1f);
+                Check("ordinary object and router events cannot replay refusal",sends==1&&door.GetOwner()==7);
+                MovePeer(player,2);Tick(10.3f);Check("movement within unchanged coverage does not retry",sends==1);
+                ZDOMan.instance.GetZDO(player.m_characterID).Yaw=90;Tick(10.5f);
+                Check("fresh heading coverage re-arms even an unchanged field owner",sends==2&&door.GetOwner()==7);
+                Check("retry neither certifies the partial field nor rewrites its owned neighbour",owned.GetOwner()==1&&owned.Writes==0&&Index().Grid.RememberedCells==0);
+                if(identified&&!immediate)Check("old refusal cannot settle a new token",!controller.Cooperative.Observed(source.m_rpc,door.m_uid,oldToken,true,true,7,door.OwnerRevision)&&controller.TransferPending(door));
+                controller.Unregister(ZNetScene.instance.FindInstance(door));Tick(11);
+                Check("unload removes rejected/in-flight transaction state",!controller.TransferPending(door)&&!controller.Cooperative.Reserved(door));
+                controller.Reset();Check("reset clears field rejection state",!controller.IsActive);
+            }
+            finally {FgnOwnerHandoff.CooperativeClient=null;FgnOwnerHandoff.IdentifiedSend=null;FgnOwnerHandoff.IdentifiedStatus=null;}
+        }
     }
     private static void BakedAndCompatibility()
     {
@@ -270,10 +364,12 @@ internal static partial class IntegrationTests
         var chestData=Object(typeof(Container),40,1);var chestView=ZNetScene.instance.FindInstance(chestData);var chest=chestView.GetComponent<Container>();int requests=0;
         chestView.OnInvoke=delegate(long target,string method,object[] args){requests++;};chestData.Use=1;
         Tick(0);Tick(2);Check("fallback server does not take open inventory",requests==0&&chestData.GetOwner()==7);
-        chestData.Use=0;controller.DataChanged(chestData);Tick(3);Check("fallback public inventory uses native source request",requests==1&&chestData.GetOwner()==7);
-        Import(chestData,99,false);controller.InventoryResponse(chest,7,true);Tick(4);
+        chestData.Use=0;controller.DataChanged(chestData);Tick(3);Check("closed default inventory waits for fresh coverage",requests==0);
+        MovePeer(player,40);MovePeer(ZNet.instance.GetPeer(7),40);Tick(3.1f);Tick(5.2f);
+        Check("fresh overlap public inventory uses native source request",requests==1&&chestData.GetOwner()==7);
+        Import(chestData,99,false);controller.InventoryResponse(chest,7,true);Tick(5.3f);
         Check("fallback inventory confirms native source revision",chestData.GetOwner()==99&&!controller.Inventory.Pending(chestData));
-        MovePeer(player,40);Tick(5);Tick(7);Check("native-confirmed fallback chest passes to nearby player",chestData.GetOwner()==1);
+        MovePeer(ZNet.instance.GetPeer(7),64);Tick(5.4f);Tick(7.5f);Check("native-confirmed fallback chest passes to nearby player",chestData.GetOwner()==1);
 
         Fresh(Kinds.Smelters);Peer(1);station=Object(typeof(Smelter));Tick(0);Tick(2);ZDOMan.instance.MarkSent(1,station);
         var refill=Request(station,"RPC_AddOre",1);Tick(3);controller.Router.TryHandle(ZRoutedRpc.instance,refill,false);
@@ -504,7 +600,9 @@ internal static partial class IntegrationTests
             if(protection==5)continue;
             data.User=0;actor.Attached=actor.Riding=false;actor.isActiveAndEnabled=true;data.Follow="";
             if(tameable.m_saddle)tameable.m_saddle.User=false;
-            Tick(3);Check("idle tame receives default through existing checked assignment",data.GetOwner()==99&&source.m_rpc.Calls==0);
+            Tick(3);Check("idle tame requests source-owner handoff instead of server stealing",data.GetOwner()==7&&source.m_rpc.Calls==1);
+            data.SetOwner(99);controller.OwnerChanged(data,true);Tick(4);
+            Check("committed idle tame receives server default",data.GetOwner()==99);
         }
         Fresh(Kinds.TamedAnimals,defaultInteractives:true);Peer(1);
         var wild=Object(typeof(Character),40,1);Tick(0);Tick(2);
@@ -543,9 +641,9 @@ internal static partial class IntegrationTests
         FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=true;
         Time.time=Time.unscaledTime=.5f;controller.Poll(.5f);Check("FGN activation waits only the normal configured poll",!controller.IsActive);
         Time.time=Time.unscaledTime=1;controller.Poll(1);
-        Check("unready local zone blocks default ownership for door and tame",controller.IsActive&&far.GetOwner()==7&&tame.GetOwner()==7);
+        Check("native defaults no longer wait for broad local readiness",controller.IsActive&&far.GetOwner()==99&&tame.GetOwner()==99&&ZNetScene.instance.AreaQueries==0);
         ZNetScene.instance.Ready=delegate{return true;};
-        Time.time=Time.unscaledTime=1.5f;controller.Poll(1.5f);Check("area completion does not bypass poll interval",far.GetOwner()==7&&tame.GetOwner()==7);
+        Time.time=Time.unscaledTime=1.5f;controller.Poll(1.5f);Check("later area completion has no ownership role",far.GetOwner()==99&&tame.GetOwner()==99);
         Time.time=Time.unscaledTime=2;controller.Poll(2);
         Check("uncovered default has no independent two-second delay",far.GetOwner()==99&&tame.GetOwner()==99);
         Check("unique player field remains native until stable decision",near.GetOwner()==7);
@@ -642,11 +740,12 @@ internal static partial class IntegrationTests
         // Native inventory and already-sent handoffs are not cancelled on exit.
         Fresh(Kinds.Containers,defaultInteractives:true);player1=Peer(1);Peer(7,64);var inventoryData=Object(typeof(Container));var inventoryView=ZNetScene.instance.FindInstance(inventoryData);var inventory=inventoryView.GetComponent<Container>();int requests=0;
         inventoryView.OnInvoke=delegate{requests++;};Tick(0);Tick(2);Check("initial native inventory transfer sent once",requests==1);
-        MovePeer(player1,40);Tick(3);Tick(5);Import(inventoryData,99,false);Tick(6);
+        MovePeer(player1,40);Tick(3);Time.unscaledTime=3.5f;Import(inventoryData,99,false);Tick(3.5f);
         Check("late exact source commit remains guarded without new return request",inventoryData.GetOwner()==99&&requests==1&&controller.Inventory.Pending(inventoryData));
-        controller.InventoryResponse(inventory,7,true);Tick(7);Check("late native reply completes without departure transfer",inventoryData.GetOwner()==99&&requests==1&&!controller.Inventory.Pending(inventoryData));
-        Peer(2);inventoryData.Use=1;Tick(8);Tick(10);Check("new entrant cannot take open inventory",inventoryData.GetOwner()==99);
-        inventoryData.Use=0;controller.DataChanged(inventoryData);Tick(12);Check("closed inventory still reaches new covering player",inventoryData.GetOwner()==2);
+        controller.InventoryResponse(inventory,7,true);Tick(4);Check("late native reply completes without departure transfer",inventoryData.GetOwner()==99&&requests==1&&!controller.Inventory.Pending(inventoryData));
+        var inventoryVisitor=Peer(2);inventoryData.Use=1;Tick(8);Tick(10);Check("new entrant cannot take open inventory",inventoryData.GetOwner()==99);
+        inventoryData.Use=0;controller.DataChanged(inventoryData);Tick(12);Check("closing after a settled former receipt does not revive a discarded request",inventoryData.GetOwner()==99);
+        MovePeer(inventoryVisitor,8);Tick(12.1f);Check("fresh coverage claims the now-closed inventory",inventoryData.GetOwner()==2);
 
         Fresh(Kinds.Doors,defaultInteractives:true);player1=Peer(1);var source=Peer(7,64);FiresGhettoNetworkMod.FgnVersionGate.Match=true;door=Object(typeof(Door));Tick(0);Tick(2);
         controller.Cooperative.Result(source.m_rpc,door.m_uid,false,"held");MovePeer(player1,40);Tick(3);Tick(5);Tick(20);
@@ -756,7 +855,7 @@ internal static partial class IntegrationTests
 
             Fresh(Kinds.Doors,defaultInteractives:true);player=Peer(1);var old=Peer(7,64);door=Object(typeof(Door),40,1,7);
             ZNetScene.instance.Ready=delegate{return false;};Tick(0);ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
-            Check("active native owner is not stolen before area readiness",door.GetOwner()==7&&door.Writes==0&&old.m_rpc.Calls==0);
+            Check("legacy native fallback does not wait for unrelated area loading",door.GetOwner()==99&&door.Writes==1&&old.m_rpc.Calls==0);
             MovePeer(old,512);Tick(1);ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
             Check("inactive native owner may be reassigned directly to server",door.GetOwner()==99&&door.Writes==1);
 
@@ -773,13 +872,13 @@ internal static partial class IntegrationTests
             door=Object(typeof(Door),1,1,0);ZNetScene.instance.Ready=delegate{return false;};
             ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);Check("settled overlap retains server target",door.GetOwner()==99);
 
-            Fresh(Kinds.Doors|Kinds.Containers|Kinds.TamedAnimals|Kinds.Vehicles,defaultInteractives:true);player=Peer(1);
+            Fresh(Kinds.Doors|Kinds.Containers|Kinds.TamedAnimals|Kinds.Vehicles,defaultInteractives:true);player=Peer(1);Tick(0);
             var chest=Object(typeof(Container),40,1,0);var privateChest=Object(typeof(Container),41,1,0);
             ZNetScene.instance.FindInstance(privateChest).GetComponent<Container>().m_privacy=Container.PrivacySetting.Private;
             var tame=Object(typeof(Character),42,1,0);tame.Tamed=true;controller.DataChanged(tame);
             var vehicle=Object(typeof(Vagon),43,1,0);var physics=Object(typeof(Door),44,1,0);ZNetScene.instance.FindInstance(physics).gameObject.Add(new Rigidbody());
             ZNetScene.instance.Ready=delegate{return false;};
-            Tick(0);ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
+            ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);
             Check("public unowned inventory can get its initial server owner",chest.GetOwner()==99);
             Check("private inventory retains native initial owner",privateChest.GetOwner()==1);
             Check("unowned tame receives initial server default without changing vehicle/body exclusions",tame.GetOwner()==99&&vehicle.GetOwner()==1&&physics.GetOwner()==1);
@@ -801,7 +900,7 @@ internal static partial class IntegrationTests
                 Tick(2);
                 Check("field timer still settles at its configured deadline",Index().Grid.Owner(initialCell)==(shared?99:1));
                 for(int i=3;i<=65;i++){Tick(i);ZDOMan.instance.ReleaseNearbyZDOS(player.Position,1);}
-                foreach(var data in initial)Check("slow scene never creates a temporary native player owner",data.GetOwner()==99&&data.Writes==1);
+                foreach(var data in initial)Check("slow neighbours do not postpone a settled field",data.GetOwner()==(shared?99:1)&&data.Writes==(shared?1:2));
                 ZNetScene.instance.Ready=delegate{return true;};Tick(66);
                 foreach(var data in initial)Check("loaded field retains intended settled owner",data.GetOwner()==(shared?99:1)&&data.Writes==(shared?1:2));
             }
@@ -836,7 +935,7 @@ internal static partial class IntegrationTests
         var far=Object(typeof(Character),40,1,7);far.Tamed=true;controller.DataChanged(far);
         var door=Object(typeof(Door),1,1,7);
         ZNetScene.instance.Ready=delegate{return false;};Tick(0);Tick(2);
-        Check("mob defaults preserve loading guard",near.GetOwner()==7&&far.GetOwner()==7);
+        Check("tamed defaults and player grid do not wait for broad loading readiness",near.GetOwner()==1&&far.GetOwner()==99);
         ZNetScene.instance.Ready=delegate{return true;};Tick(3);
         Check("solo tamed grid works with interactive default off",near.GetOwner()==1);
         Check("tamed server default is independent of interactive default",far.GetOwner()==99);
@@ -1063,7 +1162,9 @@ internal static partial class IntegrationTests
         var chestData=Object(typeof(Container));var view=ZNetScene.instance.FindInstance(chestData);var chest=view.GetComponent<Container>();int requests=0;
         view.OnInvoke=delegate{requests++;};chestData.Use=1;Tick(0);Tick(1);
         Check("instant field never takes open inventory",chestData.GetOwner()==7&&requests==0);
-        chestData.Use=0;controller.DataChanged(chestData);Tick(2);Check("closed fast-field chest uses native source handoff",chestData.GetOwner()==7&&requests==1);
+        chestData.Use=0;controller.DataChanged(chestData);Tick(2);Check("closed fast-field chest remains parked without new activity",requests==0);
+        ZDOMan.instance.GetZDO(ZNet.instance.GetPeer(1).m_characterID).Yaw=90;Tick(2.1f);
+        Check("fresh fast-field chest uses native source handoff",chestData.GetOwner()==7&&requests==1);
         Import(chestData,99,true);Tick(3);Check("native ownership receipt alone cannot authorize final handoff",chestData.GetOwner()==99);
         controller.InventoryResponse(chest,7,true);Tick(4);Check("native grant and exact receipt finish fast-field chest",chestData.GetOwner()==1);
         chestData.Use=1;Peer(2);Tick(5);Tick(6);Check("new overlapping red peer cannot steal open chest",chestData.GetOwner()==1&&requests==1);
@@ -1083,7 +1184,7 @@ internal static partial class IntegrationTests
         var white=Object(typeof(Door),1,-3);var redDoor=Object(typeof(Door));Tick(0);
         Check("independent server default remains explicit outside directional coverage",white.GetOwner()==99&&redDoor.GetOwner()==1);
         Fresh(Kinds.Doors,directional:true);Peer(1);cooperative=Object(typeof(Door));ZNetScene.instance.Ready=delegate{return false;};Tick(0);Tick(1);
-        Check("zero timer never bypasses local area readiness",cooperative.GetOwner()==7&&cooperative.Writes==0);
+        Check("zero timer ignores unrelated area loading",cooperative.GetOwner()==1&&cooperative.Writes==1);
         ZNetScene.instance.Ready=delegate{return true;};Tick(2);Check("ready local area permits immediate pending field change",cooperative.GetOwner()==1);
     }
     private static AuthorityWorld Index()
@@ -1114,6 +1215,8 @@ internal static partial class IntegrationTests
         chestData.Use=1;Peer(2);Tick(4);Tick(7);
         Check("foreign overlap invalidates cache and still cannot take open inventory",Index().Grid.RememberedCells==0&&chestData.GetOwner()==1&&requests==0);
         chestData.Use=0;controller.DataChanged(chestData);Tick(8);
+        Check("closing a formerly cached chest does not replay its rejected request",requests==0);
+        ZDOMan.instance.GetZDO(ZNet.instance.GetPeer(1).m_characterID).Yaw=90;Tick(8.1f);
         Check("closed former cached chest still uses native handoff consent",requests==1&&chestData.GetOwner()==1);
         Import(chestData,99,true);controller.InventoryResponse(chest,1,true);Tick(9);
         Check("native grant/revision settles uncached server ownership",chestData.GetOwner()==99&&Index().Grid.RememberedCells==0);
@@ -1199,13 +1302,14 @@ internal static partial class IntegrationTests
         Fresh(Kinds.Doors,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true,forwardDelay:.8f);Peer(1);door=Object(typeof(Door),1,9);Tick(0);Tick(.799f);
         Check("production custom forward timer remains independent",door.GetOwner()==7);Tick(.8f);Check("production custom forward timer completes",door.GetOwner()==1);
         Fresh(Kinds.Doors,cellSize:4,pattern:GridCoveragePattern.Rounded5x5,directional:true,forwardDelay:0);Peer(1);door=Object(typeof(Door),1,9);ZNetScene.instance.Ready=delegate{return false;};Tick(0);
-        Check("zero forward timer does not bypass area readiness",door.GetOwner()==7&&door.Writes==0);ZNetScene.instance.Ready=delegate{return true;};Tick(.1f);Check("pending forward collider readiness resumes normally",door.GetOwner()==1);
+        Check("zero forward timer ignores unrelated area readiness",door.GetOwner()==1&&door.Writes==1);ZNetScene.instance.Ready=delegate{return true;};Tick(.1f);Check("pending forward collider readiness resumes normally",door.GetOwner()==1);
 
         Fresh(Kinds.Doors,cellSize:4,pattern:GridCoveragePattern.Rounded5x5,directional:true,forwardDelay:0);Peer(1);var source=Peer(7,64);FiresGhettoNetworkMod.FgnVersionGate.Match=true;door=Object(typeof(Door),1,9);Tick(0);
         Check("zero forward timer respects actual FGN source handoff",door.GetOwner()==7&&source.m_rpc.Calls==1&&door.Writes==0);Import(door,1,false);Tick(.1f);Check("forward FGN receipt completes without extra timer",door.GetOwner()==1&&door.Writes==0);
-        Fresh(Kinds.Containers,cellSize:4,pattern:GridCoveragePattern.Rounded5x5,directional:true,forwardDelay:0);Peer(1);Peer(7,64);var dataChest=Object(typeof(Container),1,9);var view=ZNetScene.instance.FindInstance(dataChest);var chest=view.GetComponent<Container>();int requests=0;view.OnInvoke=delegate{requests++;};dataChest.Use=1;Tick(0);Tick(.2f);
+        Fresh(Kinds.Containers,cellSize:4,pattern:GridCoveragePattern.Rounded5x5,directional:true,forwardDelay:0);var chestPlayer=Peer(1);Peer(7,64);var dataChest=Object(typeof(Container),1,9);var view=ZNetScene.instance.FindInstance(dataChest);var chest=view.GetComponent<Container>();int requests=0;view.OnInvoke=delegate{requests++;};dataChest.Use=1;Tick(0);Tick(.2f);
         Check("forward zero timer cannot steal an open chest",dataChest.GetOwner()==7&&requests==0);dataChest.Use=0;controller.DataChanged(dataChest);Tick(.3f);
-        Check("closed forward chest starts native consent request",requests==1&&dataChest.GetOwner()==7);Import(dataChest,99,false);Tick(.4f);Check("forward inventory still waits for exact native grant",dataChest.GetOwner()==99);controller.InventoryResponse(chest,7,true);Tick(.5f);Check("forward chest finishes after actual receipt and grant",dataChest.GetOwner()==1);
+        Check("closed forward chest has no idle retry",requests==0);MovePeer(chestPlayer,0,4);Tick(1.1f);
+        Check("fresh forward coverage starts native consent request",requests==1&&dataChest.GetOwner()==7);Import(dataChest,99,false);Tick(1.2f);Check("forward inventory still waits for exact native grant",dataChest.GetOwner()==99);controller.InventoryResponse(chest,7,true);Tick(1.3f);Check("forward chest finishes after actual receipt and grant",dataChest.GetOwner()==1);
 
         Fresh(Kinds.Smelters,cellSize:4,pattern:GridCoveragePattern.Rounded5x5,directional:true);Peer(1);var station=Object(typeof(Smelter),1,9);Tick(0);Tick(.2f);ZDOMan.instance.MarkSent(1,station);Tick(1);controller.Router.TryHandle(ZRoutedRpc.instance,Request(station,"RPC_AddOre",1),false);Peer(2);Tick(1.2f);Tick(1.99f);
         Check("forward overlap preserves observed refill lease",station.GetOwner()==1);Tick(2);Check("forward refill lease expires normally",station.GetOwner()==99);
@@ -1267,7 +1371,8 @@ internal static partial class IntegrationTests
             ZDO animal=Object(typeof(Character),41,1,7);animal.Tamed=true;controller.DataChanged(animal);
             Tick(0);
             Check("unconfirmed endpoints keep native ownership with no speculative commit",sends==0);
-            Check("idle tamed animal still transfers through its separate protected path",animal.GetOwner()==1);
+            Check("unconfirmed tamed endpoints also retain source ownership",animal.GetOwner()==7);
+            objects.Add(animal);
             capable.Add(7);controller.CapabilityChanged(7);Tick(.05f);
             Check("source alone cannot transfer to an unconfirmed recipient",sends==0);
             capable.Add(1);controller.CapabilityChanged(1);Tick(.1f);
@@ -1332,12 +1437,15 @@ internal static partial class IntegrationTests
         ZDOMan.instance.ReleaseNearbyZDOS(first.Position,1);controller.OwnerChanged(door);Tick(56.5f);
         Check("native ownership resumes after shared coverage",door.GetOwner()==1);
         chest.Use=1;Tick(57);Check("open inventory remains protected in solo mode",!controller.Persistent(chest));
-        chest.Use=0;controller.DataChanged(chest);Check("closed solo inventory is native",controller.Persistent(chest));
+        chest.Use=0;controller.DataChanged(chest);
+        Check("solo closing retains an unanswered native request until its response window ends",!controller.Persistent(chest));
+        Time.unscaledTime=57+NativeInventoryHandoff.RequestTimeoutSeconds;
+        Check("closed solo inventory is native after the outstanding response window",controller.Persistent(chest));
         // Owner belongs to another still-active player: no invented region-owner
         // certificate may conceal it when a real second player arrives.
-        far=Peer(7,576);door.SetOwner(7);controller.OwnerChanged(door);Tick(58);Tick(62);
+        far=Peer(7,576);door.SetOwner(7);controller.OwnerChanged(door);Tick(60);Tick(64);
         Check("shared entry examines actual foreign object owner",door.GetOwner()==1);
-        ZNet.instance.Peers.Clear();Tick(63);Check("disconnect drops all coarse region references",controller.RegionGate.CachedPeers==0&&controller.RegionGate.CachedZones==0);
+        ZNet.instance.Peers.Clear();Tick(65);Check("disconnect drops all coarse region references",controller.RegionGate.CachedPeers==0&&controller.RegionGate.CachedZones==0);
         controller.Reset();Check("world reset clears coarse state",controller.RegionGate.CachedPeers==0&&controller.RegionGate.CachedZones==0);
 
         Fresh(Kinds.Doors,nativeSolo:true,defaultInteractives:true,directional:true);first=Peer(1);door=Object(typeof(Door));Tick(0);
@@ -1698,7 +1806,7 @@ internal static partial class IntegrationTests
         int writes=door.Writes+chest.Writes+privateChest.Writes+unowned.Writes+unloaded.Writes,forced=ZDOMan.instance.Forced,area=ZNetScene.instance.AreaQueries,updates=controller.FieldUpdates;
         string status=controller.OwnerStatus(1);
         Check("snapshot reports actual server mode and blocking readiness",status.Contains("active=True")&&status.Contains("defaultInteractives=True")&&status.Contains("serverAreaReady=False"));
-        Check("snapshot includes unloaded native data and distinguishes initial eligibility",status.Contains("initialEligible=4")&&status.Contains("liveOnly=1")&&status.Contains("serverOwned=1")&&status.Contains("playerOwned=3")&&status.Contains("unowned=1")&&status.Contains("withoutNode=1"));
+        Check("snapshot includes unloaded native data and immediate defaults",status.Contains("initialEligible=4")&&status.Contains("liveOnly=1")&&status.Contains("serverOwned=3")&&status.Contains("playerOwned=2")&&status.Contains("unowned=0")&&status.Contains("withoutNode=1"));
         Check("snapshot shows current owner and field decision separately",status.Contains("owner=7; activePeer=True")&&status.Contains("candidate=")&&status.Contains("no server node"));
         Check("snapshot reports instance and private-container eligibility without invoking handoffs",status.Contains("identity=True; controllable=False")&&status.Contains("controllable=True"));
         Check("snapshot does not transfer, send RPCs/data, poll fields or alter use",writes==door.Writes+chest.Writes+privateChest.Writes+unowned.Writes+unloaded.Writes&&forced==ZDOMan.instance.Forced&&player.m_rpc.Calls==0&&controller.FieldUpdates==updates);
@@ -1722,8 +1830,8 @@ internal static partial class IntegrationTests
         ZNetScene.instance.Ready=delegate{return false;};Tick(0);Tick(2);
         int writes=torch.Writes+pickable.Writes+missing.Writes+unmanaged.Writes,area=ZNetScene.instance.AreaQueries,updates=controller.FieldUpdates,forced=ZDOMan.instance.Forced;
         string general=controller.OwnerStatus(1);
-        Check("server-owned pending player fields are sampled ahead of unrelated gates",general.Contains("piece_groundtorch_fixture")&&general.Contains("Pickable_Branch_fixture")&&general.Contains("Pickable_Log_missing_fixture"));
-        Check("status distinguishes waiting handoffs from absent server instances",general.Contains("stationary=True; serverStation=True; loadPending=False")&&general.Contains("no server node; serverInstance=False"));
+        Check("completed player fields are no longer held by broad area readiness",torch.GetOwner()==1&&pickable.GetOwner()==1);
+        Check("status remains bounded after pending loading gates are removed",general.Length<6000&&!general.Contains("loadPending="));
         string torches=controller.OwnerStatus(1,"tOrCh");
         Check("case-insensitive prefab filter includes only matching detail rows",torches.Contains("piece_groundtorch_fixture")&&!torches.Contains("darkwood_gate_fixture")&&!torches.Contains("Pickable_Branch_fixture")&&torches.Contains("filteredSamples=True; samples=1"));
         string pickables=controller.OwnerStatus(1,"Pickable_");
@@ -1732,7 +1840,7 @@ internal static partial class IntegrationTests
         Check("unmatched filter returns a bounded empty sample",controller.OwnerStatus(1,"no-such-prefab").Contains("filteredSamples=True; samples=0"));
         Check("targeted snapshots perform only their explicit area query",ZNetScene.instance.AreaQueries==area+4&&torches.Length<6000&&pickables.Length<6000);
         Check("targeted snapshots do not write owners, submit requests, send replicas or update fields",writes==torch.Writes+pickable.Writes+missing.Writes+unmanaged.Writes&&player.m_rpc.Calls==0&&forced==ZDOMan.instance.Forced&&updates==controller.FieldUpdates);
-        foreach(var gate in clutter)Check("snapshot ranking does not change native active-owner gates",gate.GetOwner()==7&&gate.Writes==0);
+        foreach(var gate in clutter)Check("settled default gates remain assigned without broad area readiness",gate.GetOwner()==99&&gate.Writes==1);
     }
     private static void ForcedGridPackets()
     {
@@ -1774,15 +1882,21 @@ internal static partial class IntegrationTests
     public static void Main()
     {
         StaticGridCoverage();
+        PhysicsWorld();
+        PendingWork();
+        MergedInitialOwnership();TamedHandoffTests();
         TextEditingGrid();
         LooseItems();
         TextEditingPlayerGrid();
+        RejectedPlayerGridCells();
         try {
+        InventoryParkingAndCooldown();
         ForcedGridPackets();
-        InactiveNativeTemplates();Fields();Inventories();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();InitialTamedDefaults();SpawnerDefaults();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
+        InactiveNativeTemplates();Fields();Inventories();NativeInventoryRejectionCells();StationsAndActors();ExperimentalProtectionDisabled();CooperativeAndRouting();CooperativeRejectionRequests();BakedAndCompatibility();OwnershipOptions();TamedDefaultProtection();LoginGates();GridSettings();ExitRetention();NativeExitRelease();NativeDefaultAssignments();InitialTamedDefaults();SpawnerDefaults();DirectionalController();FieldCacheController();DestroyedViewCleanup();QuarterSecondCadence();ForwardController();
         FractionalCellGeometry();DistantInteractiveOwner();LateGridCapability();TeleportFootprint();SoloRegions();SummonedCompanions();FriendlyMagicCreatures();CameraPublication();CameraFastCadence();CameraDirectedController();CameraOverlapController();InnerOnlyDepartureController();IdentifiedInteractionDelivery();ScopedInteractionDelivery();RecipientScopeController();
         SeparateMobDefaults();DelayedReadinessInteractions();OwnerStatusSnapshot();TargetedOwnerStatusSnapshot();WorldDefaultAssignments();KinematicDoorDefaults();
 #if GRID_PROTOCOL
+        NetworkBatches();
         LooseItemProtocol();
         RefillProtocolLease();DestinationLoadProtocol();IncineratorStateProtection();
 #endif

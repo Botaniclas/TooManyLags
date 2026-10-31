@@ -4,8 +4,8 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "Botaniclas"
 name = "TooManyLags_FGN_Addon"
-versionNumber = "1.0.57"
-description = "Leave connection lag behind. Go beyond Server-Side Simulation with this FiresGhettoNetworking addon: local interactions and smarter Hostile Mob ownership. Install, play, and never look back."
+versionNumber = "2.0.0"
+description = "Less ownership lag, lower grid traffic, safer object transfers and a native enemy simulation bridge. FiresGhettoNetworking addon for dedicated servers. Install on server and all clients."
 websiteUrl = "https://github.com/Botaniclas/TooManyLags"
 containsNsfwContent = false
 
@@ -32,3 +32,4 @@ communities = ["valheim"]
 
 [publish.categories]
 valheim = ["mods", "tweaks", "utility", "server-side", "client-side", "ai-generated"]
+

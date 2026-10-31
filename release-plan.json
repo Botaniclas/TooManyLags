@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "candidate": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags-2.0.0-half-speed",
+  "preparedSource": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags-2.0.0-release-2026-10-31",
+  "sourceFiles": 140,
+  "releaseReadme": "README-Thunderstore.md",
+  "testReadme": "README-TEST.md",
+  "publicationAuthorized": false,
+  "installationAuthorized": false,
+  "runtimeModified": false,
+  "verifierAdjustment": "Reviewed existing MobBridgeWarmup.cs added to stale production-scope list",
+  "sourcePackageAdditions": [
+    "test-bridge-continuity.ps1",
+    "release-input.json"
+  ],
+  "userTestSha256": "56128F3962930854925E76EF475B549A37FE8A1A47EF43D5E15493DB80632DB6",
+  "fixtureUpdates": [
+    "CombatFixtures models existing protocol cancellation boundary",
+    "CombatSoloTests verifies selected presentation cancellation on stop"
+  ]
+}

@@ -1,7 +1,7 @@
-param([string]$ValheimDirectory = 'D:\Steam-Bibliotheksordner\steamapps\common\Valheim')
+param([string]$ValheimDirectory = 'D:\Steam-Bibliotheksordner\steamapps\common\Valheim', [switch]$DebugSystem)
 $ErrorActionPreference = 'Stop'
 $taskCompiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe'
-$taskDirectory = Join-Path $PSScriptRoot 'bin\combat-tests'
+$taskDirectory = Join-Path $PSScriptRoot $(if ($DebugSystem) {'bin/combat-tests-debug'} else {'bin/combat-tests'})
 $taskHost = Join-Path $taskDirectory 'MonoFixtureHost.exe'
 & $taskCompiler '/nologo' '/target:exe' '/platform:x64' '/optimize+' '/langversion:5' '/warnaserror+' ('/out:' + $taskHost) (Join-Path $PSScriptRoot 'tests\CombatMonoFixtureHost.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Mono fixture host compilation failed.' }

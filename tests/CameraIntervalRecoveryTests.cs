@@ -60,8 +60,11 @@ namespace TooManyLags
         internal static bool SessionEnabled, SessionMobs, SessionAutoFgn;
         internal static bool SessionFail = false;
         internal static int SessionFlags() { return Flags; }
+        internal static int VisualSessionFlags() { return Flags | (Flags == 0 ? 0 : 8); }
+        internal static bool VisualEnabled; internal static int VisualApplies;
+        internal static void ApplyVisualSession(bool enabled) { VisualEnabled = enabled; VisualApplies++; }
         internal static void ApplyServerSession(bool enabled, bool mobs, bool automaticFgn = true) { SessionApplies++; SessionEnabled = enabled; SessionMobs = mobs; SessionAutoFgn = automaticFgn; if (SessionFail) throw new Exception("startup fixture"); }
-        internal static void ClearClientSession() { SessionClears++; SessionEnabled = SessionMobs = false; }
+        internal static void ClearClientSession() { SessionClears++; SessionEnabled = SessionMobs = VisualEnabled = false; }
         internal static void Report(string message) { SessionReports++; }
     }
 }

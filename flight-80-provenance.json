@@ -1,0 +1,21 @@
+{
+  "version": "1.0.80",
+  "baseline": "1.0.79",
+  "baselineDllSha256": "BBC155A55ABB1390D5B43BE18334A8B8C36D5F7B5CAAEF3A61419CD1B9BC2AA4",
+  "baselineDebugDllSha256": "8C5CF24B0DF7DB9F199D28C7C64490D60DEDA95B1C71294DA69CB00D52D00AF9",
+  "scope": "Flight checkpoint and native-relative height correction; existing guarded handoff policy retained",
+  "wirePayloadBytes": {
+    "minimum": 86,
+    "maximum": 118,
+    "objectId": 12,
+    "nativeFramingIncluded": false
+  },
+  "nativeReferences": [
+    "assembly_valheim.dll",
+    "FiresGhettoNetworking 1.5.72",
+    "../JotunWitchHandoffAudit-2026-10-25/REPORT.md"
+  ],
+  "liveMultiplayerTested": false,
+  "published": false,
+  "installedProfilesChanged": false
+}

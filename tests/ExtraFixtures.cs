@@ -36,6 +36,7 @@ public sealed class Sign : UnityEngine.MonoBehaviour, Interactable { }
 public sealed class ZPackage
 {
     public ZRoutedRpc.RoutedRPCData Rpc;
+    public static Action<ZPackage> BeforePackageWrite;
     private readonly System.IO.MemoryStream bytes; public int Pos;
     public ZPackage(){bytes=new System.IO.MemoryStream();} public ZPackage(byte[] data){bytes=new System.IO.MemoryStream();bytes.Write(data,0,data.Length);bytes.Position=0;}
     public byte[] GetArray(){return bytes.ToArray();} public void SetPos(int pos){Pos=pos;bytes.Position=pos;}
@@ -44,6 +45,8 @@ public sealed class ZPackage
     public void Write(bool value){new System.IO.BinaryWriter(bytes).Write(value);}
     public void Write(int value){new System.IO.BinaryWriter(bytes).Write(value);}
     public void Write(uint value){new System.IO.BinaryWriter(bytes).Write(value);}
+    public void Write(ZPackage value){if(BeforePackageWrite!=null)BeforePackageWrite(value);byte[] data=value.GetArray();Write(data.Length);bytes.Write(data,0,data.Length);}
+    public ZPackage ReadPackage(){int count=ReadInt();return new ZPackage(new System.IO.BinaryReader(bytes).ReadBytes(count));}
     public void Write(UnityEngine.Vector3 value){var w=new System.IO.BinaryWriter(bytes);w.Write(value.x);w.Write(value.y);w.Write(value.z);}
     public int Size(){return (int)bytes.Length;}
     public int GetPos(){return (int)bytes.Position;}

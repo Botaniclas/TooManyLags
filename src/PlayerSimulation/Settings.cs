@@ -6,7 +6,6 @@ namespace TooManyLags.PlayerSimulation
     // Read the addon's existing settings, not a second standalone config.
     internal sealed class Settings
     {
-        internal bool Logs;
         internal readonly bool Directional, Keep;
         internal bool Mobs;
         internal readonly float CellSize;
@@ -17,7 +16,6 @@ namespace TooManyLags.PlayerSimulation
         internal readonly Kinds Categories;
         internal Settings(ConfigFile config, bool mobs)
         {
-            Logs = Read(config, "09 - Logs", "EnableLogs", false);
             CellSize = Read(config, "04 - Grid Settings", "GridCellSizeMeters", 4f);
             string shape = Read(config, "04 - Grid Settings", "GridCoveragePattern", "Rounded7x7");
             Pattern = shape == "Rounded7x7" ? GridCoveragePattern.Rounded7x7 : shape == "Rounded5x5" ? GridCoveragePattern.Rounded5x5 : GridCoveragePattern.Square3x3;

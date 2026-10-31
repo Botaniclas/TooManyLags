@@ -16,11 +16,18 @@ namespace TooManyLags
         private static ConditionalWeakTable<ZDO, Decision> decisions = new ConditionalWeakTable<ZDO, Decision>();
         private static bool configured;
         private static float radiusSquared;
+#if !TML_RELEASE || TML_TEST_METRICS
         internal static int Evaluations;
+#endif
         internal static void Configure(bool enabled, float radius)
         { configured = enabled; radiusSquared = radius * radius; }
         internal static void Reset()
-        { decisions = new ConditionalWeakTable<ZDO, Decision>(); Evaluations = 0; }
+        {
+            decisions = new ConditionalWeakTable<ZDO, Decision>();
+#if !TML_RELEASE || TML_TEST_METRICS
+            Evaluations = 0;
+#endif
+        }
         internal static bool IsBoss(ZDO data)
         { Character actor = FgnCombatOwnership.CreatureActor(data); return actor && actor.IsBoss(); }
         internal static void Record(ZDO data, ZDOID target)
@@ -41,7 +48,10 @@ namespace TooManyLags
         }
         private static bool TwoNearby(ZDO data)
         {
-            Evaluations++; int count = 0; Vector3 origin = data.GetPosition();
+#if !TML_RELEASE || TML_TEST_METRICS
+            Evaluations++;
+#endif
+            int count = 0; Vector3 origin = data.GetPosition();
             foreach (ZNetPeer peer in ZNet.instance.GetPeers())
             {
                 if (!FgnCombatOwnership.Candidate(peer, origin) || peer.m_characterID.IsNone()) continue;

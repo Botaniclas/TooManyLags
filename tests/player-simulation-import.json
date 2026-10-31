@@ -35,8 +35,9 @@
     {
       "file": "LocalAgent.cs",
       "sourceSha256": "A0739588EA520BFF2D2607BA8657D4E15B97ABB6CB1AD4319D2E328A6533F4E2",
-      "importSha256": "3B4BDDDD55E86D794573489E6B35DA52ACF538D504E4EE549AB2B17410187702",
-      "namespaceOnly": true
+      "importSha256": "C38CD73D55F9A6B98147B7E40ACB63AF8B86ED2324B7B1F591F0E769791D0046",
+      "namespaceOnly": false,
+      "ownershipLoadingChange": "1.0.67: ordinary destination preparation needs matching data, not broad readiness or a live view. Actual routed-action activation retains its exact RPC instance requirement; initial ownership is not delayed."
     },
     {
       "file": "NativeHooks.cs",

@@ -52,6 +52,12 @@ namespace TooManyLags
             route = AccessTools.MethodDelegate<Action<ZRoutedRpc, ZRoutedRpc.RoutedRPCData>>(AccessTools.Method(typeof(ZRoutedRpc), "RouteRPC"));
             knows = BindKnowledge();
         }
+        // Explicit owner-status queries and tests only; never used by routing.
+        internal int PendingRequests(AuthorityController.NativeNode node)
+        {
+            Waiting entry;
+            return waiting.TryGetValue(node.Id, out entry) && ReferenceEquals(entry.Node, node) ? entry.Requests.Count : 0;
+        }
         internal bool TryHandle(ZRoutedRpc rpc, ZRoutedRpc.RoutedRPCData data, bool local)
         {
             if (dispatching || controller.SendingInventory || !controller.IsActive || data == null || data.m_targetPeerID == 0 || data.m_targetZDO.IsNone()) return false;
@@ -124,7 +130,7 @@ namespace TooManyLags
             // destroy this object and remove its remaining work.
             while (entry.Requests.Count != 0 && !node.Removed)
             {
-                var request = entry.Requests.Dequeue().Packet; node.Requests--;
+                var request = entry.Requests.Dequeue().Packet;
                 try { Deliver(ZRoutedRpc.instance, node, request, target); }
                 catch (DispatchFailure error) { controller.RequestFault(error.Original.SourceException); }
                 if (node.Removed || node.Data.GetOwner() != target) break;
@@ -170,7 +176,7 @@ namespace TooManyLags
             float now = UnityEngine.Time.unscaledTime;
             int method = request.m_methodHash;
             bool cancel = method == open || method == stack || method == take || (entry.Node.AwaitingInstance && method == Pick);
-            entry.Requests.Enqueue(new QueuedRequest { Packet = request, At = now, Cancellable = cancel }); entry.Node.Requests++;
+            entry.Requests.Enqueue(new QueuedRequest { Packet = request, At = now, Cancellable = cancel });
             if (cancel) entry.NextExpiry = Math.Min(entry.NextExpiry, now + InventoryRequestLifetime);
         }
         private void Expire(Waiting entry)
@@ -190,7 +196,6 @@ namespace TooManyLags
                     if (queued.Cancellable) entry.NextExpiry = Math.Min(entry.NextExpiry, queued.At + InventoryRequestLifetime);
                     continue;
                 }
-                entry.Node.Requests--;
                 Deny(entry.Node, queued.Packet, response);
             }
         }
@@ -209,7 +214,7 @@ namespace TooManyLags
         private void Cancel(Waiting entry)
         {
             foreach (QueuedRequest queued in entry.Requests) Deny(entry.Node, queued.Packet, ResponseName(queued.Packet.m_methodHash));
-            entry.Node.Requests -= entry.Requests.Count; entry.Requests.Clear();
+            entry.Requests.Clear();
         }
         private static void Force(Waiting entry, long target)
         {

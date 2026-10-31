@@ -62,8 +62,9 @@ internal static class NativeCombatAudit
         string hash;
         using(SHA256 sha=SHA256.Create())using(Stream input=File.OpenRead(path))
             hash=BitConverter.ToString(sha.ComputeHash(input)).Replace("-","");
-        bool modern=hash=="C685B43D90C99BA21A8C9477D095BE76CFAF703C9F3430FD8D678302CE8308F9";
-        Check(modern||hash=="47DEADE1F80117821462E69D95752F666AFF6AA8752988852D0315B0E4ABA04B","PUP1.0.34/1.0.36 audit provenance; no runtime version lock");
+        bool current=hash=="56848B62D77A6D2C55C225257D4953E0876772E7B0824E2AFEBFEAE9ADD86278";
+        bool modern=current||hash=="C685B43D90C99BA21A8C9477D095BE76CFAF703C9F3430FD8D678302CE8308F9";
+        Check(modern||hash=="47DEADE1F80117821462E69D95752F666AFF6AA8752988852D0315B0E4ABA04B","PUP1.0.34/1.0.36/1.0.37 audit provenance; no runtime version lock");
         Check(!adapter.Methods.Where(m=>m.HasBody).Any(m=>m.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="ComputeHash"))&&
             !adapter.Fields.Any(f=>f.Name=="Hash"),"release readiness adapter has no DLL hash lock");
         Check(Method(adapter,".ctor").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="ValidateDedicatedReadiness")&&
@@ -74,7 +75,7 @@ internal static class NativeCombatAudit
             TypeDefinition pup=assembly.MainModule.Types.Single(t=>t.FullName=="ValheimInstanceCombiner.InstanceCombinerMod");
             CustomAttribute metadata=pup.CustomAttributes.Single(a=>a.AttributeType.FullName=="BepInEx.BepInPlugin");
             Check((string)metadata.ConstructorArguments[0].Value=="com.pup.instancecombiner.safe"&&
-                (string)metadata.ConstructorArguments[2].Value==(modern?"1.0.36":"1.0.34"),"verified optional PUP audit identity");
+                (string)metadata.ConstructorArguments[2].Value==(current?"1.0.37":modern?"1.0.36":"1.0.34"),"verified optional PUP audit identity");
             MethodDefinition ready=Method(pup,"IsZoneReplacementReady");
             Check(ready.ReturnType.FullName=="System.Boolean"&&String.Join(",",ready.Parameters.Select(p=>p.ParameterType.FullName).ToArray())=="UnityEngine.Vector3,System.Single","actual native replacement readiness signature");
             if(modern)
@@ -131,7 +132,8 @@ internal static class NativeCombatAudit
         string inputHash;
         using(SHA256 sha=SHA256.Create())using(Stream stream=File.OpenRead(args[0]))
             inputHash=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","");
-        bool possessionRelease=inputHash=="E43F8E7B7614D0C6B7C8437CD235D837851955A41ACE1238858EC5FCEF75B2CB"||
+        bool possessionRelease=inputHash=="8B462B43642D523AABD0CF3396074E1E45D3699D9D73B2312FC0AABD4920C700"||
+            inputHash=="E43F8E7B7614D0C6B7C8437CD235D837851955A41ACE1238858EC5FCEF75B2CB"||
             inputHash=="C11FF8A96B1A7AE4BB76A433BC26447BD914C31797C6E1EBA557217C2FB9399D"||
             inputHash=="41B18BF36F837620DC5A76DE3BEE0569555B699AAA10722B8D95C07A70A638B2";
         Check(possessionRelease||inputHash=="75F5446AD4E43529F57D2C56F8CE34E061A78B289AE88DE6DE6B3CE69506E292",
@@ -167,10 +169,11 @@ internal static class NativeCombatAudit
                 MethodReference call=instruction.Operand as MethodReference;
                 if(context!=null&&context.Name=="s_lastHitBy"&&call!=null&&call.Name=="TryGetValue"&&call.DeclaringType.FullName==context.FieldType.FullName)reads++;
             }
-            Check(reads==1,"exact single FGN combat read site");
+            bool combatGuard=ownership.Methods.Any(m=>m.Name=="CombatReason");
+            Check(combatGuard ? reads==0&&Calls(handoff,"CombatReason") : reads==1,"known legacy fighter read or current native combat guard");
             Check(handoff.Body.Instructions.Count(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="InActiveArea")==2,"FGN eligibility and candidate-area gates retained");
             Check(handoff.Body.Instructions.Any(i=>i.OpCode.Name=="ldc.r4"&&(float)i.Operand==250f),"FGN fighter250ms allowance exists");
-            Check(handoff.Body.Instructions.Any(i=>i.OpCode.Name=="ldc.r8"&&(double)i.Operand==10.0),"FGN ten-second lower-ping hold exists");
+            Check(handoff.Body.Instructions.Any(i=>i.OpCode.Name=="ldc.r8"&&(double)i.Operand==(combatGuard?30.0:10.0)),"native lower-ping hold retained");
             Check(ownership.Fields.Single(f=>f.Name=="s_owned").FieldType.FullName.Contains("System.Collections.Generic.Dictionary`2<ZDOID,FiresGhettoNetworkMod.CreatureOwnership/Owned>"),"FGN private owned-cache binding contract");
             Check(handoff.Body.Instructions.Any(i=>i.OpCode.Name=="ldc.i4.2"),"FGN two-win gate exists");
             Check(handoff.Body.Instructions.Any(i=>i.OpCode.Name=="ldc.i4.6"),"FGN six moves per owner exists");
@@ -229,6 +232,17 @@ internal static class NativeCombatAudit
                 attackAt=aiUpdate.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="DoAttack");
             Check(targetAt>=0&&attackAt>targetAt,"native AI can select a target then start attack in the same update");
             TypeDefinition human=native.MainModule.Types.Single(t=>t.Name=="Humanoid");
+            MethodDefinition startAttack=Method(human,"StartAttack"), doAttack=Method(gameAI,"DoAttack");
+            Check(startAttack.ReturnType.FullName=="System.Boolean"&&startAttack.Parameters.Select(p=>p.ParameterType.FullName).SequenceEqual(new[]{"Character","System.Boolean"}),
+                "native Humanoid StartAttack is a cancellable bool(Character,bool) boundary");
+            var doAttackCode=doAttack.Body.Instructions.ToList();
+            int startAt=doAttackCode.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="StartAttack"),
+                resetAt=doAttackCode.FindIndex(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="m_timeSinceAttacking");
+            Check(startAt>=0&&resetAt>startAt&&doAttackCode.Skip(startAt+1).Take(resetAt-startAt-1).Any(i=>i.OpCode.Name.StartsWith("brfalse")),
+                "native failed StartAttack does not reset AI attack timer");
+            Check(human.Fields.Single(f=>f.Name=="m_currentAttack").FieldType.FullName=="Attack"&&
+                Method(native.MainModule.GetType("Attack"),"IsDone").ReturnType.FullName=="System.Boolean",
+                "unfinished native Attack clone can be checked independently of animator tag");
             var humanUpdate=Method(human,"CustomFixedUpdate").Body.Instructions.ToList();
             int ownAt=humanUpdate.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="IsOwner"),
                 tickAt=humanUpdate.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="UpdateAttack");
@@ -405,15 +419,24 @@ internal static class NativeCombatAudit
             Check(Method(combat,"ReceiveAttackReady").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="Pending")&&
                 Method(combat,"HandoffAttackRejected").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="AttackReady")&&
                 Method(combat,"ResultPostfix").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="HandoffAttackRejected"),"early ready events wait for pending result and are consumed after its cleanup");
-            Check(Method(combat,"ServerReady").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.FullName=="TooManyLags.NativePup"&&((MethodReference)i.Operand).Name=="ReadyPoint"),"server takeover reuses optional PUP collision readiness");
+            Check(!Method(combat,"ServerReady").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).DeclaringType.FullName=="TooManyLags.NativePup"),"loaded-actor validation stays independent from directional server-takeover collision proof");
+            Check(Method(combat,"Request").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="ServerCollisionReady"),"actual combat request checks optional local server collision proof");
+            Check(Method(combat,"InitialDefault").Body.Instructions.Any(i=>i.Operand is FieldReference&&((FieldReference)i.Operand).Name=="ServerCollisionReady"),"actual initial mob selector checks the same local proof");
+            TypeDefinition collision=addon.MainModule.Types.Single(t=>t.FullName=="TooManyLags.MobCollisionReadiness");
+            Check(!collision.Methods.Where(m=>m.HasBody).SelectMany(m=>m.Body.Instructions).Any(i=>i.Operand is MethodReference&&new[]{"SetOwner","set_isKinematic","Release","ForceStep"}.Contains(((MethodReference)i.Operand).Name)),"collision priority supplement never changes owner, body freeze or release");
+            Check(Method(collision,"BeforeMob").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="IsDedicated")&&Method(collision,"BeforeMob").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="GetRefPos"),"native collision priority is server-only and checks actual player proximity");
+            TypeDefinition tame=addon.MainModule.Types.Single(t=>t.FullName=="TooManyLags.TamedMobHandoff");
+            Check(!tame.Methods.Where(m=>m.HasBody).SelectMany(m=>m.Body.Instructions).Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="SetOwner"),"animal supplement delegates ownership to native commit rather than writing owner itself");
+            Check(Method(tame,"Commit").Body.ExceptionHandlers.Any(h=>h.HandlerType==Mono.Cecil.Cil.ExceptionHandlerType.Finally)&&Calls(Method(tame,"Ready"),"IsDone"),"animal authorization clears in finally and checks unfinished Attack state");
+            Check(Calls(Method(tame,"Flush"),"SyncNow"),"animal commit retains native final motion synchronization");
             Check(!addon.MainModule.Types.Any(t=>t.Namespace=="TooManyLags"&&(t.Name=="CollisionGuard"||t.Name=="FgnTakeover"||t.Name=="Statics")),"combat policy remains separate from the optional PUP body/support module");
             TypeDefinition nativeAdapter=addon.MainModule.Types.Single(t=>t.FullName=="TooManyLags.NativePup");
             Check(!nativeAdapter.Methods.Any(m=>new[]{"Attach","Existing","ForceStep","ReadyBounds","NeededByNativeBody"}.Contains(m.Name))&&
                 !nativeAdapter.Fields.Any(f=>new[]{"GuardType","ReadyMethod","MobMethod","PreserveMethod","RepairMethod","RetainMethod","ForceWait"}.Contains(f.Name)),
                 "optional PUP adapter contains only readiness and no physics/support hook surface");
-            Check(Method(combat,"ServerReady").Body.Instructions.Count(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="IsAreaReady")==2&&
-                Method(combat,"ServerReady").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="get_Present"),
-                "server fallback distinguishes absent PUP and verifies destination plus differing live-pose native area");
+            Check(!Method(combat,"ServerReady").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="IsAreaReady")&&
+                new[]{"LoadedCharacter","Eligible"}.All(name=>Method(combat,"ServerReady").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name==name)),
+                "server fallback validates the actual actor without a broad native area prerequisite");
             MethodDefinition nativeArea=Method(native.MainModule.Types.Single(t=>t.Name=="ZNetScene"),"IsAreaReady");
             Check(new[]{"IsZoneLoaded","FindInstance"}.All(name=>nativeArea.Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name==name)),
                 "actual native area readiness requires zone loading and instantiated nearby valid prefabs");
@@ -430,6 +453,56 @@ internal static class NativeCombatAudit
             Check(targetWriters.Length==5&&targetWriters.Sum(m=>m.Body.Instructions.Count(i=>i.OpCode.Name=="stfld"&&i.Operand is FieldReference&&((FieldReference)i.Operand).FullName==actualTarget.FullName))==14,"all fourteen native target stores in five methods enumerated");
             Check(adopt.Body.Instructions.Count(i=>i.OpCode.Name=="stfld"&&i.Operand is FieldReference&&((FieldReference)i.Operand).FullName==actualTarget.FullName)==1,"exact one FGN adoption store observed separately");
             TypeDefinition eventSource=addon.MainModule.Types.Single(t=>t.Name=="FgnTargetEvents");
+            TypeDefinition boundary=addon.MainModule.GetType("TooManyLags.FgnTargetBoundary");
+            Check(boundary!=null&&Calls(Method(boundary,"AfterAi"),"Flush")&&Calls(Method(boundary,"BeforeAttack"),"Busy"),
+                "addon dispatches at completed AI boundary and preserves unfinished actions");
+            Check(Calls(Method(combat,"VetoPostfix"),"Busy")&&Calls(Method(combat,"Request"),"Busy"),
+                "client and server native commit paths veto unfinished attacks");
+            Check(Calls(Method(eventSource,"AssignTarget"),"Changed")&&!Calls(Method(eventSource,"AssignAdoptedTarget"),"Changed"),
+                "new target choice and FGN adoption have separate attack-barrier behavior");
+            TypeDefinition solo=addon.MainModule.GetType("TooManyLags.FgnSoloCombatTest");
+            foreach(TypeDefinition endpoint in (solo == null ? new[]{boundary} : new[]{boundary,solo}))
+            {
+                var endpointCode=Method(endpoint,"Connect").Body.Instructions.ToList();int registrations=0;
+                for(int index=0;index<endpointCode.Count;index++)
+                {
+                    MethodReference registeredCall=endpointCode[index].Operand as MethodReference;
+                    if(registeredCall==null||registeredCall.DeclaringType.FullName!="ZRpc"||registeredCall.Name!="Register")continue;
+                    int nameAt=index-1;while(nameAt>=0&&endpointCode[nameAt].OpCode.Name!="ldstr")nameAt--;
+                    Check(nameAt>=0&&((string)endpointCode[nameAt].Operand).StartsWith("TooManyLags_AI_",StringComparison.Ordinal),
+                        "new combat endpoint registers only its own RPC namespace, never a native callback");registrations++;
+                }
+                Check(registrations==(endpoint==boundary?2:6),"new combat endpoint registration count is bounded and reviewed");
+            }
+            Check((solo != null) == (args.Length > 4 && args[4] == "debug"), "compiled test mode matches requested native audit");
+            if (solo != null)
+            {
+            var names=Method(solo,"Register").Body.Instructions.Where(i=>i.OpCode.Name=="ldstr").Select(i=>(string)i.Operand).ToList();
+            Check(new[]{"ai_test","ai_test_v","ai_test_vanilla"}.All(n=>names.Contains(n)),"short and vanilla console commands are registered in actual DLL");
+            Check(Calls(Method(solo,"Run"),"ParseRequest")&&Calls(Method(solo,"SetMode"),"EnsureLocalHooks"),
+                "console uses normalized parsing and mode metadata warms scoped endpoint gates");
+            Check(Method(solo,"Vanilla").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="ReferenceEquals"),
+                "vanilla comparison lacks world/network/object identity fencing");
+            Check(solo.NestedTypes.SelectMany(t=>t.Methods).Any(m=>m.HasBody&&Calls(m,"IsAdmin")),
+                "compiled solo-control callback retains vanilla admin authorization");
+            Check(solo!=null&&!solo.Methods.Where(m=>m.HasBody).Any(m=>Calls(m,"SetOwner")),
+                "solo driver never writes ownership directly");
+            Check(Calls(Method(solo,"Evaluated"),"HoldForSolo")&&Calls(Method(solo,"TryTransfer"),"Invoke"),
+                "solo test reuses attack barrier at native target-evaluation boundary and existing transfer delegate");
+            Check(Method(solo,"Completed").Parameters.Any(p=>p.Name=="__result"&&p.ParameterType.FullName=="System.Boolean")&&
+                Calls(Method(solo,"Completed"),"HoldForSolo")&&Calls(Method(solo,"Completed"),"Observe"),
+                "diagnostic idle fallback checks successful AI completion and publishes the unchanged real target");
+            Check(Calls(Method(boundary,"HoldForSolo"),"Busy")&&!Calls(Method(boundary,"HoldForSolo"),"Wakeup")&&
+                !Calls(Method(solo,"Completed"),"Wakeup"),"idle readiness keeps unfinished attacks guarded without waking mobs");
+            Check(!solo.Methods.Where(m=>m.HasBody).Any(m=>m.Body.Instructions.Any(i=>i.Operand is FieldReference&&
+                ((FieldReference)i.Operand).Name=="m_targetCreature"&&i.OpCode.Name=="stfld")),
+                "solo test does not rewrite the native mob target");
+            }
+            var aiCode=Method(gameAI,"UpdateAI").Body.Instructions.ToList();
+            int sleepingAt=aiCode.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="IsSleeping"),
+                evaluatingAt=aiCode.FindIndex(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="UpdateTarget");
+            Check(sleepingAt>=0&&evaluatingAt>sleepingAt&&aiCode.Skip(sleepingAt+1).Take(evaluatingAt-sleepingAt-1).Any(i=>i.OpCode.Name=="ret"),
+                "actual native sleeping AI returns before the target-evaluation boundary");
             Check(Method(eventSource,"Install").Body.Instructions.Any(i=>i.OpCode.Name=="ldstr"&&(string)i.Operand=="UnityEngine.UnitySynchronizationContext"),"event installation requires actual Unity main-thread context");
             Check(Method(eventSource,"Schedule").Body.Instructions.Any(i=>i.Operand is MethodReference&&((MethodReference)i.Operand).Name=="Post"),"notifications queued only through captured context Post");
             var assignInstructions=Method(eventSource,"AssignTarget").Body.Instructions.ToList();

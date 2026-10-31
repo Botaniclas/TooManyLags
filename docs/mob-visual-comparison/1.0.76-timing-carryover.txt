@@ -1,0 +1,5 @@
+Socket RTT remains 50ms. A first mob supplied a changed replica revision after 800ms.
+A different mob's next handoff inherits prediction window=0.6s.
+Its own first changed update arrives after 100ms, but its blend=0.6s.
+The second bridge remains active at the solo test's 500ms return interval=True.
+Window/Blend use one global previous observedWait; the current fast reply does not shorten the already captured window.

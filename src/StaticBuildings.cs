@@ -5,8 +5,8 @@ using UnityEngine;
 
 namespace TooManyLags
 {
-    // Preserve the conservative static-only behavior of ServerBuildings 1.4.0.
-    // Interactive types and creatures never pass this classifier.
+    // Shared static policy for fixed building pieces and native world objects.
+    // Extra visual/mod components do not by themselves make a root interactive.
     internal sealed class StaticBuildings
     {
         private sealed class State
@@ -15,18 +15,16 @@ namespace TooManyLags
             internal bool Eligible, Ready; internal Vector3 ReadyPosition;
         }
         private readonly Dictionary<int, bool> prefabs = new Dictionary<int, bool>();
-        private readonly Dictionary<Vector2s, bool> readiness = new Dictionary<Vector2s, bool>();
         private readonly List<Vector2s> centers = new List<Vector2s>();
         private readonly ConditionalWeakTable<ZNetView, State> states = new ConditionalWeakTable<ZNetView, State>();
         private ZNetScene scene; private long server; private int baked;
         private bool takeovers;
         private readonly Func<bool> takeoversReady;
         internal StaticBuildings(Func<bool> takeoversReady) { this.takeoversReady = takeoversReady; }
-        internal void InvalidateReadiness() { readiness.Clear(); }
         internal void Begin(ZNet network, ZNetScene scene, long server, int baked, bool takeovers)
         {
             this.scene = scene; this.server = server; this.baked = baked; this.takeovers = takeovers;
-            centers.Clear(); readiness.Clear();
+            centers.Clear();
             foreach (ZNetPeer peer in network.GetPeers())
             {
                 if (peer == null || !peer.IsReady() || !Finite(peer.GetRefPos())) continue;
@@ -48,7 +46,7 @@ namespace TooManyLags
             bool covered = false; foreach (Vector2s center in centers) if (ZNetScene.InActiveArea(position, center)) { covered = true; break; }
             if (!covered) return false;
             ZNetView view = scene.FindInstance(data);
-            if (!view || !view.IsValid() || view.m_distant || !view.gameObject.activeInHierarchy || !ReferenceEquals(view.GetZDO(), data)) return false;
+            if (!view || !view.IsValid() || !view.gameObject.activeInHierarchy || !ReferenceEquals(view.GetZDO(), data)) return false;
             Transform pose = view.transform; Vector3 live = pose.position;
             if (pose.parent != null || !Finite(live) || (live - position).sqrMagnitude > 0.0025f) return false;
             State state;
@@ -57,12 +55,10 @@ namespace TooManyLags
                 state = new State { Data = data, Id = data.m_uid, Wear = view.GetComponent<WearNTear>(), Eligible = Safe(view.gameObject) };
                 states.Add(view, state);
             }
-            if (!ReferenceEquals(state.Data, data) || state.Id != data.m_uid || !state.Eligible || !state.Wear || !state.Wear.enabled || !state.Wear.m_staticPosition) return false;
+            if (!ReferenceEquals(state.Data, data) || state.Id != data.m_uid || !state.Eligible ||
+                (state.Wear && (!state.Wear.enabled || !state.Wear.m_staticPosition))) return false;
             if (data.GetOwner() == server && state.Ready && state.ReadyPosition == position) return true;
-            if (!takeovers) return false;
-            Vector2s zone = ZoneSystem.GetZone(position); bool ready;
-            if (!readiness.TryGetValue(zone, out ready)) { ready = scene.IsAreaReady(position); readiness.Add(zone, ready); }
-            if (!ready || !data.IsValid() || state.Id != data.m_uid || !view || !view.IsValid() ||
+            if (!takeovers || !data.IsValid() || state.Id != data.m_uid || !view || !view.IsValid() ||
                 !ReferenceEquals(view.GetZDO(), data) || data.GetPosition() != position) return false;
             if (data.GetOwner() != server)
             {
@@ -76,12 +72,28 @@ namespace TooManyLags
         internal void Remove(ZNetView view) { states.Remove(view); }
         internal static bool Safe(GameObject root, MonoBehaviour[] components = null)
         {
-            Piece piece = root.GetComponent<Piece>(); WearNTear wear = root.GetComponent<WearNTear>(); ZNetView view = root.GetComponent<ZNetView>();
-            if (!piece || !wear || !wear.m_staticPosition || !view || !view.m_persistent || view.m_distant || root.GetComponentsInChildren<Rigidbody>(true).Length != 0) return false;
+            WearNTear wear = root.GetComponent<WearNTear>(); ZNetView view = root.GetComponent<ZNetView>();
+            // Native standing trees can be distant roots. Their fixed network
+            // identity is safe; active-area and recipient checks still apply.
+            if (!view || !view.m_persistent || root.GetComponentsInChildren<Rigidbody>(true).Length != 0) return false;
+            // These roots belong to the separate interactive category even
+            // when that category is disabled; the legacy static-only path
+            // must not silently take them over through its own prefab cache.
+            if (root.GetComponent<Projectile>() || PhysicsObjects.FixedSource(root)) return false;
+            Destructible destructible = root.GetComponent<Destructible>();
+            // Native decorative vines have fixed WearNTear but no Piece.
+            // Build-menu membership is not part of the network/safety contract.
+            bool building = wear && wear.m_staticPosition;
+            bool world = root.GetComponent<TreeBase>() || root.GetComponent<MineRock>() || root.GetComponent<MineRock5>() ||
+                (destructible && destructible.m_ttl <= 0f);
+            if ((!building && !world) || (wear && !wear.m_staticPosition)) return false;
             foreach (MonoBehaviour component in components ?? root.GetComponentsInChildren<MonoBehaviour>(true))
             {
-                if (!component) return false; Type type = component.GetType();
-                if ((type != typeof(Piece) && type != typeof(WearNTear) && type != typeof(ZNetView)) || component.gameObject != root) return false;
+                if (!component || component is Interactable || component is Character || component is BaseAI ||
+                    component is ItemDrop || component is Container || component is ZSyncTransform || component is TreeLog ||
+                    component is SpawnArea || component is CreatureSpawner || component is SpawnSystem ||
+                    (component is Destructible && ((Destructible)component).m_ttl > 0f) ||
+                    (component is ZNetView && component != view) || component.GetComponentInParent<ZNetView>(true) != view) return false;
             }
             return true;
         }

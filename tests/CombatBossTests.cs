@@ -54,8 +54,8 @@ internal static partial class FgnCombatTests
             Assert(old.m_rpc.Destination==2,"dead nearby players cannot activate server boss rule");
             BossSetup();FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=false;BossEvent();
             Assert(old.m_rpc.Destination==2&&FgnBossPolicy.Evaluations==0,"no Server-Side Simulation: boss uses player target without server transfer or radius work");
-            BossSetup();NativePup.Ready=false;BossEvent();Assert(old.m_rpc.Sent==0&&FgnBossPolicy.WantsServer(mob),"boss server transfer waits for original collider readiness proof");
-            NativePup.Ready=true;Handle(out moved);Assert(moved&&old.m_rpc.Destination==100,"blocked readiness retry reuses cached boss decision");
+            BossSetup();NativePup.Ready=false;BossEvent();Assert(old.m_rpc.Sent==1&&FgnBossPolicy.WantsServer(mob)&&old.m_rpc.Destination==100,"boss ownership does not wait for collider simulation readiness");
+            NativePup.Ready=true;Handle(out moved);Assert(!moved&&old.m_rpc.Sent==1,"collision readiness change cannot duplicate an existing boss handoff");
 
             BossSetup();BossEvent();Client(1);var body=ZNetScene.instance.FindInstance(mob).GetComponent<Humanoid>();var attack=body.BeginAttack();
             DeliverCommit();DeliverReply();Assert(mob.GetOwner()==1&&FgnMobHandoff.Count==0,"native boss attack veto preserves current owner");

@@ -58,6 +58,7 @@ namespace TooManyLags
             ZDOID target;
             if (data == null || !FgnCombatOwnership.ShouldOverride(data.m_uid) || !FgnCombatOwnership.ReadTarget(data, out target))
             { rpc.Invoke(name, args); return; }
+            if (!FgnCombatOwnership.TargetAllowsOwnership(data)) return;
             if (Waiting(data)) return;
             Request request = new Request { Data = data, Rpc = rpc, Source = data.GetOwner(),
                 Revision = data.OwnerRevision, Destination = (long)args[1], Token = ++nextToken };
@@ -87,15 +88,20 @@ namespace TooManyLags
                 { Reply(current, id, false, "source changed"); return; }
                 // Refresh from the real local AI, including a target change which
                 // was queued before this commit. The server receives it before the reply.
+                if (!FgnCombatOwnership.TargetAllowsOwnership(data)) { Reply(current, id, false, "non-player target"); return; }
                 if (!FgnCombatOwnership.HandoffObserve(data)) { Reply(current, id, false, "not ready"); return; }
                 FgnCombatOwnership.Fgn.Commit(peer.m_rpc, id, destination);
                 if (!current.Replied) Reply(current, id, false, "unprocessed");
             }
             catch (Exception) { if (!current.Replied) Reply(current, id, false, "unprocessed"); }
-            finally { commit = previous; }
+            finally
+            {
+                try { FgnTargetBoundary.CommitFinished(data, target); }
+                finally { commit = previous; }
+            }
         }
         internal static bool StaleTarget(ZDO data, ZDOID target)
-        { return commit != null && ReferenceEquals(commit.Data, data) && commit.Target != target; }
+        { return MobSourceHandoff.IsLocalCommit(data) ? MobSourceHandoff.LocalTarget != target : commit != null && ReferenceEquals(commit.Data, data) && commit.Target != target; }
         internal static bool AuthorizesBoss(ZDOID id)
         {
             return commit != null && commit.Data != null && commit.Data.m_uid == id && commit.Data.IsValid() &&
@@ -103,6 +109,7 @@ namespace TooManyLags
         }
         internal static void SendResult(ZRpc rpc, string name, object[] args)
         {
+            if (name == "FGN_HandOffResult" && args.Length == 3 && ZDOMan.instance != null && MobSourceHandoff.IsLocalCommit(ZDOMan.instance.GetZDO((ZDOID)args[0]))) return;
             if (commit == null || name != "FGN_HandOffResult" || args.Length != 3 ||
                 !ReferenceEquals(commit.Rpc, rpc) || commit.Data == null || commit.Data.m_uid != (ZDOID)args[0])
             { rpc.Invoke(name, args); return; }

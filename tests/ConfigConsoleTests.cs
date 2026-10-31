@@ -71,6 +71,8 @@ namespace TooManyLags
         internal static string ConfigCommand(string text, bool server) { Calls++; Server = server; return "reply"; }
         internal static string OwnerStatus(long peer, string filter = null) { OwnerCalls++; OwnerPeer=peer; OwnerFilter=filter; return "SERVER owner status"; }
         internal static int SessionFlags() { return 3; }
+        internal static int VisualSessionFlags() { return 11; }
+        internal static void ApplyVisualSession(bool enabled) { }
         internal static void ApplyServerSession(bool enabled, bool mobs, bool automaticFgn = true) { }
         internal static void ClearClientSession() { }
         internal static void Report(string message) { }

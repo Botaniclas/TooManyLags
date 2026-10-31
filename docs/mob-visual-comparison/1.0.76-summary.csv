@@ -1,0 +1,7 @@
+scenario,max_native_frame_m,max_visual_frame_m,max_offset_m,max_negative_visual_step_m,exit_time_s,exit_native_step_m,exit_visual_step_m,owner_writes
+native_extrapolation_without_fresh_state,0.040000,2.030000,1.990000,0.000000,1.133333,0.040000,2.030000,1
+steady_movement_50ms_packets,0.042142,0.042142,0.037196,0.000000,0.233333,0.031857,0.021510,1
+attack_during_recovery,0.084284,0.293733,0.269439,0.000000,0.233333,0.053928,0.293733,1
+ownership_return_during_recovery,0.272440,0.544466,0.638764,0.000000,0.500000,0.272440,0.544466,2
+early_nonpose_revision,0.042142,0.042142,0.017206,0.000000,0.133333,0.026237,0.020284,1
+one_missing_render_frame,0.084284,0.119250,0.108145,0.000000,0.333333,0.070380,0.038876,1

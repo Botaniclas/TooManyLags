@@ -12,7 +12,7 @@ internal static class IdentifiedGridHandoffTests
         internal readonly Dictionary<long, ZNetPeer> Peers = new Dictionary<long, ZNetPeer>();
         internal readonly Dictionary<ZDOID, ZDO> Data = new Dictionary<ZDOID, ZDO>();
         internal readonly FgnOwnerHandoff Handoff;
-        internal double Time; internal int Sends, Queries; internal long Token; internal bool ThrowSend;
+        internal double Time; internal int Sends, Queries, Rejections; internal long Token; internal bool ThrowSend;
         internal bool Matched = true;
         internal World()
         {
@@ -21,6 +21,7 @@ internal static class IdentifiedGridHandoffTests
                 delegate(ZNetPeer p, ZDOID id, long target, uint revision, long token)
                 { Sends++; Token = token; if (ThrowSend) throw new Exception("uncertain send"); },
                 delegate { Queries++; }, delegate { return Time; });
+            Handoff.Rejected = delegate { Rejections++; };
         }
         private ZNetPeer FindPeer(long id) { ZNetPeer p; return Peers.TryGetValue(id, out p) ? p : null; }
         private ZDO FindData(ZDOID id) { ZDO d; return Data.TryGetValue(id, out d) ? d : null; }
@@ -48,11 +49,12 @@ internal static class IdentifiedGridHandoffTests
             Check("untagged legacy busy result cannot settle identified commit", LegacyBusy(w, d) && w.Handoff.Pending(d));
             Check("wrong token rejected", !w.Handoff.Observed(w.Peers[10].m_rpc, d.m_uid, first + 1, true, true, 10, 7));
             Check("wrong source rejected", !w.Handoff.Observed(w.Peers[20].m_rpc, d.m_uid, first, true, true, 10, 7));
-            Check("definite rejection settles without owner write", w.Reply(d, true, 10, 7) && !w.Handoff.Pending(d) && w.Handoff.Reserved(d) && d.Owner == 10 && d.OwnerRevision == 7);
+            Check("definite rejection releases transaction without owner write", w.Reply(d, true, 10, 7) && !w.Handoff.Pending(d) && !w.Handoff.Reserved(d) && w.Rejections == 1 && d.Owner == 10 && d.OwnerRevision == 7);
             w.Time = 3;
-            Check("duplicate result cannot extend settled retry deadline", !w.Reply(d, true, 10, 7) && !w.Handoff.Pending(d));
-            w.Time = 7.99; w.Handoff.Request(d, 20); Check("rejection backoff retained", w.Sends == 1);
-            w.Time = 8; w.Handoff.Request(d, 20); Check("next attempt uses fresh token", w.Sends == 2 && w.Token > first);
+            Check("duplicate result cannot recreate a settled request", !w.Reply(d, true, 10, 7) && !w.Handoff.Pending(d) && w.Rejections == 1);
+            for (int i = 0; i < 10000; i++) { w.Time = i + 3; w.Handoff.Pending(d); w.Handoff.Reserved(d); }
+            Check("rejected command has no timed retry or status probes", w.Sends == 1 && w.Queries == 1 && w.Rejections == 1);
+            w.Time = 3; w.Handoff.Request(d, 20); Check("fresh request immediately uses a new token", w.Sends == 2 && w.Token > first);
             Check("late rejected attempt cannot release newer attempt", !w.Handoff.Observed(w.Peers[10].m_rpc, d.m_uid, first, true, true, 10, 7) && w.Handoff.Pending(d));
             Check("not-owner snapshot waits for actual native state", w.Reply(d, true, 30, 8) && w.Handoff.Pending(d));
             w.Time = 600; w.Handoff.Request(d, 99); Check("reconciliation never overwrites or recommits stale owner", w.Sends == 2 && d.Owner == 10 && d.OwnerRevision == 7);
@@ -85,7 +87,7 @@ internal static class IdentifiedGridHandoffTests
             Check("newer native owner discards source-repair reservation without overwriting it", !w.Handoff.Pending(d) && !w.Handoff.Reserved(d) && d.Owner == 30 && d.OwnerRevision == 8);
 
             w = new World(); d = w.Add(); w.Handoff.Request(d, 20);
-            Check("gone is a terminal no-commit, not steal consent", w.Reply(d, false, 0, 0) && !w.Handoff.Pending(d) && d.Owner == 10 && d.OwnerRevision == 7);
+            Check("gone is a terminal no-commit, not steal consent", w.Reply(d, false, 0, 0) && !w.Handoff.Pending(d) && !w.Handoff.Reserved(d) && w.Rejections == 1 && d.Owner == 10 && d.OwnerRevision == 7);
             w = new World(); d = w.Add(); w.ThrowSend = true; w.Handoff.Request(d, 20); w.Time = 2;
             Check("uncertain send queried without retry", w.Handoff.Pending(d) && w.Queries == 1 && w.Sends == 1);
             Check("fenced no-commit status releases gameplay", w.Reply(d, true, 10, 7) && !w.Handoff.Pending(d));

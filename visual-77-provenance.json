@@ -1,0 +1,14 @@
+{
+  "baselineVersion": "1.0.76",
+  "baselineDllSha256": "F9EEAE13A2AC2AE005D4571545AD40EE1F342422790737C0EE1819E559F30094",
+  "productionScope": [
+    "ConfigTemplate.cs",
+    "MobHandoffVisual.cs",
+    "MobVisualCurve.cs",
+    "Plugin.cs"
+  ],
+  "enabledByDefault": true,
+  "newAuthorityWrites": false,
+  "newGameplayRPCs": false,
+  "liveMultiplayerTested": false
+}

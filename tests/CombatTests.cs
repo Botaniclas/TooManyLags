@@ -52,7 +52,7 @@ internal static partial class FgnCombatTests
     private static bool Handle(out bool moved)
     {object[] args={mob,Time.realtimeSinceStartupAsDouble,false};bool original=(bool)Call("TryPrefix",args);moved=(bool)args[2];if(moved)Call("TryPostfix",true);return original;}
     private static void ServerAccept()
-    {mob.SetOwner(100);Call("MarkWatch",mob);FgnCombatOwnership.Observe(ai);Time.realtimeSinceStartupAsDouble+=6;object[] args={false};Call("BalancePrefix",args);}
+    {mob.SetOwner(100);Call("MarkWatch",mob);FgnCombatOwnership.CompletedAi(ai);FgnCombatOwnership.Observe(ai);Time.realtimeSinceStartupAsDouble+=6;object[] args={false};Call("BalancePrefix",args);}
     public static void Main()
     {
         try { Run(); }
@@ -60,12 +60,26 @@ internal static partial class FgnCombatTests
     }
     private static void Run()
     {
+        Setup();
+        var currentGuard=typeof(FiresGhettoNetworkMod.CreatureOwnership).GetMethod("CombatReason",flags);
+        var modernInput=new List<CodeInstruction>{
+            new CodeInstruction(System.Reflection.Emit.OpCodes.Call,currentGuard),
+            new CodeInstruction(System.Reflection.Emit.OpCodes.Callvirt,AccessTools.Method(typeof(ZRpc),"Invoke",new[]{typeof(string),typeof(object[])}))};
+        var modernOutput=FgnCombatOwnership.RewriteTarget(modernInput);
+        Assert(modernOutput.Count==2&&System.Object.Equals(modernOutput[0].operand,currentGuard),"current fallback retains native combat guard");
+        Assert(((MethodInfo)modernOutput[1].operand).DeclaringType==typeof(FgnMobHandoff),"current fallback keeps identified handoff envelope");
+        bool unknownRejected=false;
+        try { FgnCombatOwnership.RewriteTarget(new[]{modernInput[1]}); } catch(NotSupportedException){unknownRejected=true;}
+        Assert(unknownRejected,"unknown fallback without fighter read or combat guard rejected");
+        mob.Prefab=9876543;
+        Assert(!FgnCombatOwnership.ShouldOverride(mob.m_uid),"provider-excluded companion cannot enter target ownership");
+        mob.Prefab=42;
         bool moved;ZDOID id;Setup();
         Assert(FgnCombatOwnership.ReadTarget(mob,out id)&&id==target.m_characterID,"actual target recorded");
         int writes=mob.Writes;ZDOMan.Session=1;for(int i=0;i<10000;i++)FgnCombatOwnership.Observe(ai);ZDOMan.Session=100;
         Assert(mob.Writes==writes,"stable AI updates do not rewrite/transmit ZDO data");
         Assert(ZDOExtraData.Session.Count==5,"target and capability fields excluded from saved world");
-        Assert(Handle(out moved)&&!moved,"normal RTT uses original FGN path");
+        Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==2,"normal RTT live target uses guarded request without stock noncombat selection");
         mob.SetOwner(3);Assert(!FgnCombatOwnership.ReadTarget(mob,out id),"old-owner report invalid after revision change");
         Assert(!Handle(out moved)&&!moved,"missing new-owner report waits without damage fallback");
         ZDOMan.Session=3;FgnCombatOwnership.Observe(ai);ZDOMan.Session=100;Assert(FgnCombatOwnership.ReadTarget(mob,out id),"new owner renews same target once");
@@ -90,8 +104,9 @@ internal static partial class FgnCombatTests
         ZDOMan.instance.GetZDO(old.m_characterID).Position=new Vector3(107,0,100);
         Assert(!Handle(out moved)&&moved&&mob.GetOwner()==2,"last nearby second player leaves: returns to high-ping AI target");
         ZNetView mobView=ZNetScene.instance.FindInstance(mob);HitData hit=new HitData();
-        Assert(!(bool)Call("DamagePrefix",mobView.GetComponent<Character>(),hit)&&mobView.Forwarded==1&&mobView.ForwardOwner==2&&ReferenceEquals(mobView.ForwardHit,hit),"late server hit forwarded exactly once to confirmed return owner");
-        Time.realtimeSinceStartupAsDouble+=5.1;Assert((bool)Call("DamagePrefix",mobView.GetComponent<Character>(),hit)&&mobView.Forwarded==1,"late forwarding expires");
+        Assert(!(bool)Call("DamagePrefix",mobView.GetComponent<Character>(),hit,true)&&mobView.Forwarded==1&&mobView.ForwardOwner==2&&ReferenceEquals(mobView.ForwardHit,hit),"late server hit forwarded exactly once to confirmed return owner");
+        Assert(!(bool)Call("DamagePrefix",mobView.GetComponent<Character>(),hit,false)&&mobView.Forwarded==1,"earlier combat forwarding suppresses legacy second forwarding");
+        Time.realtimeSinceStartupAsDouble+=5.1;Assert((bool)Call("DamagePrefix",mobView.GetComponent<Character>(),hit,true)&&mobView.Forwarded==1,"late forwarding expires");
 
         Setup();target.Ping=400;ZDOMan.instance.GetZDO(old.m_characterID).Position=new Vector3(120,0,100);ZDOMan.instance.GetZDO(other.m_characterID).Position=new Vector3(120,0,100);
         Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==2,"no close other player: high-ping target receives owner, not previous attacker");
@@ -108,25 +123,25 @@ internal static partial class FgnCombatTests
         Setup();target.Ping=400;FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=false;
         Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==2,"without SSS the high-ping target receives owner");
         Setup();target.Ping=400;NativePup.Ready=false;
-        Assert(!Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"pending collision denies server takeover");
+        Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==100&&NativePup.Checks==0,"ownership request does not duplicate native PUP collision gating");
         Setup();target.Ping=400;NativePup.DestinationReady=false;
-        Assert(!Handle(out moved)&&!moved,"pending canonical destination denies takeover");
+        Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==100,"canonical collision readiness remains simulation-owned");
         Setup();target.Ping=400;ZNetScene.instance.Ready=false;
-        Assert(!Handle(out moved)&&!moved,"unloaded area denies takeover");
+        Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==100,"existing actor takeover does not wait for unrelated area loading");
         Setup();target.Ping=400;target.Measured=false;
-        Assert(Handle(out moved)&&!moved,"unknown RTT not misclassified as measured high RTT");
-        Setup();target.Ping=200;Assert(Handle(out moved),"exact ping boundary stays stock FGN");
+        Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==2,"unknown RTT retains target owner without inventing high-ping server fallback");
+        Setup();target.Ping=200;Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==2,"exact ping boundary targets the player through guarded handoff");
         Setup();Set("maximumPing",new ConfigEntry<int>(0));target.Ping=301;Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==100,"relative 250 ms mode supported");
-        Setup();Set("maximumPing",new ConfigEntry<int>(0));target.Ping=290;Assert(Handle(out moved),"relative boundary preserved");
+        Setup();Set("maximumPing",new ConfigEntry<int>(0));target.Ping=290;Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==2,"relative boundary keeps target owner instead of server fallback");
         Setup();target.Matched=false;Assert(!Handle(out moved)&&!moved,"mismatched target rejected");
         Setup();target.Ping=400;old.Matched=false;Assert(Handle(out moved)&&!moved,"FGN compatibility gate preserved for old owner");
         Setup();target.Ping=400;mob.Set(ZDOVars.s_tamed,1);Assert(!Handle(out moved)&&!moved,"tamed excluded");
         Setup();target.Ping=400;mob.Set(ZDOVars.s_user,3);Assert(!Handle(out moved)&&!moved,"controlled excluded");
-        Setup();target.Ping=400;mob.Held=true;Assert(!Handle(out moved)&&!moved,"FGN hold respected");
+        Setup();target.Ping=400;mob.Held=true;Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==100,"foreign FGN combat timestamp cannot block a TML target handoff");
         Setup();target.Ping=400;ZNetScene.instance.FindInstance(mob).GetComponent<Character>().Boss=true;Assert(!Handle(out moved)&&moved,"boss uses normal high-ping exception with special rule disabled");
         Setup();target.Ping=400;FgnCombatOwnership.Fgn.PerOwner[1]=6;Assert(!Handle(out moved)&&!moved,"six handoffs per owner cap preserved");
         Setup();target.Ping=400;Set("passMoves",16);Assert(!Handle(out moved)&&!moved,"sixteen handoffs per pass cap preserved");
-        Setup();target.Ping=400;FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]=30;Assert(!Handle(out moved)&&!moved,"FGN declined cooldown preserved");
+        Setup();target.Ping=400;FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]=30;Assert(!Handle(out moved)&&moved,"foreign FGN decline cooldown cannot block a TML target handoff");
         Setup();target.Ping=400;FgnCombatOwnership.Fgn.MarkPending(mob.m_uid,2,Time.realtimeSinceStartupAsDouble);Assert(!Handle(out moved)&&!moved,"FGN pending window preserved");
         Setup();target.Ping=400;Handle(out moved);ServerAccept();target.Ping=100;ZNetScene.instance.FindInstance(mob).GetComponent<Character>().Attack=true;
         Assert(!Handle(out moved)&&!moved&&mob.GetOwner()==100,"return waits for ongoing server attack");
@@ -196,9 +211,11 @@ internal static partial class FgnCombatTests
         hitArgs=new object[]{hits,mob.m_uid,0.0};Assert((bool)localHit.Invoke(null,hitArgs),"server failure OFF notification restores original client damage veto");
         Setup();ZDOMan.instance=new ZDOMan();Call("NativeSetOwner",mob,3L);Assert(mob.GetOwner()==3,"old-world lease cannot pin new world");
         Setup();ai.Target=null;ai.Sleeping=true;mob.SetOwner(3);ZDOMan.Session=3;ZNet.instance.Dedicated=false;Set("serverConfirmed",true);
-        // Initial watch after an owner change includes sleeping actors without a per-AI update hook.
+        // A fresh owner's default-null target is not a completed target search.
         ZNet.instance.Dedicated=true;Call("MarkWatch",mob);ZNet.instance.Dedicated=false;Set("serverConfirmed",true);
-        FgnCombatOwnership.Observe(ai);Assert(FgnCombatOwnership.ReadTarget(mob,out id)&&id.IsNone(),"initial watch publishes no-target report for sleeping new owner");
+        FgnCombatOwnership.Observe(ai);Assert(!FgnCombatOwnership.ReadTarget(mob,out id),"initial watch does not publish transient no-target before AI");
+        FgnCombatOwnership.CompletedAi(ai);FgnCombatOwnership.Observe(ai);
+        Assert(FgnCombatOwnership.ReadTarget(mob,out id)&&id.IsNone(),"successful sleeping AI can publish stable no-target");
         Setup();FgnCombatOwnership.Stop();MethodInfo fgnTry=typeof(FiresGhettoNetworkMod.CreatureOwnership).GetMethod("TryHandOffCreature",flags);
         ConfigFile defaultConfig=new ConfigFile();FgnCombatOwnership.Install(defaultConfig,null,null);
         Assert((bool)defaultConfig.Defaults["EnableAIOwnership"]&&!FgnCombatOwnership.Enabled,"default ON cannot install without required FGN");FgnCombatOwnership.Stop();
@@ -240,7 +257,11 @@ internal static partial class FgnCombatTests
         FriendlyCreatureTests();
         DefaultMobTests();
         InitialMobDefaults();
-        IdentifiedHandoffTests(); BossTargetTests();
+        IdentifiedHandoffTests(); BossTargetTests(); BoundaryTests();
+#if TML_DEBUG_SYSTEM
+            SoloTests();
+#endif
+        MobReadinessRegressions();
         Console.WriteLine("PASS: "+count+" production FGN combat/target/lease/runtime-transpiler assertions; managed doubles, not live Unity/transport.");
     }
 
@@ -264,11 +285,11 @@ internal static partial class FgnCombatTests
         Assert(!Handle(out moved)&&moved&&mob.GetOwner()==2,"server default returns to actual player target");
 
         Setup();Set("serverDefaultsConfigured",true);NoPlayerTarget();ZNetScene.instance.Ready=false;
-        Assert(!Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"idle default preserves native loading readiness");
+        Assert(!Handle(out moved)&&moved&&old.m_rpc.Sent==1&&old.m_rpc.Destination==100,"idle default requests the configured server without broad readiness");
         ZNetScene.instance.Ready=true;Plugin.Native.Active=false;
-        Assert(!Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"idle default preserves invalid PUP block");
+        Assert(!Handle(out moved)&&!moved&&old.m_rpc.Sent==1,"PUP state cannot duplicate an outstanding source commit");
         Plugin.Native.Active=true;NativePup.DestinationReady=false;
-        Assert(!Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"idle default preserves cluster collision proof");
+        Assert(!Handle(out moved)&&!moved&&old.m_rpc.Sent==1,"collision readiness remains independent of an outstanding source commit");
 
         Setup();Set("serverDefaultsConfigured",true);NoPlayerTarget();
         ZNet.instance.Peers.Remove(target);ZNet.instance.Peers.Remove(other);FiresGhettoNetworkMod.CreatureOwnership.Candidates(ZNet.instance.Peers);
@@ -278,18 +299,17 @@ internal static partial class FgnCombatTests
         Assert(!Handle(out moved)&&!moved&&mob.GetOwner()==0,"no active player allows native release instead of permanent server pin");
 
         Setup();Set("serverDefaultsConfigured",true);
-        Assert(Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"valid player target retains existing target-based path");
-        NoPlayerTarget();FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=false;
-        Assert(Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"server defaults ignored without Server-Side Simulation");
+        Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==2,"valid player target keeps guarded target ownership instead of server default");
+        Setup();Set("serverDefaultsConfigured",true);NoPlayerTarget();FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=false;
+        Assert(Handle(out moved)&&!moved&&old.m_rpc.Sent==0,"idle server defaults ignored without Server-Side Simulation");
 
-        foreach(int protection in new[]{0,1,2,3,4,5})
+        foreach(int protection in new[]{0,1,2,3,5})
         {
             Setup();Set("serverDefaultsConfigured",true);NoPlayerTarget();var actor=ZNetScene.instance.FindInstance(mob).GetComponent<Character>();
             if(protection==0)actor.Team=Character.Faction.Players;
             if(protection==1){actor.Tamed=true;mob.Set(ZDOVars.s_tamed,1L);}
             if(protection==2)actor.Boss=true;
             if(protection==3)actor.Riding=true;
-            if(protection==4)mob.Held=true;
             if(protection==5)mob.Set(ZDOVars.s_user,1L);
             Handle(out moved);Assert(!moved&&old.m_rpc.Sent==0,"idle default retains exclusion "+protection);
         }
@@ -333,20 +353,19 @@ internal static partial class FgnCombatTests
             "repeated construction entry adds no writes, readiness work or source RPC");
         mob.Created=true;ZNetScene.instance.Views.Add(mob,loadedView);Call("AiAwakePostfix",ai);
         Assert(FgnCombatOwnership.ShouldOverride(mob.m_uid),"pre-construction server owner adopts the normal deferred AI policy");
-        foreach(int excluded in new[]{0,1,2,3,4,5})
+        foreach(int excluded in new[]{0,1,2,3,5})
         {
             loadedView=UncreatedHostile();
             if(excluded==0)mob.SetOwner(1);
             if(excluded==1)Set("serverDefaultsConfigured",false);
             if(excluded==2)FiresGhettoNetworkMod.ServerAuthorityPatches.SimulationActive=false;
             if(excluded==3)loadedView.GetComponent<Character>().Team=Character.Faction.Players;
-            if(excluded==4)mob.Held=true;
             if(excluded==5)ZNet.instance.Dedicated=false;
             long before=mob.GetOwner();int ownerWrites=mob.OwnerWrites;
             FgnCombatOwnership.InitialMobLoad(mob);
             Assert(mob.GetOwner()==before&&mob.OwnerWrites==ownerWrites,"construction prefix retains existing owner/mode/friendly/use exclusion "+excluded);
         }
-        foreach(int excluded in new[]{-1,0,1,2,3,4,5,6})
+        foreach(int excluded in new[]{-1,0,1,2,3,4,5})
         {
             loadedView=UncreatedHostile();ZDOMan.instance.Data.Remove(mob.m_uid);
             mob.m_uid=new ZDOID(100,77);ZDOMan.instance.Data.Add(mob.m_uid,mob);
@@ -358,7 +377,6 @@ internal static partial class FgnCombatTests
             if(excluded==3)mob.Set(ZDOVars.s_tamed,1);
             if(excluded==4)mob.Persistent=false;
             if(excluded==5)mob.SetFloat(ZDOVars.s_health,0);
-            if(excluded==6)mob.Held=true;
             Call("DefaultLoadedPostfix",mob,loadedView);
             var bornLeases=(System.Collections.IDictionary)service.GetField("managed",flags).GetValue(null);
             Assert(bornLeases.Count==(excluded<0?1:0)&&mob.OwnerWrites==0,
@@ -400,10 +418,10 @@ internal static partial class FgnCombatTests
         for(int i=0;i<20;i++)Handle(out moved);
         Assert(mob.GetOwner()==100&&mob.OwnerWrites==writes&&ZNetScene.instance.AreaCalls==areas&&NativePup.Checks==colliders,
             "idle default stays on server during greeting without repeated writes or collision proofs");
-        target.Matched=true;ai.Target=targetPlayer;ZNetScene.instance.Ready=false;FgnCombatOwnership.Observe(ai);
-        Assert(mob.GetOwner()==100,"confirmed client target still waits for existing server readiness protection");
+        target.Matched=true;ai.Target=targetPlayer;ZNetScene.instance.Ready=false;FgnCombatOwnership.Observe(ai);Handle(out moved);
+        Assert(moved&&mob.GetOwner()==target.m_uid,"confirmed target receives ownership without broad server readiness");
         ZNetScene.instance.Ready=true;Handle(out moved);
-        Assert(moved&&mob.GetOwner()==target.m_uid,"confirmed target receives normal ownership after a delayed greeting");
+        Assert(!moved&&mob.GetOwner()==target.m_uid,"later area readiness cannot duplicate target ownership");
 
         for(int unavailable=0;unavailable<3;unavailable++)
         {
@@ -425,7 +443,7 @@ internal static partial class FgnCombatTests
         view=UncreatedHostile();Call("NativeSetOwner",mob,1L);mob.SetOwner(3);Call("NativeSetOwner",mob,2L);
         Assert(mob.GetOwner()==2&&leases.Count==0,"changed owner/revision cannot inherit an early server pin");
 
-        foreach(int excluded in new[]{0,1,2,3,4,5,8,9,10,11,12,13})
+        foreach(int excluded in new[]{0,1,2,3,4,5,8,9,10,12,13})
         {
             view=UncreatedHostile();var actor=view.GetComponent<Character>();
             if(excluded==0)Set("serverDefaultsConfigured",false);
@@ -437,7 +455,6 @@ internal static partial class FgnCombatTests
             if(excluded==8)mob.Persistent=false;
             if(excluded==9)mob.SetFloat(ZDOVars.s_health,0);
             if(excluded==10)mob.SetOwner(3);
-            if(excluded==11)mob.Held=true;
             if(excluded==12)FiresGhettoNetworkMod.CreatureOwnership.Enabled=false;
             if(excluded==13)mob.OwnerRevision=UInt16.MaxValue;
             Call("NativeSetOwner",mob,1L);
@@ -448,35 +465,35 @@ internal static partial class FgnCombatTests
     private static void NativeReadinessTests()
     {
         Setup();Plugin.Native=null;
-        Assert(!(bool)Call("ServerReady",mob)&&NativePup.Checks==0,"missing native bridge denies server ownership without collision work");
+        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==0,"missing PUP bridge does not block an existing actor owner selection");
         Setup();Plugin.Native.Present=false;Plugin.Native.Active=false;
-        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==0&&ZNetScene.instance.AreaCalls==2,"absent PUP requires native readiness at canonical and live poses without PUP work");
+        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==0&&ZNetScene.instance.AreaCalls==0,"absent PUP adds no duplicate native loading gate");
         Setup();Plugin.Native.Present=false;ZNetView absentView=ZNetScene.instance.FindInstance(mob);absentView.transform.position=mob.GetPosition();
-        Assert((bool)Call("ServerReady",mob)&&ZNetScene.instance.AreaCalls==1,"absent PUP reuses native area proof for equal poses");
+        Assert((bool)Call("ServerReady",mob)&&ZNetScene.instance.AreaCalls==0,"equal actor poses need no area proof");
         Setup();Plugin.Native.Present=false;ZNetScene.instance.AreaReady=p=>p.Equals(mob.GetPosition());
-        Assert(!(bool)Call("ServerReady",mob)&&NativePup.Checks==0,"absent PUP cannot bypass unloaded live-pose area");
+        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==0&&ZNetScene.instance.AreaCalls==0,"unrelated missing live-pose neighbours do not block ownership");
         Setup();Plugin.Native.Present=false;ZNetScene.instance.FindInstance(mob).m_distant=true;
         Assert(!(bool)Call("ServerReady",mob)&&ZNetScene.instance.AreaCalls==0,"absent PUP still requires an actual active mob instance");
         Setup();Plugin.Native.Present=false;mob.Position=new Vector3(float.NaN,0,100);
         Assert(!(bool)Call("ServerReady",mob)&&ZNetScene.instance.AreaCalls==0,"absent PUP denies nonfinite canonical position before native sector queries");
         Setup();Plugin.Native.Present=false;ZNetScene.instance.FindInstance(mob).transform.position=new Vector3(float.PositiveInfinity,0,100);
-        Assert(!(bool)Call("ServerReady",mob)&&ZNetScene.instance.AreaCalls==1,"absent PUP denies nonfinite live pose before its native sector query");
+        Assert(!(bool)Call("ServerReady",mob)&&ZNetScene.instance.AreaCalls==0,"nonfinite live pose is rejected without an area query");
         Setup();Plugin.Native.Active=false;
-        Assert(!(bool)Call("ServerReady",mob)&&NativePup.Checks==0,"inactive PUP cannot authorize server fallback");
+        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==0,"inactive PUP does not block metadata owner selection");
         Setup();ZNetScene.instance.Ready=false;
-        Assert(!(bool)Call("ServerReady",mob)&&NativePup.Checks==0,"unloaded native area denies fallback before readiness calls");
+        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==0&&ZNetScene.instance.AreaCalls==0,"broad native area readiness is not an ownership prerequisite");
         Setup();ZNetView view=ZNetScene.instance.FindInstance(mob);view.transform.position=mob.GetPosition();
-        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==1,"exact-equal live and canonical positions reuse one native collision proof");
+        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==0,"equal live and canonical poses require no duplicate collision proof");
         Setup();view=ZNetScene.instance.FindInstance(mob);view.transform.position=new Vector3(101,0,100);
-        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==2,"different live and canonical positions both require readiness");
+        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==0,"different finite actor poses do not trigger collision scans");
         Setup();NativePup.DestinationReady=false;
-        Assert(!(bool)Call("ServerReady",mob)&&NativePup.Checks==1,"missing canonical collision stops before testing old live pose");
+        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==0,"native canonical collision guard stays independent from owner selection");
         Setup();NativePup.Ready=false;
-        Assert(!(bool)Call("ServerReady",mob)&&NativePup.Checks==2,"ready destination cannot bypass missing live-pose collision");
+        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==0,"native live-pose collision guard stays independent from owner selection");
         Setup();NativePup.OnReady=()=>mob.Position=new Vector3(200,0,100);
-        Assert(!(bool)Call("ServerReady",mob),"readiness cannot certify a ZDO destination changed while preparing collision");
+        Assert((bool)Call("ServerReady",mob)&&NativePup.Checks==0&&mob.GetPosition().Equals(new Vector3(100,0,100)),"owner selection never invokes collision preparation callbacks");
         Setup();NativePup.OnReady=()=>mob.Set(ZDOVars.s_tamed,1);
-        Assert(!(bool)Call("ServerReady",mob),"readiness rechecks tame eligibility after preparing collision");
+        Assert((bool)Call("ServerReady",mob)&&!mob.GetBool(ZDOVars.s_tamed)&&NativePup.Checks==0,"owner selection does not mutate eligibility through collision callbacks");
         Setup();FgnCombatOwnership.Enabled=false;bool moved;
         Assert(Handle(out moved)&&!moved&&NativePup.Checks==0,"disabled target policy leaves native FGN without readiness work");
         Setup();int before=NativePup.Checks;Harmony hooks=new Harmony("combat.native.readiness.fixture");
@@ -699,7 +716,8 @@ internal static partial class FgnCombatTests
             ignore(()=>mob.Set(ZDOVars.s_tamed,1),"taming excludes pending attack-ready event");
             ignore(()=>mob.Set(ZDOVars.s_user,2),"new rider/controller excludes pending attack-ready event");
             ignore(()=>mob.Set("valcast_possessed".GetStableHashCode(),42),"direct possession excludes pending attack-ready event");
-            ignore(()=>mob.Held=true,"FGN combat hold excludes pending attack-ready event");
+            Attack foreignHold=reject();mob.Held=true;end(foreignHold);
+            Assert(ZNet.instance.ServerPeer.m_rpc.AttackReadySent==1,"foreign FGN hold cannot suppress our actual attack-end notification");
             ignore(()=>ai.Target=ZNetScene.instance.FindInstance(mob).GetComponent<Character>(),"non-player current target emits no attack-ready event");
             ignore(()=>targetPlayer.Dead=true,"dead current player target emits no attack-ready event");
             ignore(()=>Set("serverConfirmed",false),"unconfirmed server cannot receive attack-ready events");
@@ -715,7 +733,8 @@ internal static partial class FgnCombatTests
             blocked(()=>ZDOMan.instance.GetZDO(old.m_characterID).Set("toomanylags.fgn.ai.protocol".GetStableHashCode(),2),"old capability cannot trigger new retry endpoint");
             blocked(()=>FgnCombatOwnership.Fgn.PerOwner[1]=6,"attack-ready retries preserve per-owner budget");
             blocked(()=>Set("passMoves",16),"attack-ready retries preserve shared pass budget");
-            blocked(()=>FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]=30,"attack-ready retries preserve unrelated cooldowns");
+            current=reject();end(current);Server();FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]=30;ready();
+            Assert(old.m_rpc.Sent==2&&FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]==30,"our attack-end retry ignores foreign cooldown without deleting its native record");
             blocked(()=>Set("world",new ZDOMan()),"old-world source cannot trigger retry");
             blocked(()=>Set("network",new ZNet()),"old-network source cannot trigger retry");
             current=reject();end(current);Server();
@@ -763,7 +782,7 @@ internal static partial class FgnCombatTests
             finally{context.ThrowPost=false;}
 
             current=reject();end(current);Server();target.Ping=400;NativePup.Ready=false;ready();
-            Assert(old.m_rpc.Sent==1,"high-ping server retry still waits for real collider readiness");
+            Assert(old.m_rpc.Sent==2&&old.m_rpc.Destination==100,"attack-end retry is not blocked by a duplicate collider-loading gate");
             current=reject();end(current);Server();target.Ping=400;ready();
             Assert(old.m_rpc.Destination==100,"close-player high-ping exception still chooses server after attack");
 
@@ -824,12 +843,12 @@ internal static partial class FgnCombatTests
             foreach(string reason in new[]{"staggering","AI target changed","held","owner fighting","tamed","gone"})
             {
                 Setup();arm();result.Invoke(null,new object[]{old.m_rpc,mob.m_uid,false,reason});change(other.m_characterID);
-                Assert(FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]==26&&old.m_rpc.Sent==1,"new target preserves unrelated decline cooldown: "+reason);
+                Assert(FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]==26&&old.m_rpc.Sent==2,"foreign decline memory stays native but cannot delay our new target: "+reason);
             }
             Setup();arm();FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]=30;change(other.m_characterID);
-            Assert(FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]==30&&old.m_rpc.Sent==1,"new target leaves another hook's cooldown unchanged");
+            Assert(FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]==30&&old.m_rpc.Sent==2,"native cooldown stays stored without blocking our new target");
             Setup();arm();FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]=22;change(other.m_characterID);
-            Assert(FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]==22&&old.m_rpc.Sent==1,"new target cannot delete an untracked cooldown");
+            Assert(FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]==22&&old.m_rpc.Sent==2,"untracked cooldown stays native without blocking our new target");
             Action<Action,string> ignored=(alter,name)=>{
                 Setup();arm();FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]=30;alter();change(other.m_characterID);
                 Assert(FgnCombatOwnership.Fgn.Cooldowns[mob.m_uid]==30&&old.m_rpc.Sent==1,name);
@@ -868,6 +887,7 @@ internal static partial class FgnCombatTests
         handoff.Patch(FgnCombatOwnership.Fgn.Veto,postfix:guard==null?null:new HarmonyMethod(guard),
             transpiler:new HarmonyMethod(service.GetMethod("RewriteVeto",flags)));
         handoff.Patch(FgnCombatOwnership.Fgn.TryHandOff,transpiler:new HarmonyMethod(service.GetMethod("RewriteTarget",flags)));
+        handoff.Patch(FgnCombatOwnership.Fgn.OnHandOff,prefix:new HarmonyMethod(service.GetMethod("BeforeOnHandOff",flags)));
         MethodInfo receive=typeof(FiresGhettoNetworkMod.CreatureOwnership).GetMethod("OnHandOff",flags);
         try
         {
@@ -892,8 +912,12 @@ internal static partial class FgnCombatTests
             receive.Invoke(null,new object[]{ZNet.instance.ServerPeer.m_rpc,mob.m_uid,3L});
             Assert(mob.GetOwner()==3&&ZNet.instance.ServerPeer.m_rpc.HandoffAccepted,"no player target retains FGN noncombat lower-ping transfers");
             Setup();Client(1);ai.Target=ZNetScene.instance.FindInstance(mob).GetComponent<Character>();FgnCombatOwnership.Observe(ai);
+            Assert(!(bool)Call("TargetAllowsOwnership",mob),"non-player target helper unexpectedly permits ownership");
+            Assert(!(bool)Call("BeforeOnHandOff",ZNet.instance.ServerPeer.m_rpc,mob.m_uid,3L),
+                "non-player target prefix does not reject the native handoff");
             receive.Invoke(null,new object[]{ZNet.instance.ServerPeer.m_rpc,mob.m_uid,3L});
-            Assert(mob.GetOwner()==3,"non-player target does not gain a player-target handoff veto");
+            Assert(mob.GetOwner()==1&&!ZNet.instance.ServerPeer.m_rpc.HandoffAccepted,
+                "non-player target does not trigger ordinary player-owned ownership transfer");
             Setup();Client(1);ai.Target=ZNetScene.instance.FindInstance(ZDOMan.instance.GetZDO(old.m_characterID)).GetComponent<Player>();Set("serverConfirmed",false);
             receive.Invoke(null,new object[]{ZNet.instance.ServerPeer.m_rpc,mob.m_uid,2L});
             Assert(mob.GetOwner()==2,"unconfirmed server mode retains original FGN receive behavior");

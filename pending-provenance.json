@@ -1,0 +1,23 @@
+{
+  "baseline": "TooManyLags-1.0.63-fgn-1.5.72",
+  "version": "1.0.64",
+  "runtimeChanges": [
+    {
+      "file": "src\\AuthorityController.cs",
+      "before": "FD5B2E7CCE41226DE3B00B5276CEED2D89857367251CC02D7C5EA0F715ED7B6F",
+      "after": "60F4572E0BFB040AC06F29C7DD916AADD583D2D3AE1A657AB6F49B871CFA183E"
+    },
+    {
+      "file": "src\\AuthorityGrid.cs",
+      "before": "3154B28D8DB3237D2F82A1EB54C0A12D9EF58C06EBE487C610A70B822C44CBDB",
+      "after": "EE02650CF230BBAE80B81B9F40E090BBADCEA1669C77D1EEF91BCCC4D14C96F2"
+    },
+    {
+      "file": "src\\Plugin.cs",
+      "before": "D89ADDD23B408181990E244D936E4E6AC1163ED01815C66E8DFAFB6F010EEF08",
+      "after": "914B3957782B421D9C2E1CCAA1A01C20D1E0FC401208233B231547C2C2B242A1"
+    }
+  ],
+  "scope": "Local server-side Pending-work fixes; no new protocol, client guards or physics classification changes.",
+  "liveMultiplayerTested": false
+}

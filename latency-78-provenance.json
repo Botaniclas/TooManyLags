@@ -1,0 +1,13 @@
+{
+  "baselineVersion": "1.0.77",
+  "baselineDllSha256": "346248A73B90E07379D120FC487ABD6BDAE379465502DDB662594A5A5FAAA173",
+  "productionScope": [
+    "FgnSoloCombatTest.cs",
+    "Plugin.cs",
+    "SoloNetworkLatency.cs"
+  ],
+  "defaultVisualBridgeChanged": false,
+  "newAuthorityWrites": false,
+  "realNetworkTested": false,
+  "published": false
+}

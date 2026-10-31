@@ -79,12 +79,12 @@ Enable it if you want more of the remaining simulation on the server and have sp
 
 **`ServerOwnedStaticBuildingsByDefault = false`**
 
-Controls eligible building pieces without interactions, separately from doors, chests and other interactives. With true, these pieces use a server default. By itself, this keeps eligible static pieces on the server rather than sharing them through the grid.
+Controls eligible building pieces and fixed world objects without interactions, including rocks, ore and decorative vines. With true, they use a server default. By itself, this keeps their simulation on the server rather than sharing it through the grid. The separate `PhysicsObjects` category manages movable world props and sources of physical successors, such as trees/logs, under interactive settings. Creatures and PUP FPS clusters are excluded; interactives keep their own settings.
 
 
 **`UseGridForStaticBuildings = false`**
 
-With true, eligible static pieces join the same grid as interactives. **This works independently of `ServerOwnedStaticBuildingsByDefault`:** that setting selects the default outside player fields; `KeepOwnershipOnCellExit` can retain the last owner after leaving. Nearby exclusive fields can belong to a player; overlapping fields belong to the server. PUP FPS clusters stay excluded. Both static options require Server-Side Simulation. Changes require a server restart.
+With true, the same eligible static buildings and world objects join the grid. **This works independently of `ServerOwnedStaticBuildingsByDefault`:** that setting selects the default outside player fields; `KeepOwnershipOnCellExit` can retain the last owner after leaving. Nearby exclusive fields can belong to a player; overlapping fields belong to the server. PUP FPS clusters stay excluded. Both static options require Server-Side Simulation. Changes require a server restart. Update clients as well as the server for early grid handoffs and damage-request routing for the expanded static scope.
 
 Common static setups:
 
@@ -162,12 +162,22 @@ Unchanged coverage creates no new field requests. Standing players still count f
 
 **`EnableAIOwnership = true`** enables target-based ownership. Ordinary Hostile Mobs normally run on their player target's client; attacks and active use protect ongoing actions from an unsafe transfer.
 
+Hostile Mobs can hand off at the current owner's safe target-change boundary without a server permission or return request. The old owner sends final state and ends real simulation immediately after the owner write. The server authenticates the source/epoch and relays it; destination physics guards and subsequent server policy remain. Target identity and the remaining native target-search timer move with the mob, avoiding an immediate search caused by a stale replica timer. Player-only mode retains its existing path.
+
+**`EnableMobHandoffVisualBridge = true`** enables the native simulation bridge during enemy ownership changes. The old owner records locally continued AI, movement and animation from live target input over the measured network window, then replays the immutable recording more slowly. Takeover starts only after an observed new-owner state reaches matching simulation progress, followed by local position/rotation smoothing. Playback can slow further or wait when updates are late. Nearby compatible observers share the same recording in temporary batches at up to 20 sends per second; they do not run another AI/physics simulation. Hitboxes, nameplates and mob-attached effects follow the displayed enemy. Predicted attacks are visual only; late player hits are routed to the current owner. The real actor root, gameplay events and networking retain native authority. Timing uses measured connection latency, the cached owner simulation rate and expected readiness of the first publishable movement step. The finite recording includes a 20% reserve; it is only used when matching real progress has not arrived, rather than forcing a longer transition. Total bridge timing is not a fixed 500 ms latency window. Final position/rotation correction follows live motion with a bounded correction budget. Source position, rotation and velocity are restored through native owner-sync setup; owner-gain presentation blends the older replica pose into the new local simulation without delaying gameplay authority. Locomotion and a matching attack animation continue without deliberately restarting their phase. Set false for native presentation. Server-controlled; restart and update every endpoint together. Unsupported actors retain the safe native fallback.
+
+Updated endpoints also preserve residual knockback, native movement/turn state, accumulated stagger and last-hit attribution. Late damage, status-effect, parry/stagger and healing requests use bounded forwarding. **Active status effects move with the mob**: remaining budgets, elapsed time and tick phase continue without restarting the effect or repeating initial rewards. Existing network effect objects are reused. Unsupported custom runtime references can still refuse a transfer; matching templates and versions are required. Existing attack, riding and other use guards remain active. Update server and participating clients together.
+
+Flying mobs also carry flight mode, flight/landing phase, motion and valid movement goals when both endpoints support the new handoff. This works independently of the display switch. Height presentation follows native movement and briefly reconciles excessive corrections. Update the server and clients; older endpoints keep native handoffs.
+
+**Development debug build only:** local builds include the solo comparison test by default; published releases omit it. Use `build.ps1` (or `build.ps1 -DebugSystem`) and install that variant on both server and client to use `ai_test 100` or `ai_test 200` for simulated round-trip latency. Existing RTT is counted; frame scheduling and jitter still apply. `ai_test stop` restores native traffic; the test also ends after five minutes. Admin-only, one connected player. `ai_test start` keeps native timing. Bare `ai_test` toggles start/stop; `ai_test_v` and `ai_test_vanilla` accept the same arguments for native handoffs without bridge/checkpoint extensions, retaining latency and interval. Both endpoints require the updated debug build. Do not combine with `fgn_netsim`.
+
 The high-ping fallback needs **both** conditions:
 
 - **`ServerFallbackPingMs = 200`:** the target player's measured ping exceeds 200 ms.
 - **`ServerFallbackRadius = 6`:** another eligible player is within 6 metres **of the mob**, not of its target, and has that area loaded.
 
-With Server-Side Simulation, the server can then take over once loading and handoff safeguards allow it. High ping alone does not force server ownership. Without Server-Side Simulation, fallback selects a suitable lower-latency player instead.
+With Server-Side Simulation, the server can then take over once the source-state and active-use safeguards allow it. High ping alone does not force server ownership. Without Server-Side Simulation, fallback selects a suitable lower-latency player instead.
 
 A lower ping limit or larger radius makes fallback apply more often and can increase server CPU use. Setting the ping limit to 0 uses a relative rule: the target must exceed the best other candidate by 250 ms; the nearby-player condition still applies. It does not disable fallback.
 
@@ -186,11 +196,17 @@ On false bosses use same rules like other Hostile Mobs. Not well tested so defau
 
 The **Object Categories** section at the bottom enables or disables broad groups such as doors, containers and tamed animals. Disabled groups keep native vanilla/FiresGhettoNetworking handling. Static building pieces use their separate Simulation Settings switches.
 
-**`LooseItems=true`** includes dropped items in the grid. Leave it enabled; native pickup takes priority over automatic ownership changes. With false, loose items keep native ownership. Update server and clients for this feature; older clients retain native item ownership.
+**`PhysicsObjects = true`** includes simple networked world physics props and stationary objects whose destruction creates physical successors, such as standing trees and their logs. Ordinary loot and visual destruction effects do not qualify a source; projectiles remain excluded. This group follows `ServerOwnedInteractivesByDefault`, the normal grid timers and `KeepOwnershipOnCellExit`.
+
+Loaded unowned objects use the configured default or a settled nearby grid owner. New objects retain native creator ownership so their setup and spawn impulse stay together. Later grid changes for non-interactable bodies require the current owner's body to be sleeping. A genuine return to the server after leaving all player fields with `KeepOwnershipOnCellExit=false` bypasses sleep; overlap-driven server takeovers do not. A rejected moving-body request is discarded and retried only by fresh grid activity, with no sleep-polling timer. Native motion sync and collision holds remain active. Requires Server-Side Simulation and matching updated clients; unsupported multi-body/jointed or incompletely synchronized props retain native handling.
+
+**`LooseItems=true`** includes dropped items and eggs in the grid. Leave it enabled; native pickup takes priority over automatic ownership changes. With ServerOwnedInteractivesByDefault=true, native initial owner assignment also selects the server outside settled player fields. These items retain their separate dynamic pickup/state-transfer path and are not PhysicsObjects. With false, loose items keep native ownership. Update server and clients for guarded grid handoffs; older clients retain native item ownership.
 
 
 
 ## Optional PUP FPS compatibility
+
+With PUP installed, mob transfers onto the server wait for local collision readiness; server-to-player returns do not. The compatibility switch also prioritises native collision preparation for already blocked server mobs within 40 metres of a player. It does not disable PUP's own collision safeguards. Idle tamed animals use source-confirmed grid handoffs and need updated clients; attacks, riding/following and active use retain their owner.
 
 `EnablePupCompatibility=true`  adds the built-in collision/stability guards when PUP FPS is present. No separate BotanicPupPatch is needed. Without the required mods, or when a separate PupPatch is detected, the embedded module stays completely inactive. Configure this switch locally on each installation and restart; see **Compatibility** for details.
 
@@ -206,4 +222,5 @@ tml_config GridCellSizeMeters
 tml_config OuterTransitionDelaySeconds 2
 ```
 
-Use `tml_config <Key>` to read a setting and `tml_config <Key> <Value>` to save it. Check intervals, camera overlap/prediction, transition delays, overlap cooldown and mob fallback ping/radius apply live. Other settings require a **server restart**; the reply confirms this and shows pending values. Manual config-file edits require a restart. Clients receive server settings when connecting; live camera changes are sent automatically. `EnableLogs` affects only the machine where it is changed.
+Use `tml_config <Key>` to read a setting and `tml_config <Key> <Value>` to save it. Check intervals, camera overlap/prediction, transition delays, overlap cooldown and mob fallback ping/radius apply live. Other settings require a **server restart**; the reply confirms this and shows pending values. Manual config-file edits require a restart. Clients receive server settings when connecting; live camera changes are sent automatically. `EnableLogs` enables optional on-demand console diagnostics on the machine where it is changed; it does not enable continuous informational logging or profiling. Real errors and failed optional features are always reported to its BepInEx log. Explicit test-command feedback stays in the requesting console.
+

@@ -12,9 +12,17 @@ if($LASTEXITCODE -ne 0){throw 'Grid compile failed.'}
 & $authorityGridExe
 if($LASTEXITCODE -ne 0){throw 'Grid tests failed.'}
 $authoritySources=Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' | Where-Object { $_.Name -notin @('Plugin.cs','GridHandoffProtocol.cs','ConfigCommands.cs','ConfigConsole.cs','ServerSession.cs','FgnSessionSettings.cs','MobPolicyHandoff.cs','FgnCombatOwnership.cs','FgnMobHandoff.cs','FgnBossPolicy.cs','FgnCombatBridge.cs','FgnCombatStatus.cs','FgnTargetEvents.cs','FgnAttackRetry.cs','NativePup.cs','CellReadiness.cs') } | Select-Object -ExpandProperty FullName
+$authoritySources=@($authoritySources | Where-Object { [IO.Path]::GetFileName($_) -notin @('FgnTargetBoundary.cs','FgnSoloCombatTest.cs','MobCollisionReadiness.cs','MobHandoffVisual.cs','MobVisualCurve.cs','SoloNetworkLatency.cs','MobFlightHandoff.cs','MobCombatState.cs','MobStatusState.cs','MobSourceHandoff.cs','MobObserverHandoff.cs','MobNativePublication.cs') })
 $authorityFixtures=@('RuntimeFixtures.cs','ExtraFixtures.cs','InteractionFixtures.cs','FgnRpcFixtures.cs','IntegrationTests.cs','WorldInteractionTests.cs','StaticGridTests.cs') | ForEach-Object {Join-Path $PSScriptRoot ('tests\'+$_)}
 $authorityFixtures+=Join-Path $PSScriptRoot 'tests\TextEditingGridTests.cs'
 $authorityFixtures+=Join-Path $PSScriptRoot 'tests\LooseItemTests.cs'
+$authorityFixtures+=Join-Path $PSScriptRoot 'tests\PhysicsWorldTests.cs'
+$authorityFixtures+=Join-Path $PSScriptRoot 'tests\PendingWorkTests.cs'
+$authorityFixtures+=Join-Path $PSScriptRoot 'tests\NetworkBatchTests.cs'
+$authorityFixtures+=Join-Path $PSScriptRoot 'tests\StateTransferFixtures.cs'
+$authorityFixtures+=Join-Path $PSScriptRoot 'tests\MergedInitialOwnershipTests.cs'
+$authorityFixtures+=Join-Path $PSScriptRoot 'tests\TamedHandoffTests.cs'
+$authorityFixtures+=Join-Path $PSScriptRoot 'tests\InventoryParkingTests.cs'
 $authoritySources=@($authoritySources | Where-Object { [IO.Path]::GetFileName($_) -notin @('ConfigLayout.cs','ConfigTemplate.cs') })
 $authoritySources+=@('AuthorityController.cs','AuthorityGrid.cs','RegionContentionGate.cs','OwnershipCadence.cs','CameraHeading.cs') | ForEach-Object { Join-Path $PSScriptRoot ('src/PlayerSimulation/'+$_) }
 $authorityFixtures+=Join-Path $PSScriptRoot 'tests/TextEditingPlayerGridTests.cs'

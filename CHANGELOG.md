@@ -1,5 +1,44 @@
 # Changelog
 
+## 2.0.0
+
+A complete rebuild of the systems behind TooManyLags' ownership logic. The goal stays the same: responsive local interactions and smoother multiplayer combat, with less network traffic and safer ownership changes.
+
+- **Less grid bandwidth.** Compact, batched handoffs and reuse of unchanged object state reduce the traffic needed to keep the ownership grid running.
+- **Safer object transfers.** Safeguards across supported object categories handle busy inventories, delayed updates, loading boundaries and repeated ownership changes. Objects retain a safe owner while a transfer cannot complete.
+- **Physics objects and destruction.** The `PhysicsObjects` category covers movable world props and objects that create physical successors when destroyed, such as trees and logs. Moving bodies wait until they are at rest before an automatic grid transfer; projectiles, visual debris and ordinary loot are excluded.
+- **A real simulation bridge for enemy handoffs.**
+  - Transfers the enemy's AI and movement state, attack cooldowns, flight state and active effects so the new owner can continue where the old one left off.
+  - Bridges the latency gap with locally continued native simulation, replayed smoothly until the new owner's simulation reaches the same point.
+  - Blends back into live movement instead of snapping to a delayed position, reducing freezes and backward jumps during high-latency ownership changes. Nearby observers can share the same recorded transition.
+  - Keeps hitboxes, nameplates and attached effects aligned with the displayed enemy. Hits during the transition continue to reach its current owner.
+  - Restores locomotion animation immediately at ownership changes, avoiding an idle pose while the enemy is already moving or preparing an attack.
+  - Joins a matching attack at its current animation phase instead of retriggering it, preventing visible attack restarts during fake playback and takeover.
+  - Clears test and handoff presentation immediately when an ownership test stops, so a delayed visual cannot remain displaced from the mob until the next test starts.
+- **Continuous owner-gain presentation.** Preserves the source position, rotation and velocity through native owner-sync setup, and blends the visible replica into the new local simulation. Final smoothing follows live motion and uses measured update readiness, with a bounded correction window.
+- **Less background overhead.** Removes routine debug logging and profiling from normal builds; genuine errors remain visible. One-time bridge reflection, delegate and JIT setup is prepared in small staged steps during the session instead of the first ownership change.
+- **Shorter transitions on fast connections.** Uses measured connection timing instead of a conservative ownership-policy fallback that could unnecessarily stretch the simulation bridge.
+- **Smoother low-ping handoffs.** Publishes completed movement independently of AI timing, uses received matching positions immediately and plans short recordings around actual physics steps. Reduces unnecessary near-stops; genuinely late updates can still require slowing or waiting.
+- **More resilient handoff buffers.** Accounts for the new owner's first publishable movement step and keeps 20% recording reserve for unexpected delays. Uses matching real progress as soon as available; unused reserve does not extend the visible transition.
+- **Lighter handoff playback.** Avoids unused skeleton interpolation during native locomotion, reduces animation-recording allocations and removes unnecessary pose storage on spectator relays. Very short recordings now move from the start, and clean final corrections no longer have an added 20 ms minimum.
+- **Less handoff setup and effect overhead.** Avoids repeated rig-hierarchy scans and reuses temporary storage for attached-effect updates while keeping the same animations and effects.
+
+**Update the dedicated server and every client together.** The simulation bridge is enabled by default through `EnableMobHandoffVisualBridge`. Existing ownership settings remain available. Enemies targeting you still normally run on your client; shared-combat and configured server-fallback rules still apply.
+
+**1.0.63**
+```
+- Restores station handoff integration with FiresGhettoNetworking 1.5.72 in both simulation modes. Keeps target-based Hostile Mob ownership compatible with its new native combat safeguards and respects its excluded companion prefabs.
+```
+
+**1.0.62**
+```
+- Reduces repeated state payloads on ownership changes with Server-Side Simulation: unchanged objects use ownership-only native updates; changed/initial state stays complete. Adds bounded missing-state recovery and removes duplicate forced/ordinary records. Requires updated endpoints; unsupported contracts retain full native payloads. Existing usage/readiness guards and priorities remain active.
+- Fixes eligible fixed building/world roots being skipped because of visual or mod scripts, including rocks, ore and PlantEverything's decorative vines. Configured early server defaults respect settled player fields; creatures and PUP FPS clusters remain separate. Update server and clients for early grid handoffs and rock-hit routing.
+- Gives loose items, including eggs, the interactive server default directly during native initial owner assignment; settled player fields retain priority. Existing active owners, physics readiness and native pickup remain protected. Server update only for this fix.
+- Adds PhysicsObjects under interactive categories for synchronized world props and sources of physical successors, such as trees/logs; excludes projectiles, visual debris and ordinary loot. Normal body transfers require sleep at the owner; genuine vacant-field server returns bypass sleep. Native spawns retain creator ownership. Requires Server-Side Simulation and updated clients.
+- Batches small grid handoff requests and replies without an extra waiting interval. Failed sends remain isolated per connection, with individual-message fallback if packaging fails. Existing priorities, usage/readiness guards and token checks remain active; older peers retain individual messages. Update server and clients to use batching.
+```
+
 **1.0.57**
 ```
 - Assigns configured server defaults to eligible unowned mobs before server construction and preserves server ownership for server-created newborns. Existing owners, player grid claims and handoff guards remain protected. Server update only; existing clients and configs remain compatible.
@@ -147,3 +186,4 @@
 ```
 - CameraHeadingCheckIntervalSeconds now accepts 0.05–5 seconds, allowing up to 20 camera-direction checks per second. The default remains 0.1 seconds.
 ```
+

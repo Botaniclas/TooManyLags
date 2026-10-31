@@ -73,119 +73,57 @@ internal static partial class IntegrationTests
     }
     private static void DestinationLoadProtocol()
     {
-        int initial=checks;Plugin.Warnings.Clear();
-        Fresh(Kinds.Doors|Kinds.Containers,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true,checkIntervalSeconds:.05f);
-        var first=Peer(1);var second=Peer(2);var serverPeer=new ZNetPeer{Uid=99,m_server=true};ZNet.instance.Peers.Add(serverPeer);
-        var door=Object(typeof(Door),1,1,99);door.DataRevision=3;var view=ZNetScene.instance.FindInstance(door);
-        var animated=new GameObject();animated.transform.parent=view.transform;view.gameObject.Children.Add(animated);animated.Add(new Rigidbody{isKinematic=true,useGravity=false});
-        controller.Unregister(view);controller.Register(door,view);
-        GridStart();
-        try
+        int before=checks;
+        foreach(Type type in new[]{typeof(Door),typeof(Pickable),typeof(Container),typeof(Fireplace),typeof(CraftingStation)})
         {
-            GridHello(first,true);GridHello(second,true);var sent=GridCapture(first);
-            ZNetScene.instance.Ready=delegate{return false;};Tick(0);MovePeer(second,1024);Tick(.1f);
-            Check("server-area gap queries only destination and retains owner",sent.Count==1&&door.GetOwner()==99);
-            long token=GridToken(sent[0]);
-            GridReceive(first,GridReply(door,token+1,true));Tick(.2f);
-            GridReceive(second,GridReply(door,token,true));Tick(.3f);
-            Check("wrong nonce and wrong authenticated peer cannot authorize",door.GetOwner()==99&&sent.Count==1);
-            Tick(.7f);Check("slow response remains valid across retries",GridToken(sent[1])==token);
-            Check("client-area gap rejects pre-owner proof",!GridReplyAvailable(GridClientReply(serverPeer,sent[1],false)));
-            door.DataRevision=2;
-            Check("recipient state below captured minimum cannot prove ready",!GridReplyAvailable(GridClientReply(serverPeer,sent[1],true)));
-            door.DataRevision=4;
-            Check("current data can satisfy captured minimum without restarting token",GridReplyAvailable(GridClientReply(serverPeer,sent[1],true)));
-            view.gameObject.activeInHierarchy=false;
-            Check("inactive exact object cannot prove ready",!GridReplyAvailable(GridClientReply(serverPeer,sent[1],true)));view.gameObject.activeInHierarchy=true;
-            Vector3 pos=door.Position;door.Position=new Vector3(2,0,1);
-            Check("moved object cannot answer old position proof",!GridReplyAvailable(GridClientReply(serverPeer,sent[1],true)));door.Position=pos;
-            ushort rev=door.OwnerRevision;door.OwnerRevision++;
-            Check("changed owner revision cannot answer old proof",!GridReplyAvailable(GridClientReply(serverPeer,sent[1],true)));door.OwnerRevision=rev;
-            door.SetOwnerInternal(1);
-            Check("pre-owner proof requires authenticated server ownership",!GridReplyAvailable(GridClientReply(serverPeer,sent[1],true)));door.SetOwnerInternal(99);
-            // Simulate an existing residence barrier while the exact native
-            // destination proof is in flight. The actual reply must wake the
-            // scheduler as well as the controller's cadence.
-            var readinessNode=controller.RequestNode(door.m_uid,"UseDoor".GetStableHashCode());
-            var scheduling=(AuthorityWorld)typeof(AuthorityController).GetField("indexed",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(controller);
-            readinessNode.NotBefore=10f;scheduling.Received(readinessNode,.7f);Tick(.705f);
-            int waitingVisits=scheduling.Attempts;Tick(.706f);
-            Check("future native load job waits for its original deadline",scheduling.Attempts==waitingVisits&&door.GetOwner()==99);
-            GridReceive(first,GridClientReply(serverPeer,sent[1],true));
-            // The retained request wakes the next frame; it never writes inside the RPC.
-            Check("proof reply alone makes no owner write",door.GetOwner()==99);
-            Time.unscaledTime=.71f;controller.Poll(.71f);
-            Check("valid destination world proof resumes exact static handoff",door.GetOwner()==1&&GridCacheCount()==0);
-            Check("authenticated native load reply bypasses the old object deadline without a scheduler sleep gate",scheduling.Attempts==waitingVisits+1&&readinessNode.NotBefore<10f);
-            int calls=sent.Count;for(int i=0;i<1000;i++)Tick(1+i*.05f);
-            Check("settled object creates no repeated load queries",sent.Count==calls);
-            uint minimum;Check("post-write delivery still requires new recipient revision",controller.TryRecipientState(door,1,out minimum));
-            Check("old proof cannot satisfy post-owner readiness",!TooManyLags.GridHandoffs.Protocol.Ready(ZDOMan.instance,1,door));
-            GridReceive(first,GridReply(door,token,true));
-            Check("old pre-owner nonce does not unlock newer delivery proof",!TooManyLags.GridHandoffs.Protocol.Ready(ZDOMan.instance,1,door));
-            controller.Unregister(view);Check("unload removes all per-object proof state",GridCacheCount()==0);
+            Fresh(Kinds.Doors|Kinds.Pickables|Kinds.Containers|Kinds.Fireplaces|Kinds.Workstations,
+                defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true,keepOnExit:false);
+            var peer=Peer(1);GridStart();
+            try
+            {
+                HarvestHello(peer);var sent=GridCapture(peer);
+                ZNetScene.instance.Ready=delegate{throw new Exception("Ownership must not query broad readiness.");};
+                var data=Object(type,1,1,99);Tick(0);
+                Check("loaded red object transfers without a loading query: "+type.Name,data.GetOwner()==1&&sent.Count==0&&ZNetScene.instance.AreaQueries==0);
+                var absent=UncreatedInteraction(type);Tick(.1f);
+                Check("missing server instance does not delay initial player acquisition: "+type.Name,absent.GetOwner()==1&&!absent.Created&&!ZNetScene.instance.FindInstance(absent)&&sent.Count==0);
+                int attempts=controller.ScheduledAttempts;
+                for(int i=1;i<=50;i++)Tick(.1f+i*.05f);
+                Check("settled initial ownership has no proof retries: "+type.Name,controller.ScheduledAttempts==attempts&&sent.Count==0&&ZNetScene.instance.AreaQueries==0);
+            }
+            finally{TooManyLags.GridHandoffs.Protocol.Stop();}
         }
-        finally {TooManyLags.GridHandoffs.Protocol.Stop();}
-
-        // Existing/legacy clients retain the complete old area guard, without
-        // sending a new message they cannot understand or requiring a version.
         Fresh(Kinds.Doors,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true);
-        first=Peer(1);door=Object(typeof(Door),1,1,99);GridStart();
+        var source=Peer(7);var nearby=Peer(1);GridStart();
         try
         {
-            GridHello(first,false);var sent=GridCapture(first);ZNetScene.instance.Ready=delegate{return false;};Tick(0);Tick(1);
-            Check("legacy client keeps area guard without new RPC",door.GetOwner()==99&&sent.Count==0);
-            ZNetScene.instance.Ready=delegate{return true;};Tick(2);
-            Check("normal ready path creates no load-proof work",door.GetOwner()==1&&sent.Count==0&&GridCacheCount()==0);
+            HarvestHello(source);HarvestHello(nearby);var messages=GridCapture(source);var active=Object(typeof(Door),1,1,7);
+            ZNetScene.instance.Ready=delegate{throw new Exception("Source handoff must not query broad readiness.");};Tick(0);
+            Check("active player source is not forcibly stolen when a loading gate disappears",active.GetOwner()==7&&active.Writes==0&&messages.Count==1);
         }
-        finally {TooManyLags.GridHandoffs.Protocol.Stop();}
-
-        // The alternative proof does not apply to source-client commits,
-        // physics actors, local open use, or a server destination.
-        Fresh(Kinds.Doors|Kinds.Containers|Kinds.TamedAnimals|Kinds.Vehicles,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true);
-        first=Peer(1);second=Peer(2,64);door=Object(typeof(Door),1,1,2);
-        var chest=Object(typeof(Container),2,1,99);var chestView=ZNetScene.instance.FindInstance(chest);chestView.GetComponent<Container>().InUse=true;
-        var moving=Object(typeof(Door),1,2,99);var movingView=ZNetScene.instance.FindInstance(moving);
-        controller.Unregister(movingView);movingView.gameObject.Add(new Rigidbody());controller.Register(moving,movingView);
-        var animal=Object(typeof(Character),2,2,99);animal.Tamed=true;controller.Unregister(ZNetScene.instance.FindInstance(animal));controller.Register(animal,ZNetScene.instance.FindInstance(animal));
-        GridStart();
-        try
-        {
-            GridHello(first,true);GridHello(second,true);var sent=GridCapture(first);ZNetScene.instance.Ready=delegate{return false;};Tick(0);Tick(1);
-            Check("source client, rigidbody, tame and local open chest keep original guard",door.GetOwner()==2&&moving.GetOwner()==99&&animal.GetOwner()==99&&chest.GetOwner()==99&&sent.Count==0);
-            chestView.GetComponent<Container>().InUse=false;Tick(2);
-            Check("closing chest enables only its pending load query",sent.Count==1&&chest.GetOwner()==99);
-            long token=GridToken(sent[0]);chest.OwnerRevision++;Tick(3);
-            GridReceive(first,GridReply(chest,token,true));Tick(3.1f);
-            Check("old server revision cannot unlock changed snapshot",chest.GetOwner()==99);
-            MovePeer(first,4);Tick(3.2f);var last=sent[sent.Count-1];long nextToken=GridToken(last);
-            GridReceive(first,GridPacket(8,delegate(ZPackage p){p.Write(chest.m_uid);p.Write(nextToken);}));Tick(3.3f);
-            Check("load-loss notification leaves transfer guarded",chest.GetOwner()==99);
-            controller.Unregister(chestView);Check("unload also removes outstanding pre-owner proof",GridCacheCount()==0);
-            GridReceive(first,GridReply(chest,nextToken,true));Check("reply cannot recreate unloaded object proof",GridCacheCount()==0);
-            controller.Register(chest,chestView);Tick(3.4f);
-            ZNet.instance.Disconnect(first);Check("disconnect retires destination proof cache",GridCacheCount()==0);
-            GridReceive(first,GridReply(chest,nextToken,true));Check("removed transport cannot restore proof",GridCacheCount()==0);
-        }
-        finally {TooManyLags.GridHandoffs.Protocol.Stop();}
+        finally{TooManyLags.GridHandoffs.Protocol.Stop();}
         Fresh(Kinds.Doors,defaultInteractives:true,cellSize:4,pattern:GridCoveragePattern.Rounded7x7,directional:true);
-        first=Peer(1);second=Peer(2);door=Object(typeof(Door),1,1,1);GridStart();
+        var target=Peer(1);var server=new ZNetPeer{Uid=99,m_server=true};ZNet.instance.Peers.Add(server);GridStart();
         try
         {
-            GridHello(first,true);GridHello(second,true);var a=GridCapture(first);var b=GridCapture(second);
-            ZNetScene.instance.Ready=delegate{return false;};Tick(0);Tick(1);
-            Check("server destination retains its own full area check",door.GetOwner()==1&&a.Count==0&&b.Count==0);
+            HarvestHello(target);var sent=GridCapture(target);var data=Object(typeof(Door),1,1,99);
+            ZNetScene.instance.Ready=delegate{throw new Exception("State receipt must not query broad readiness.");};Tick(0);
+            Check("ownership finishes before any state-receipt request",data.GetOwner()==1&&sent.Count==0);
+            Check("exceptional recipient requirement remains a separate state check",!RequestRouter.RecipientReady(ZDOMan.instance,1,data)&&sent.Count==1);
+            var view=ZNetScene.instance.FindInstance(data);ZNetScene.instance.Views.Remove(data);
+            var reply=GridClientReply(server,sent[0],false);
+            Check("routed action still needs its exact RPC instance, not a broad ready area",!GridReplyAvailable(reply)&&ZNetScene.instance.AreaQueries==0);
+            ZNetScene.instance.Views.Add(data,view);reply=GridClientReply(server,sent[0],false);
+            Check("exact live receiver is sufficient despite unrelated missing neighbours",GridReplyAvailable(reply)&&ZNetScene.instance.AreaQueries==0);
+            GridReceive(target,reply);
+            Check("matching receipt releases routed use without broad load wait",RequestRouter.RecipientReady(ZDOMan.instance,1,data));
+            data.OwnerRevision++;
+            var stale=GridClientReply(server,sent[0],false);
+            Check("stale owner revision still cannot certify state",!GridReplyAvailable(stale));
         }
-        finally {TooManyLags.GridHandoffs.Protocol.Stop();}
-        Check("valid protocol exercise logs no rejection",Plugin.Warnings.Count==0);
-        Check("stop clears destination hook and caches",AuthorityController.DestinationLoaded==null&&GridCacheCount()==0);
-        DestinationStateTraffic();
-        DestinationGrantCancellation();
-        NormalDestinationWork();
-        DeferredStartupProof();
-        WaitingDestinationWork();
-        HarvestLoading();
-        Console.WriteLine("PASS: "+(checks-initial)+" actual grid-protocol/controller assertions: authenticated object/world proof, stable retries, normal/legacy zero-RPC path, open-use/physics guards and lifecycle cleanup.");
+        finally{TooManyLags.GridHandoffs.Protocol.Stop();}
+        Check("stop clears initial capability and state receipts",AuthorityController.InitialClient==null&&GridCacheCount()==0);
+        Console.WriteLine("PASS: "+(checks-before)+" ownership-without-load-gates assertions: loaded roots, absent server instances, zero readiness scans/probe RPCs, state-only receipts and stale-revision rejection.");
     }
     private static void DestinationStateTraffic()
     {

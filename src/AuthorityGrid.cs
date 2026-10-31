@@ -217,6 +217,7 @@ namespace TooManyLags
         { if (Single.IsNaN(value) || Single.IsInfinity(value)) return fallback; value %= 360f; return value < 0 ? value + 360f : value; }
         internal long Owner(Cell cell) { Policy p; return policies.TryGetValue(cell, out p) ? p.Owner : 0L; }
         internal long Candidate(Cell cell) { Policy p; return policies.TryGetValue(cell, out p) ? p.Candidate : 0L; }
+        internal bool Covered(Cell cell) { Policy p; return policies.TryGetValue(cell, out p) && p.Count != 0; }
         // Current coverage, not owner or delay: shared red fields stay urgent,
         // and only completely vacated fields are background return work.
         internal int WorkPriority(Cell cell)
@@ -478,6 +479,7 @@ namespace TooManyLags
         internal long ConfirmedFieldOwner;
         internal AuthorityWorld.ObjectBucket IndexedBucket;
         internal float NotBefore;
+        internal bool WaitingForFieldTimer;
         internal abstract long CurrentOwner { get; }
         // Done: safely applied/no-op. Pending: retry only this node next cycle.
         // Dropped: retain native ownership and await a relevant new event.
@@ -499,6 +501,7 @@ namespace TooManyLags
             internal int Priority;
         }
         internal readonly AuthorityGrid Grid;
+        internal Action PriorityLaneCompleted = null;
         private readonly Dictionary<Cell, ObjectBucket> buckets = new Dictionary<Cell, ObjectBucket>();
         private readonly HashSet<AuthorityNode> pending = new HashSet<AuthorityNode>();
         private readonly List<ObjectBucket> priorityBuckets = new List<ObjectBucket>();
@@ -589,6 +592,9 @@ namespace TooManyLags
                 foreach (AuthorityNode node in bucket.Nodes)
                 {
                     node.ConfirmedFieldOwner = 0;
+                    // A changed/committed field supersedes its former deadline.
+                    // Do not add another full delay after a shortened timer.
+                    if (node.WaitingForFieldTimer) { node.WaitingForFieldTimer = false; node.NotBefore = now; }
                     if (pending.Add(node)) node.NotBefore = now;
                     else if (Grid.Directional)
                     {
@@ -612,22 +618,35 @@ namespace TooManyLags
             {
                 // Red, forward, outer, then vacated/default ownership. Every
                 // due lane runs this pass: no new quota, timer or starvation.
-                foreach (List<AuthorityNode> lane in work) foreach (AuthorityNode node in lane)
+                foreach (List<AuthorityNode> lane in work)
                 {
-                    if (node.Removed || !pending.Contains(node)) continue;
-                    if (Grid.Accelerations.Count != 0 && Grid.Accelerations.Contains(node.Cell))
-                        node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(node.Cell));
-                    if (now < node.NotBefore) continue;
-                    Count(ref Attempts, 1);
-                    ApplyResult result = node.Apply(Grid.Owner(node.Cell));
-                    if (result != ApplyResult.Pending) pending.Remove(node);
-                    if (result == ApplyResult.Dropped) node.Managed = false;
-                    else if (result == ApplyResult.Done && keepOnExit && !node.Removed) Confirm(node);
+                    foreach (AuthorityNode node in lane)
+                    {
+                        if (node.Removed || !pending.Contains(node)) continue;
+                        if (Grid.Accelerations.Count != 0 && Grid.Accelerations.Contains(node.Cell))
+                            node.NotBefore = Math.Min(node.NotBefore, now + Grid.Wait(node.Cell));
+                        if (now < node.NotBefore) continue;
+                        Count(ref Attempts, 1);
+                        ApplyResult result = node.Apply(Grid.Owner(node.Cell));
+                        if (result != ApplyResult.Pending) pending.Remove(node);
+                        if (result == ApplyResult.Dropped) node.Managed = false;
+                        else if (result == ApplyResult.Done && keepOnExit && !node.Removed) Confirm(node);
+                    }
+                    // Flush a red tail before beginning lower-priority work.
+                    if (lane.Count != 0 && PriorityLaneCompleted != null) PriorityLaneCompleted();
                 }
             }
             finally { foreach (List<AuthorityNode> lane in work) lane.Clear(); }
         }
         internal void Dismiss(AuthorityNode node) { Invalidate(node); pending.Remove(node); node.Managed = false; }
+        // Parking a prerequisite must retain the established owner's native
+        // release protection. This is not a refusal or an ownership reset.
+        internal void Suspend(AuthorityNode node) { pending.Remove(node); }
+        internal void WaitForFieldTimer(AuthorityNode node, float now)
+        {
+            node.WaitingForFieldTimer = true;
+            node.NotBefore = now + Grid.Remaining(node.Cell, now);
+        }
         internal int BatchPriority(AuthorityNode node)
         {
             ObjectBucket bucket = node.IndexedBucket;
@@ -645,7 +664,7 @@ namespace TooManyLags
             foreach (ObjectBucket bucket in priorityBuckets) bucket.PriorityCached = false;
             priorityBuckets.Clear();
         }
-        private void Queue(AuthorityNode node, float at) { node.NotBefore = at; pending.Add(node); }
+        private void Queue(AuthorityNode node, float at) { node.WaitingForFieldTimer = false; node.NotBefore = at; pending.Add(node); }
         private void Invalidate(AuthorityNode node)
         {
             if (!keepOnExit) return;

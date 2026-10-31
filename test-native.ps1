@@ -26,7 +26,7 @@ $hash = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash
 $results = @()
 $actorResult = @()
 $failed = $false
-foreach ($version in @('1.5.41', '1.5.36', '1.5.65')) {
+foreach ($version in @('1.5.41', '1.5.36', '1.5.72')) {
     $fgn = Join-Path $FgnCache ($version + '\VAGhettoNetworking.dll')
     if (!(Test-Path -LiteralPath $fgn)) { $fgn = Join-Path $FgnCache ($version + '\plugins\FiresGhettoNetworking\VAGhettoNetworking.dll') }
     $lines = @(& $audit $dll $managed $core $fgn $version 2>&1)
@@ -42,7 +42,7 @@ foreach ($version in @('1.5.41', '1.5.36', '1.5.65')) {
         if ($actorStatus -ne 0) { $failed = $true; break }
     }
 }
-foreach ($providerVersion in @('1.5.53', '1.5.65')) {
+foreach ($providerVersion in @('1.5.53', '1.5.72')) {
     if ($failed) { break }
     # Latest provider: target the reported Pickable collision. Full networking
     # and simulation-mode contracts retain their separate validated baselines.

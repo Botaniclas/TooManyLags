@@ -1,13 +1,16 @@
 param(
     [string]$PackagePath,
-    [string]$CliDll = (Join-Path (Split-Path $PSScriptRoot) 'tools\thunderstore-cli\package\tools\net7.0\any\tcli.dll')
+    [string]$CliDll = (Join-Path (Split-Path $PSScriptRoot) 'tools\thunderstore-cli\package\tools\net7.0\any\tcli.dll'),
+    [switch]$ValidateOnly
 )
 $ErrorActionPreference = 'Stop'
 $manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'manifest.json') -Raw | ConvertFrom-Json
 if (-not $PackagePath) {
-    $PackagePath = Join-Path (Split-Path (Split-Path $PSScriptRoot)) ('outputs\TooManyLags-FGNAddon-' + $manifest.version_number + '.zip')
+    $PackagePath = Join-Path (Split-Path (Split-Path $PSScriptRoot)) ('outputs\TooManyLags-FGNAddon-Combined-' + $manifest.version_number + '.zip')
 }
-foreach ($inputFile in @($PackagePath, $CliDll)) {
+$publishInputs = @($PackagePath)
+if (!$ValidateOnly) { $publishInputs += $CliDll }
+foreach ($inputFile in $publishInputs) {
     if (-not (Test-Path -LiteralPath $inputFile -PathType Leaf)) { throw ('Missing publish input: ' + $inputFile) }
 }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -19,11 +22,13 @@ try {
         throw 'Package manifest differs from the project manifest.'
     }
     $verification = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verification.json') -Raw | ConvertFrom-Json
+    if ($verification.debugSystem -or !$verification.releaseVerified) { throw 'Publication requires verify.ps1 -Release; debug development builds cannot be published.' }
     $dllStream = $archive.GetEntry('TooManyLags.dll').Open()
     $sha = [Security.Cryptography.SHA256]::Create()
     try { $dllHash = [BitConverter]::ToString($sha.ComputeHash($dllStream)).Replace('-', '') } finally { $sha.Dispose(); $dllStream.Dispose() }
     if ($verification.version -ne $manifest.version_number -or $dllHash -ne $verification.dllSha256) { throw 'Package DLL is not the verified release.' }
 } finally { $archive.Dispose() }
+if ($ValidateOnly) { Write-Output 'Release package validated; no network access or publication performed.'; return }
 $remotePackage = Invoke-RestMethod -Uri ('https://thunderstore.io/api/experimental/package/Botaniclas/' + $manifest.name + '/')
 if ([Version]$remotePackage.latest.version_number -ge [Version]$manifest.version_number) {
     throw ('Thunderstore already has version ' + $remotePackage.latest.version_number + '. No upload performed.')

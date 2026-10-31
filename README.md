@@ -2,6 +2,14 @@
 
 Built to avoid almost all connection-related lag. TooManyLags is a multiplayer optimisation addon that brings nearby interactions to your own client and gives Hostile Mobs smarter ownership. Go beyond Server-Side Simulation: install, play, and never look back.
 
+## New in 2.0
+
+Rebuilt ownership handling with less grid traffic, safer object transfers and a native simulation bridge for enemy handoffs. During a transfer, the old owner records continued native simulation and shows it at reduced speed while waiting for matching movement from the new owner. Nearby compatible observers can share that recording. Hitboxes, nameplates and attached effects follow the displayed enemy; predicted attacks are visual only and player hits still reach the current owner.
+
+2.0 also carries movement and animation state through ownership changes, including server-to-player transfers. It preserves locomotion and joins matching attacks at their current phase, while staged setup reduces one-time work at the first handoff. A finite recording reserve covers some unexpected delay; updates that arrive too late can still require slowing or waiting.
+
+`PhysicsObjects` covers movable props and destructible sources such as trees and logs. **Update the dedicated server and all clients together.** The simulation bridge is enabled by default through `EnableMobHandoffVisualBridge`; set it to false on the server and restart to use native presentation. The standard release includes the bridge but omits development test commands and routine bridge diagnostics. See [CHANGELOG.md](https://github.com/Botaniclas/TooManyLags/blob/main/CHANGELOG.md) for the complete 2.0 overview.
+
 ## Choose your version
 
 | Your setup | Recommended edition and mode |
@@ -59,10 +67,13 @@ With the default Server-Side Simulation mode, nearby objects run locally before 
 Your own **very poor connection** can still be felt in these situations:
 
 1. **Close to other players:** overlapping fields run on the server, so interactions can reflect your own latency.
-2. **Fighting the same mob together:** when it targets someone else, its simulation runs elsewhere and your connection can delay what you see. If an ordinary Hostile Mob targets you, it normally runs locally; above the configured ping limit (**200 ms** by default), another eligible player within **6 metres of the mob** triggers server fallback once loading and handoff safeguards allow it. Both values are configurable. Bosses have separate shared-combat rules in the Wiki.
+2. **Fighting the same mob together:** when it targets someone else, its simulation runs elsewhere and your connection can delay what you see. If an ordinary Hostile Mob targets you, it normally runs locally; above the configured ping limit (**200 ms** by default), another eligible player within **6 metres of the mob** triggers server fallback once the source-state and active-use safeguards allow it. Both values are configurable. Bosses have separate shared-combat rules in the Wiki.
 
 With a very poor connection, give other players space when fighting the same enemy.
 
 ## Report bugs and ideas
 
 Real-world testing is still limited. Please share bugs and ideas through [GitHub Issues](https://github.com/Botaniclas/TooManyLags/issues).
+
+
+

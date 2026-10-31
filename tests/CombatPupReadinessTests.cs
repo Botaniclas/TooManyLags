@@ -9,9 +9,11 @@ using UnityEngine;
 namespace UnityEngine
 {
     public class Object { public bool Alive=true; public static implicit operator bool(Object o){return o!=null&&o.Alive;} public static bool operator !(Object o){return !(bool)o;} }
-    public class MonoBehaviour:Object { public bool isActiveAndEnabled=true; }
-    public class GameObject:Object { public bool activeInHierarchy=true; }
-    public struct Vector3 { public float x,y,z; public Vector3(float a,float b,float c){x=a;y=b;z=c;} }
+    public class Component:Object { public GameObject gameObject; public T GetComponent<T>() where T:Component{return gameObject.GetComponent<T>();} public Component GetComponent(Type type){return gameObject.GetComponent(type);} }
+    public class MonoBehaviour:Component { public bool isActiveAndEnabled=true; }
+    public class GameObject:Object { public bool activeInHierarchy=true; private readonly Dictionary<Type,Component> parts=new Dictionary<Type,Component>();public T Add<T>(T part)where T:Component{part.gameObject=this;parts[part.GetType()]=part;return part;}public Component GetComponent(Type type){foreach(var p in parts.Values)if(type.IsInstanceOfType(p))return p;return null;}public T GetComponent<T>()where T:Component{return (T)GetComponent(typeof(T));} }
+    public static class Time {public static int frameCount;public static double realtimeSinceStartupAsDouble;}
+    public struct Vector3 { public float x,y,z; public Vector3(float a,float b,float c){x=a;y=b;z=c;} public float sqrMagnitude{get{return x*x+y*y+z*z;}}public static Vector3 operator -(Vector3 a,Vector3 b){return new Vector3(a.x-b.x,a.y-b.y,a.z-b.z);} }
     public struct Vector2Int { public int x,y; public Vector2Int(int a,int b){x=a;y=b;} }
     public static class Mathf { public static int FloorToInt(float f){return (int)Math.Floor(f);} public static float Max(float a,float b){return Math.Max(a,b);} public static float Abs(float f){return Math.Abs(f);} }
 }
@@ -19,8 +21,21 @@ public class ZNet:UnityEngine.Object
 {
     public static ZNet instance; public static bool IsSinglePlayer; public bool Server,Dedicated;
     public bool IsServer(){return Server;} public bool IsDedicated(){return Dedicated;}
+    public readonly List<ZNetPeer> Peers=new List<ZNetPeer>();public List<ZNetPeer> GetPeers(){return Peers;}
 }
-namespace TooManyLags { internal static class Plugin { internal static bool Diagnostics = false; internal static int Warnings; internal static void Warn(string value){Warnings++;} } }
+public class Character:MonoBehaviour { }
+public class Player:Character { }
+public class ZDO {public Vector3 Position;public ushort OwnerRevision;public long Owner=1;public long GetOwner(){return Owner;}public Vector3 GetPosition(){return Position;}}
+public class ZNetView:Component {public ZDO Data=new ZDO();public bool Owned=true;public bool IsValid(){return true;}public bool IsOwner(){return Owned;}public ZDO GetZDO(){return Data;}}
+public class ZNetPeer {public Vector3 Position;public bool Ready=true;public bool IsReady(){return Ready;}public Vector3 GetRefPos(){return Position;}}
+namespace TooManyLags {
+    internal static class Plugin { internal const string Id="mobcollision.fixture";internal static bool Diagnostics = false; internal static int Warnings; internal static void Warn(string value){Warnings++;} internal static void Report(string value){Warnings++;} }
+    internal static class FgnCombatOwnership {internal static Func<Vector3,bool> ServerCollisionReady=null;}
+    internal static class AuthorityController {internal static Func<Vector3,bool> MobServerReady=null;}
+#if TML_DEBUG_SYSTEM
+    internal static class FgnSoloCombatTest {internal static bool Active;internal static Func<ZDO,string> CollisionStatus=null;internal static ZDO Chosen=null;internal static bool Selected(ZDO data){return ReferenceEquals(data,Chosen);}}
+#endif
+}
 
 internal class PupReadinessFixture:MonoBehaviour
 {
@@ -61,13 +76,14 @@ internal class PupReadinessFixture:MonoBehaviour
     internal void Recipe(string value){if(value==null)cacheIds.Remove(cell);else cacheIds[cell]=value;}
     internal void Restore(bool value){if(value)pendingWorldSaveRestores.Add(cell);else pendingWorldSaveRestores.Remove(cell);}
     internal void Transition(bool value){if(value)zoneTransitions[cell]=1;else zoneTransitions.Remove(cell);}
+    internal void Distant(){var far=new Vector2Int(1000,1000);records[far]=new List<int>{1};cacheIds[far]="a";restoreSupportCells[far]=new object();zoneTransitions[far]=1;}
     internal void FastCell(bool complete)
     {
         Local();Fast fast=new Fast{root=new GameObject()};fast.required.Add("part");fastColliderCells[cell]=fast;
         fastLoadedSubclusters[cell]=new HashSet<string>();if(complete)fastLoadedSubclusters[cell].Add("part");
     }
     protected bool PrepareExactCollision(Vector3 point,float radius){ExactCalls++;return Exact;}
-    protected bool IsZoneTransitionNear(Vector3 point,float radius){return zoneTransitions.ContainsKey(cell)||restoreSupportCells.Count>0;}
+    protected bool IsZoneTransitionNear(Vector3 point,float radius){return zoneTransitions.ContainsKey(cell)||restoreSupportCells.ContainsKey(cell);}
     protected bool HasPendingCollidersForCell(Vector2Int key){return false;}
     protected bool IsZoneReplacementReady(Vector3 point,float radius)
     {
@@ -149,9 +165,9 @@ internal static class CombatPupReadinessTests
         Check(!bridge.ReadyPoint(point,16)&&modern.PreparedCalls==before,"modern restore gaps still block server handoff");
         modern.Restore(false);modern.ThrowPrepared=true;int warnings=Plugin.Warnings;
         Plugin.Diagnostics=false;
-        Check(!bridge.ReadyPoint(point,16)&&Plugin.Warnings==warnings,"proxy-query failure still denies handoff without disabled diagnostic output");
+        Check(!bridge.ReadyPoint(point,16)&&Plugin.Warnings==warnings+1,"proxy-query failure denies handoff and reports the error even with diagnostics off");
         Plugin.Diagnostics=true;
-        Check(!bridge.ReadyPoint(point,16)&&Plugin.Warnings==warnings+1,"enabled diagnostics report the same denied proxy query");
+        Check(!bridge.ReadyPoint(point,16)&&Plugin.Warnings==warnings+2,"diagnostics on preserves the same failure report and denied handoff");
         Plugin.Diagnostics=false;
         modern.ThrowPrepared=false;Check(bridge.ReadyPoint(point,16),"proxy query recovers without a permanent lock");
         modern.isActiveAndEnabled=false;before=modern.PreparedCalls;
@@ -165,6 +181,9 @@ internal static class CombatPupReadinessTests
         bool rejected=false;
         try{new NativePup(new ChangedPupReadinessFixture());}catch(NotSupportedException){rejected=true;}
         Check(rejected,"unknown dedicated readiness fails closed during startup binding");
+        pup=World(true);pup.Distant();bridge=new NativePup(pup);
+        Check(bridge.ReadyPoint(point,16)&&pup.ExactCalls==0,"distant world restores/transitions/records do not block ordinary local wilderness");
+        MobCollisionGateTests.Run();
         Console.WriteLine("PASS: "+checks+" production optional PUP readiness assertions; managed doubles, no guards or physics state writes.");
         return 0;
     }

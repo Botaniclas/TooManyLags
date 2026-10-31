@@ -20,7 +20,10 @@ namespace TooManyLags
             originalHandler = (Action<ZRoutedRpc, ZRoutedRpc.RoutedRPCData>)handlerField.GetValue(null);
             MethodInfo process = fgn.GetType("FiresGhettoNetworkMod.RoutedRpcManager", true).GetMethod("ProcessRoutedRPC", flags);
             Type stations = fgn.GetType("FiresGhettoNetworkMod.StationRouter", true);
-            MethodInfo route = stations.GetMethod("TryRoute", flags), deliver = stations.GetMethod("Deliver", flags);
+            MethodInfo route = stations.GetMethod("TryRoute", flags);
+            MethodInfo deliver = stations.GetMethod("Deliver", flags, null, new[] { typeof(ZRoutedRpc), typeof(ZDO), typeof(ZRoutedRpc.RoutedRPCData), typeof(long) }, null);
+            bool compactDeliver = deliver == null;
+            if (compactDeliver) deliver = stations.GetMethod("Deliver", flags, null, new[] { typeof(ZDO), typeof(ZRoutedRpc.RoutedRPCData), typeof(long) }, null);
             MethodInfo result = fgn.GetType("FiresGhettoNetworkMod.CreatureOwnership", true).GetMethod("OnResult", flags,
                 null, new[] { typeof(ZRpc), typeof(ZDOID), typeof(bool), typeof(string) }, null);
             if (originalHandler == null || process == null || process.ReturnType != typeof(void) ||
@@ -33,7 +36,7 @@ namespace TooManyLags
                 AccessTools.Method(typeof(FgnRpcIntegration), "DispatchLocal"));
             harmony.Patch(process, transpiler: new HarmonyMethod(typeof(FgnRpcIntegration), "Transpiler"));
             harmony.Patch(route, prefix: new HarmonyMethod(typeof(FgnRpcIntegration), "Station") { priority = Priority.First });
-            harmony.Patch(deliver, prefix: new HarmonyMethod(typeof(FgnRpcIntegration), "HeldStation") { priority = Priority.First });
+            harmony.Patch(deliver, prefix: new HarmonyMethod(typeof(FgnRpcIntegration), compactDeliver ? "HeldStationCurrent" : "HeldStation") { priority = Priority.First });
             harmony.Patch(result, postfix: new HarmonyMethod(typeof(FgnRpcIntegration), "Result"));
         }
         private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> source)
@@ -72,6 +75,8 @@ namespace TooManyLags
             if (!__runOriginal || Plugin.Controller == null || !Plugin.Controller.Router.TryHandle(__0, __2, __3 == Plugin.Controller.Server)) return true;
             __result = true; return false;
         }
+        private static bool HeldStationCurrent(ZRoutedRpc.RoutedRPCData __1, long __2, bool __runOriginal, ref bool __result)
+        { return HeldStation(ZRoutedRpc.instance, __1, __2, __runOriginal, ref __result); }
         private static void Result(ZRpc __0, ZDOID __1, bool __2, string __3)
         {
             AuthorityController controller = Plugin.Controller;

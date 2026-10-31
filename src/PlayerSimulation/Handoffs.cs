@@ -142,6 +142,16 @@ namespace TooManyLags.PlayerSimulation
             if (message != Message.Result || sender != s.Source || s.Phase != HandoffPhase.Commit) return;
             int result = packet.ReadInt();
             if (result == 1) { s.Next = now + 2f; Observe(job.Data); }
+            else if (job.Kind != Kinds.None)
+            {
+                // Separate native replication can precede this reply. Retain
+                // a real receipt/activation barrier or an expected half import.
+                if (s.Observe(job.Data.GetOwner(), job.Data.OwnerRevision)) { Finish(job); return; }
+                if (!s.MatchesSource(job.Data.GetOwner(), job.Data.OwnerRevision)) return;
+                // A processed grid refusal is not a request to retry after
+                // use ends. Keep only the existing sparse coverage listener.
+                Cancel(id, true); controller.Rejected(id);
+            }
             else if (result == 2) s.Block(now);
             else { Cancel(id, true); if (result == 4 && job.Kind == Kinds.LooseItems) { controller.PickupBlocked(id); return; } if (result == 3) controller.Rejected(id); controller.Wake(id); }
         }

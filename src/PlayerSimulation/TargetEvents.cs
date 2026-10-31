@@ -31,7 +31,9 @@ namespace TooManyLags.PlayerSimulation
         private static ConditionalWeakTable<BaseAI, Pending> pending = new ConditionalWeakTable<BaseAI, Pending>();
         private static readonly SendOrPostCallback dispatch = Dispatch;
         private static readonly Dictionary<MethodBase, int> expected = new Dictionary<MethodBase, int>();
+#if !TML_RELEASE || TML_TEST_METRICS
         internal static int PatchedMethods, ObservedWrites;
+#endif
 
         internal static void Install(Harmony harmony, Func<BaseAI, bool> isWatched,
             Action<BaseAI> onChange, Action<Exception> onFailure)
@@ -66,13 +68,18 @@ namespace TooManyLags.PlayerSimulation
             il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Stfld, targetField); il.Emit(OpCodes.Ret);
             writeTarget = (Action<MonsterAI, Character>)setter.CreateDelegate(typeof(Action<MonsterAI, Character>));
             watched = isWatched; notify = onChange; fail = onFailure; context = unity;
-            Reset(); PatchedMethods = ObservedWrites = 0;
+            Reset();
+#if !TML_RELEASE || TML_TEST_METRICS
+            PatchedMethods = ObservedWrites = 0;
+#endif
 
             HarmonyMethod transpiler = new HarmonyMethod(AccessTools.Method(typeof(TargetEvents), "RewriteAssignments"));
             foreach (KeyValuePair<MethodBase, int> entry in expected)
             {
                 harmony.Patch(entry.Key, transpiler: transpiler);
+#if !TML_RELEASE || TML_TEST_METRICS
                 PatchedMethods++; ObservedWrites += entry.Value;
+#endif
             }
         }
 
@@ -158,7 +165,8 @@ namespace TooManyLags.PlayerSimulation
         }
 
         internal static Character Read(MonsterAI ai) { return readTarget(ai); }
-        internal static void Adopt(MonsterAI ai, Character target) { writeTarget(ai, target); }
+        internal static Action<BaseAI, Character> FlightAdopt = null;
+        internal static void Adopt(MonsterAI ai, Character target) { writeTarget(ai, target); if (FlightAdopt != null) FlightAdopt(ai, target); }
         internal static void Reset()
         {
             unchecked { epoch++; }

@@ -1,0 +1,54 @@
+[
+  {
+    "file": "src\\FgnCombatOwnership.cs",
+    "result": "merged LF-normalized"
+  },
+  {
+    "file": "src\\FgnMobHandoff.cs",
+    "result": "merged LF-normalized"
+  },
+  {
+    "file": "src\\FgnSoloCombatTest.cs",
+    "result": "new side file"
+  },
+  {
+    "file": "src\\FgnTargetBoundary.cs",
+    "result": "new side file"
+  },
+  {
+    "file": "src\\FgnTargetEvents.cs",
+    "result": "merged LF-normalized"
+  },
+  {
+    "file": "src\\Plugin.cs",
+    "result": "version conflicts resolved to 1.0.71; both branches retained"
+  },
+  {
+    "file": "tests\\CombatBoundaryTests.cs",
+    "result": "new side file"
+  },
+  {
+    "file": "tests\\CombatFixtures.cs",
+    "result": "merged LF-normalized"
+  },
+  {
+    "file": "tests\\CombatNativeAudit.cs",
+    "result": "merged LF-normalized"
+  },
+  {
+    "file": "tests\\CombatSoloTests.cs",
+    "result": "new side file"
+  },
+  {
+    "file": "tests\\CombatTests.cs",
+    "result": "merged LF-normalized"
+  },
+  {
+    "file": "test-combat.ps1",
+    "result": "merged LF-normalized"
+  },
+  {
+    "file": "test-integration.ps1",
+    "result": "merged LF-normalized"
+  }
+]

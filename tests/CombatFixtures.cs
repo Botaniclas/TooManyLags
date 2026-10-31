@@ -4,6 +4,39 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
+namespace FiresGhettoNetworkMod { public static class NetSim { public static bool Active { get; set; } } }
+// Separate production suites execute the negotiated source/checkpoint modules;
+// legacy policy fixtures deliberately retain their existing transport path.
+namespace TooManyLags
+{
+    internal static class MobCombatState { internal static bool CanCheckpoint(ZNetPeer peer) { return false; } }
+    internal static class MobSourceHandoff
+    {
+        internal static Func<ZDO,bool> SkipLocalCommit;
+        internal static ZDOID LocalTarget { get { return ZDOID.None; } }
+        internal static void Reset() { } internal static void Stop() { } internal static void Probe(ZNetPeer peer) { } internal static void Connect(ZNetPeer peer) { }
+        internal static bool CanGrant(ZNetPeer peer) { return false; }
+        internal static bool NeedsGrant(ZDO data, ZNetPeer peer) { return false; }
+        internal static bool IsLocalCommit(ZDO data) { return false; }
+        internal static bool Waiting(ZDO data) { return false; }
+        internal static void InvalidatePresentationTiming() { }
+        internal static bool TryCommit(BaseAI ai,ZDO data,ZDOID target,ZNetPeer peer) { return false; }
+        internal static void Grant(ZDO data,ZNetPeer peer,List<KeyValuePair<ZDOID,long>> choices) { }
+        internal static void Forget(ZDOID id) { }
+    }
+    internal static class MobNativePublication { internal static void Send(ZDO data,ZNetPeer peer) { } }
+    internal static class MobHandoffVisual { internal static Func<ZDO,bool> SkipPresentation; internal static void Cancel(ZDOID id) { } internal static object CaptureSource(ZDO data,long destination) { return null; } internal static void CommitObserver(object state) { } }
+    internal static class MobBridgeVisual { internal static int Cancelled; internal static void Cancel(ZDOID id) { ++Cancelled; } }
+    internal static class MobBridgeObserver { internal static void Cancel(ZDOID id) { } }
+    // Protocol runtime is exercised in bridge/observer suites. This policy
+    // fixture models its cancellation boundary for current solo-test shutdown.
+    internal static class MobBridgeProtocol
+    {
+        internal static void Cancel(ZDOID id) { MobBridgeVisual.Cancel(id); MobBridgeObserver.Cancel(id); }
+    }
+    internal static class MobFlightHandoff { internal static Func<ZDO,bool> NativeTransfer; internal static void Transfer(ZDO data,long destination) { data.SetOwner(destination); } }
+}
+
 namespace UnityEngine
 {
     public class Object { public string name="fixture"; public bool Alive = true; public static implicit operator bool(Object v) { return v != null && v.Alive; } public static bool operator !(Object v) { return !(bool)v; } }
@@ -81,6 +114,7 @@ public class ZDO
     private readonly Dictionary<int,float> floats=new Dictionary<int,float>();
     public ZDO(ZDOID id,long owner) { m_uid=id; this.owner=owner; }
     public bool IsValid() { return Valid; } public long GetOwner() { return owner; }
+    public bool IsOwner() { return owner == ZDOMan.GetSessionID(); }
     public void SetOwner(long value) { OwnerWrites++; if(owner!=value) { owner=value; OwnerRevision++; } }
     public UnityEngine.Vector3 GetPosition() { return Position; }
     public Vector2s GetSector() { return ZoneSystem.GetZone(Position); }
@@ -122,7 +156,10 @@ public class HitData {}
 public class Humanoid : Character
 {
     protected Attack m_currentAttack;
+    public int StartedAttacks;
     public Attack BeginAttack(){Attack=true;return m_currentAttack=new Attack();}
+    [MethodImpl(MethodImplOptions.NoInlining)] public bool StartAttack(Character target,bool secondaryAttack)
+    { if(Attack)return false; StartedAttacks++;BeginAttack();return true; }
 }
 public class Attack
 {
@@ -135,6 +172,7 @@ public class BaseAI : UnityEngine.Component
     protected ZNetView m_nview; public Character Target; public bool Rider;
     public void SetView(ZNetView view) { m_nview=view; }
     public virtual Character GetTargetCreature(){return Target;} public bool HaveRider(){return Rider;}
+    public virtual bool IsSleeping(){return false;}
     [MethodImpl(MethodImplOptions.NoInlining)] public virtual bool UpdateAI(float dt){return m_nview.IsOwner();}
     [MethodImpl(MethodImplOptions.NoInlining)] protected virtual void Awake(){}
 }
@@ -142,26 +180,34 @@ public class MonsterAI : BaseAI
 {
     internal Character m_targetCreature;
     public new Character Target {get{return m_targetCreature;}set{SetTarget(value);}}
+    public override bool IsSleeping(){return Sleeping;}
     [MethodImpl(MethodImplOptions.NoInlining)] public override Character GetTargetCreature(){return m_targetCreature;}
     [MethodImpl(MethodImplOptions.NoInlining)] private void SetTarget(Character value){m_targetCreature=value;}
-    public bool Sleeping;
-    [MethodImpl(MethodImplOptions.NoInlining)] public override bool UpdateAI(float dt){if(!base.UpdateAI(dt))return false;if(Sleeping)return true;bool hear,see;UpdateTarget(null,dt,out hear,out see);return true;}
+    public bool Sleeping,SelectOnUpdate,AttackAfterTarget,InsideUpdate; public Character NextTarget; public int DecisionsCompleted;
+    public Action AfterSelection;
+    [MethodImpl(MethodImplOptions.NoInlining)] public override bool UpdateAI(float dt)
+    {if(!base.UpdateAI(dt))return false;if(Sleeping)return true;InsideUpdate=true;bool hear,see;UpdateTarget(null,dt,out hear,out see);
+     if(SelectOnUpdate){SelectOnUpdate=false;SetTarget(NextTarget);}if(AfterSelection!=null)AfterSelection();
+     if(AttackAfterTarget)GetComponent<Humanoid>().StartAttack(m_targetCreature,false);DecisionsCompleted++;InsideUpdate=false;return true;}
     [MethodImpl(MethodImplOptions.NoInlining)] private void UpdateTarget(Humanoid human,float dt,out bool hear,out bool see) { hear=see=true; }
 }
 public class ZPackage
 {
     private readonly System.IO.MemoryStream stream=new System.IO.MemoryStream();
     public void Write(uint value){new System.IO.BinaryWriter(stream).Write(value);}
+    public void Write(int value){new System.IO.BinaryWriter(stream).Write(value);}
     public void Write(long value){new System.IO.BinaryWriter(stream).Write(value);}
     public void Write(bool value){new System.IO.BinaryWriter(stream).Write(value);}
     public void Write(string value){new System.IO.BinaryWriter(stream).Write(value);}
     public void Write(ZDOID value){Write(value.UserID);Write(value.ID);}
     public uint ReadUInt(){return new System.IO.BinaryReader(stream).ReadUInt32();}
+    public int ReadInt(){return new System.IO.BinaryReader(stream).ReadInt32();}
     public long ReadLong(){return new System.IO.BinaryReader(stream).ReadInt64();}
     public bool ReadBool(){return new System.IO.BinaryReader(stream).ReadBoolean();}
     public string ReadString(){return new System.IO.BinaryReader(stream).ReadString();}
     public ZDOID ReadZDOID(){return new ZDOID(ReadLong(),ReadUInt());}
     public ZPackage Rewind(){stream.Position=0;return this;}
+    public int GetPos(){return (int)stream.Position;} public int Size(){return (int)stream.Length;}
 }
 public class ZRpc
 {
@@ -174,8 +220,11 @@ public class ZRpc
     public int HandoffResults; public bool HandoffAccepted; public string HandoffReason;
     public int AttackReadySent; public ZDOID AttackReadyMob; public long AttackReadyRevision;
     public long CommitToken,ResultToken; public ZPackage CommitPayload,ResultPayload; public int CommitResults;
+    public int BoundaryTargets,BoundaryDecisions; public ZDOID BoundaryMob,BoundaryId; public ZPackage BoundaryPayload,DecisionPayload;
+    public int SoloArms,SoloReadies,SoloMessages,SoloControls,SoloModes; public ZDOID SoloMob,SoloModeMob; public ZPackage SoloArmPayload,SoloReadyPayload,SoloModePayload; public string SoloMessage,SoloControl;
+    public int LatencyRequests,LatencyReplies; public ZPackage LatencyPayload,LatencyReply;
     private readonly Dictionary<string,Delegate> handlers=new Dictionary<string,Delegate>();
-    public void Register<T>(string name,Action<ZRpc,T> handler){receive=(rpc,value)=>handler(rpc,(T)(object)value);}
+    public void Register<T>(string name,Action<ZRpc,T> handler){handlers[name]=handler;if(name=="TooManyLags_AI_Mode")receive=(rpc,value)=>handler(rpc,(T)(object)value);}
     public void Register<T,U>(string name,Action<ZRpc,T,U> handler){handlers[name]=handler;}
     public void Register<T,U,V>(string name,Action<ZRpc,T,U,V> handler){handlers[name]=handler;}
     public void Receive(int mode){receive(this,mode);}
@@ -184,6 +233,13 @@ public class ZRpc
     public void ReceiveAttackReady(ZDOID id,long revision){((Action<ZRpc,ZDOID,long>)handlers["TooManyLags_AI_AttackReady"])(this,id,revision);}
     public void ReceiveCommit(ZDOID id,long token,ZPackage payload){((Action<ZRpc,ZDOID,long,ZPackage>)handlers["TooManyLags_AI_Commit"])(this,id,token,payload.Rewind());}
     public void ReceiveCommitResult(ZDOID id,long token,ZPackage payload){((Action<ZRpc,ZDOID,long,ZPackage>)handlers["TooManyLags_AI_CommitResult"])(this,id,token,payload.Rewind());}
+    public void ReceiveBoundaryTarget(ZDOID id,ZDOID target,ZPackage payload){((Action<ZRpc,ZDOID,ZDOID,ZPackage>)handlers["TooManyLags_AI_BoundaryTarget"])(this,id,target,payload.Rewind());}
+    public void ReceiveBoundaryDecision(ZDOID id,ZDOID target,ZPackage payload){((Action<ZRpc,ZDOID,ZDOID,ZPackage>)handlers["TooManyLags_AI_BoundaryDecision"])(this,id,target,payload.Rewind());}
+    public void ReceiveSoloControl(string command){((Action<ZRpc,string>)handlers["TooManyLags_AI_SoloControl"])(this,command);}
+    public void ReceiveSoloArm(ZDOID id,ZPackage payload){((Action<ZRpc,ZDOID,ZPackage>)handlers["TooManyLags_AI_SoloArm"])(this,id,payload.Rewind());}
+    public void ReceiveSoloReady(ZDOID id,ZPackage payload){((Action<ZRpc,ZDOID,ZPackage>)handlers["TooManyLags_AI_SoloReady"])(this,id,payload.Rewind());}
+    public void ReceiveLatency(ZPackage payload){((Action<ZRpc,ZPackage>)handlers["TooManyLags_AI_SoloLatency"])(this,payload.Rewind());}
+    public void ReceiveLatencyReady(ZPackage payload){((Action<ZRpc,ZPackage>)handlers["TooManyLags_AI_SoloLatencyReady"])(this,payload.Rewind());}
     public bool HasHandler(string name){return handlers.ContainsKey(name);}
     public void ReceiveStatus(ZDOID id,int ticket){((Action<ZRpc,ZDOID,int>)handlers["TooManyLags_AI_Status"])(this,id,ticket);}
     public void ReceiveStatusReply(int ticket,string line){((Action<ZRpc,int,string>)handlers["TooManyLags_AI_StatusReply"])(this,ticket,line);}
@@ -194,6 +250,14 @@ public class ZRpc
      else if(name=="TooManyLags_AI_Mode"){ModeSent++;LastMode=(int)data[0];}
      else if(name=="TooManyLags_AI_Watch"){WatchSent++;WatchMob=(ZDOID)data[0];WatchOwner=(long)data[1];WatchRevision=(long)data[2];}
      else if(name=="TooManyLags_AI_Target"){TargetSent++;TargetMob=(ZDOID)data[0];TargetId=(ZDOID)data[1];TargetRevision=(long)data[2];}
+     else if(name=="TooManyLags_AI_BoundaryTarget"){BoundaryTargets++;BoundaryMob=(ZDOID)data[0];BoundaryId=(ZDOID)data[1];BoundaryPayload=(ZPackage)data[2];}
+     else if(name=="TooManyLags_AI_BoundaryDecision"){BoundaryDecisions++;BoundaryMob=(ZDOID)data[0];BoundaryId=(ZDOID)data[1];DecisionPayload=(ZPackage)data[2];}
+     else if(name=="TooManyLags_AI_SoloArm"){var p=((ZPackage)data[1]).Rewind();long t=p.ReadLong();p.Rewind();if(t<0){SoloModes++;SoloModeMob=(ZDOID)data[0];SoloModePayload=p;}else{SoloArms++;SoloMob=(ZDOID)data[0];SoloArmPayload=p;}}
+     else if(name=="TooManyLags_AI_SoloReady"){SoloReadies++;SoloMob=(ZDOID)data[0];SoloReadyPayload=(ZPackage)data[1];}
+     else if(name=="TooManyLags_AI_SoloMessage"){SoloMessages++;SoloMessage=(string)data[0];}
+     else if(name=="TooManyLags_AI_SoloControl"){SoloControls++;SoloControl=(string)data[0];}
+     else if(name=="TooManyLags_AI_SoloLatency"){LatencyRequests++;LatencyPayload=(ZPackage)data[0];}
+     else if(name=="TooManyLags_AI_SoloLatencyReady"){LatencyReplies++;LatencyReply=(ZPackage)data[0];}
      else if(name=="TooManyLags_AI_AttackReady"){AttackReadySent++;AttackReadyMob=(ZDOID)data[0];AttackReadyRevision=(long)data[1];}
      else if(name=="TooManyLags_AI_Status"){StatusRequests++;StatusTicket=(int)data[1];}
      else if(name=="TooManyLags_AI_StatusReply"){StatusReplies++;StatusTicket=(int)data[0];StatusLine=(string)data[1];}
@@ -202,18 +266,20 @@ public class ZRpc
 public class Terminal : UnityEngine.Object
 {
     public readonly List<string> Lines=new List<string>(); public void AddString(string line){Lines.Add(line);}
-    public class ConsoleEventArgs { public Terminal Context; }
+    public class ConsoleEventArgs { public Terminal Context; public string[] Args=new string[0]; }
     public delegate void ConsoleEvent(ConsoleEventArgs args);
-    public class ConsoleCommand { public ConsoleCommand(string name,string help,ConsoleEvent callback){} }
+    public class ConsoleCommand { public static readonly Dictionary<string,ConsoleEvent> Commands=new Dictionary<string,ConsoleEvent>(); public ConsoleCommand(string name,string help,ConsoleEvent callback){Commands[name]=callback;} }
 }
 public class ZNetPeer
 {
+    public class Socket { public string GetHostName(){return "fixture";} } public Socket m_socket=new Socket();
     public long m_uid; public ZDOID m_characterID; public bool Ready=true,Matched=true,m_server; public float Ping=50; public bool Measured=true;
     public UnityEngine.Vector3 Ref=new UnityEngine.Vector3(100,0,100); public ZRpc m_rpc=new ZRpc();
     public bool IsReady(){return Ready;} public UnityEngine.Vector3 GetRefPos(){return Ref;}
 }
 public class ZNet : UnityEngine.Object
 {
+    public bool Admin=true; public bool IsAdmin(string host){return Admin;}
     public static ZNet instance; public bool Dedicated=true; public readonly List<ZNetPeer> Peers=new List<ZNetPeer>();
     public ZNetPeer ServerPeer; public ZDOID LocalPlayerCharacterID;
     public bool IsDedicated(){return Dedicated;} public List<ZNetPeer> GetPeers(){return Peers;}
@@ -254,7 +320,17 @@ public class ZDOMan
 }
 namespace TooManyLags
 {
-    internal static class Plugin { internal const string Id="botanic.toomanylags.fgnaddon",Version="fixture"; internal static bool Diagnostics; internal static NativePup Native=new NativePup(); internal static int Warnings; internal static void Warn(string s){Warnings++;} }
+    // Network module is exercised separately with real production queue/hooks.
+#if TML_DEBUG_SYSTEM
+    internal static class SoloNetworkLatency
+    {
+        internal static int Starts; internal static bool Active,Fail;
+        internal static bool Start(ZNetPeer peer,int ping,out int baseline,out int added,out string error)
+        {Starts++;baseline=20;added=Math.Max(0,ping-baseline);error=Fail?"unsupported fixture transport":"";Active=!Fail;return !Fail;}
+        internal static void End(){Active=false;}internal static string Describe(){return Active?"latency active":"inactive";}
+    }
+#endif
+    internal static class Plugin { internal const string Id="botanic.toomanylags.fgnaddon",Version="fixture"; internal static bool Diagnostics; internal static NativePup Native=new NativePup(); internal static int Warnings; internal static void Warn(string s){Warnings++;} internal static void TestLog(string s){} }
     internal class NativePup
     {
         internal static bool Ready=true,DestinationReady=true,Available=true; internal static int Checks;
@@ -266,6 +342,10 @@ namespace TooManyLags
 }
 namespace FiresGhettoNetworkMod
 {
+    internal static class ServerOwnershipPatchesV3
+    {
+        internal static bool IsExcluded(int prefab){return prefab==9876543;}
+    }
     public static class FiresGhettoNetworkMod
     {
         public static BepInEx.Configuration.ConfigEntry<bool> ConfigEnableServerOwnership=new BepInEx.Configuration.ConfigEntry<bool>(false);
@@ -290,6 +370,7 @@ namespace FiresGhettoNetworkMod
     {
         private const double PassSeconds=2.0,PendingSeconds=5.0,DeclinedCooldownSeconds=6.0,ForwardHitsSeconds=5.0;
         private const int MaxHandOffsPerPass=16,MaxHandOffsPerOwner=6;
+        private static string CombatReason(ZDO data,double now){return "native combat guard";}
         private struct Stamp { public long Peer; public double At; }
         private struct Owned { public long Owner; public double Since; }
         private struct StreakState { public long Candidate; public int Wins; }
@@ -359,6 +440,7 @@ namespace FiresGhettoNetworkMod
         {
             double at;
             if(s_localHits.TryGetValue(data.m_uid,out at)&&UnityEngine.Time.realtimeSinceStartupAsDouble-at<=6)return "owner fighting";
+            if(IsHeld(data))return "held";
             if(ValcastPossession.IsPossessed(data))return "possessed";
             Character mob=ZNetScene.instance.FindInstance(data).GetComponent<Character>();
             if(mob.IsBoss())return "boss";if(mob.InAttack())return "attacking";if(mob.IsStaggering())return "staggering";if(mob.IsTamed())return "tamed";

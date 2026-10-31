@@ -1,0 +1,37 @@
+{
+  "method": "Read-only UnityPy native prefab typetree inspection; actual installed SoftRef bundle c4210710",
+  "game_assembly_sha256": "94998885b103d6e5f5480123eaee0a093e82af2ddeeee37536c15bf555f24f3a",
+  "rows": [
+    {
+      "prefab": "Oak_log",
+      "m_syncPosition": true,
+      "m_syncRotation": true,
+      "m_syncBodyVelocity": true
+    },
+    {
+      "prefab": "Birch_log",
+      "m_syncPosition": true,
+      "m_syncRotation": true,
+      "m_syncBodyVelocity": true
+    },
+    {
+      "prefab": "AshlandsTreeLog1",
+      "m_syncPosition": true,
+      "m_syncRotation": true,
+      "m_syncBodyVelocity": true
+    },
+    {
+      "prefab": "beech_log_half",
+      "m_syncPosition": true,
+      "m_syncRotation": true,
+      "m_syncBodyVelocity": true
+    },
+    {
+      "prefab": "beech_log",
+      "m_syncPosition": true,
+      "m_syncRotation": true,
+      "m_syncBodyVelocity": true
+    }
+  ],
+  "scope": "Native motion flags only, not a live simulation or gameplay test."
+}

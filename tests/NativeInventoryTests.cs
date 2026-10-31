@@ -85,14 +85,35 @@ internal static class NativeInventoryTests
             Case c = new Case(); c.Busy = true;
             Require(c.Acquire() == 0 && c.Data.Owner == 2, "source busy denial retains native owner");
             Require(!c.Bridge.Pending(c.Data), "denial releases reservation");
-            Require(c.Acquire() == 0 && c.Sends == 1, "denial retry backoff");
-            UnityEngine.Time.unscaledTime = 2; c.Busy = false;
-            Require(c.Acquire() == 1 && c.Sends == 2, "denied request retries only when due");
+            Require(!c.Bridge.Reserved(c.Data), "explicit denial has no unresolved native transaction");
+            UnityEngine.Time.unscaledTime = 100;
+            Require(!c.Bridge.Pending(c.Data) && c.Sends == 1, "elapsed time cannot retry a discarded inventory refusal");
+            c = new Case(); c.Busy = true; c.Acquire(); c.Busy = false;
+            Require(c.Acquire() == 1 && c.Sends == 2, "fresh explicit acquisition after refusal has no two-second backoff");
             Require(c.Acquire() == 1 && c.Sends == 2, "no duplicate request per active revision");
+
+            c = new Case(); c.Acquire();
+            Require(c.Bridge.Reserved(c.Data), "unanswered source acquisition remains reserved");
+            UnityEngine.Time.unscaledTime = 3;
+            Require(!c.Bridge.Pending(c.Data) && c.Bridge.Reserved(c.Data), "expired reply window is not proof that the source did not commit");
+            c.Bridge.Forget(c.Data);
+            Require(!c.Bridge.Reserved(c.Data), "explicit retirement clears the source reservation");
+
+            c = new Case(); c.Acquire(); c.Commit();
+            Require(!c.Bridge.Response(c.Container, 2, false) && c.Bridge.Pending(c.Data) && c.Bridge.Received(c.Data), "delayed denial cannot discard an actual native owner receipt");
+            c.Bridge.Response(c.Container, 2, true);
+            Require(c.Acquire() == 2, "actual receipt still pairs with its later positive reply");
+            c = new Case(); c.Acquire(); c.Data.Owner = 1;
+            Require(!c.Bridge.Response(c.Container, 2, false) && c.Bridge.Transitioning(c.Data), "delayed denial cannot discard a native half import");
+            c.Data.OwnerRevision = 8; c.Bridge.Response(c.Container, 2, true);
+            Require(c.Acquire() == 2, "protected half import completes normally");
+            c = new Case(); c.Acquire(); UnityEngine.Time.unscaledTime = 2;
+            Require(c.Bridge.Response(c.Container, 2, false) && !c.Bridge.Pending(c.Data), "late explicit refusal with unchanged source state is discarded after timeout too");
 
             c = new Case(); c.Sent = delegate { c.Commit(); c.Bridge.Response(c.Container, 2, true); };
             Require(c.Acquire() == 1, "send result remains pending until next evaluation");
             Require(c.Acquire() == 2 && c.Bridge.Received(c.Data) && !c.Bridge.Pending(c.Data), "idle native grant completes matching receipt");
+            Require(!c.Bridge.Reserved(c.Data), "complete receipt and grant are settled for local-use parking");
             c.Bridge.Response(c.Container, 2, false);
             Require(c.Acquire() == 2, "late denial cannot revoke a completed grant");
 
@@ -163,14 +184,20 @@ internal static class NativeInventoryTests
             c.View.Data = replacement; c.Bridge.Response(c.Container, 2, true);
             Require(!c.Bridge.Received(replacement), "replacement view cannot consume old response");
 
-            c = new Case(); c.Acquire(); UnityEngine.Time.unscaledTime = 5;
-            Require(!c.Bridge.Pending(c.Data) && c.Acquire() == 0 && c.Data.Owner == 2 && c.Sends == 1, "timeout releases reservation and does not steal");
+            c = new Case(); c.Acquire(); UnityEngine.Time.unscaledTime = 1.999f;
+            Require(c.Bridge.Pending(c.Data) && c.Acquire() == 1 && c.Sends == 1, "unanswered request keeps the full two-second response window");
+            UnityEngine.Time.unscaledTime = 2;
+            Require(!c.Bridge.Pending(c.Data) && c.Data.Owner == 2 && c.Sends == 1, "two-second timeout releases reservation without stealing");
             c.Bridge.Response(c.Container, 2, true);
-            Require(c.Acquire() == 0, "expired positive reply ignored");
-            UnityEngine.Time.unscaledTime = 7;
-            Require(c.Acquire() == 1 && c.Sends == 2 && c.Data.Owner == 2, "lost request retry remains a native request");
+            Require(!c.Bridge.Pending(c.Data) && c.Data.Owner == 2 && c.Sends == 1, "expired positive reply without a native owner receipt cannot grant ownership");
+            Require(c.Acquire() == 1 && c.Sends == 2 && c.Data.Owner == 2, "unanswered request retries immediately at two seconds through native RequestOpen");
+            Require(c.Acquire() == 1 && c.Sends == 2, "repeated evaluation cannot duplicate the new outstanding request");
+            UnityEngine.Time.unscaledTime = 3.999f;
+            Require(c.Acquire() == 1 && c.Sends == 2, "retry has its own complete two-second response window");
+            UnityEngine.Time.unscaledTime = 4;
+            Require(c.Acquire() == 1 && c.Sends == 3 && c.Data.Owner == 2, "successive unanswered requests remain two seconds apart without forced ownership");
 
-            c = new Case(); c.Acquire(); c.Commit(); UnityEngine.Time.unscaledTime = 5;
+            c = new Case(); c.Acquire(); c.Commit(); UnityEngine.Time.unscaledTime = 2;
             Require(!c.Bridge.Pending(c.Data) && c.Bridge.Received(c.Data) && c.Acquire() == 2, "expired exact server receipt resumes current idle server contract");
             UnityEngine.Time.unscaledTime = 10;
             Require(c.Acquire() == 2 && c.Sends == 1 && !c.Bridge.Received(c.Data), "retired reply wait sends no request to former owner");

@@ -48,7 +48,7 @@ namespace TooManyLags
                     if (terminal && line != null && line.Length <= 3000) terminal.AddString(line);
                 });
             }
-            catch (Exception error) { if (Plugin.Diagnostics) Plugin.Warn("Optional AI status endpoint: " + error.Message); }
+            catch (Exception error) { Plugin.Warn("Optional AI status endpoint: " + error.Message); }
         }
         private static void RequestServer(Terminal terminal, List<ZDOID> mobs)
         {

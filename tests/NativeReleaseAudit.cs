@@ -50,6 +50,7 @@ internal static class NativeReleaseAudit
                         RegionBounds(native);
                         IncineratorState(authority, native, module);
                         SummonedRules(native, module);
+                        StaticWorldState(native, fgn);
                         Ownership(authority, game);
                         ComposedOwnership(authority, game);
                     }
@@ -250,6 +251,8 @@ internal static class NativeReleaseAudit
                 type.FullName.StartsWith("TooManyLags.FgnMobHandoff",StringComparison.Ordinal)||
                 type.FullName.StartsWith("TooManyLags.FgnBossPolicy",StringComparison.Ordinal)||
                 type.FullName.StartsWith("TooManyLags.FgnTargetEvents",StringComparison.Ordinal)||
+                type.FullName.StartsWith("TooManyLags.FgnTargetBoundary",StringComparison.Ordinal)||
+                type.FullName.StartsWith("TooManyLags.FgnSoloCombatTest",StringComparison.Ordinal)||
                 type.FullName.StartsWith("TooManyLags.FgnAttackRetry",StringComparison.Ordinal)||
                 type.FullName.StartsWith("TooManyLags.NativePup",StringComparison.Ordinal)||
                 type.FullName.StartsWith("TooManyLags.CellReadiness",StringComparison.Ordinal)||
@@ -267,6 +270,14 @@ internal static class NativeReleaseAudit
                         bool gridEndpoint = type.FullName == "TooManyLags.GridHandoffs.Protocol" && method.Name == "Connect";
                         bool sessionEndpoint = type.FullName == "TooManyLags.ServerSession" && method.Name == "Connect";
                         bool textEndpoint = type.FullName == "TooManyLags.TextEditing.Protection" && method.Name == "Connected";
+                        bool repairEndpoint = type.FullName == "TooManyLags.NetworkSavings.StateTransfer" && method.Name == "Connect";
+                        if (called.DeclaringType.FullName == "ZRpc" && called.Name == "Register" && repairEndpoint)
+                        {
+                            string endpoint = null;
+                            for (int i = method.Body.Instructions.IndexOf(instruction) - 1; i >= 0; i--)
+                                if (method.Body.Instructions[i].OpCode == Mono.Cecil.Cil.OpCodes.Ldstr) { endpoint = (string)method.Body.Instructions[i].Operand; break; }
+                            Check(endpoint == "TooManyLags_StateRepair_1", "State repair must register only its private endpoint, never native callbacks");
+                        }
                         if (called.DeclaringType.FullName == "ZRpc" && called.Name == "Register" && textEndpoint)
                         {
                             string endpoint = null;
@@ -308,7 +319,7 @@ internal static class NativeReleaseAudit
                             Check(executesAfterAuthorization, "Remote setting execution follows native admin identity check"); configAdminChecks++;
                         }
                         Check(!((called.DeclaringType.FullName == "ZRpc" || called.DeclaringType.FullName == "ZRoutedRpc") &&
-                            called.Name == "Register") || configEndpoint || gridEndpoint || sessionEndpoint || textEndpoint || (type.FullName == "TooManyLags.PlayerSimulation.Network" && method.Name == "Register"), "Authority registers/replaces a native client RPC callback");
+                            called.Name == "Register") || configEndpoint || gridEndpoint || sessionEndpoint || textEndpoint || repairEndpoint || (type.FullName == "TooManyLags.PlayerSimulation.Network" && method.Name == "Register"), "Authority registers/replaces a native client RPC callback");
                         bool cancelOwnText = type.FullName == "TooManyLags.TextEditing.Protection" && method.Name == "RemoveLocal" &&
                             instruction.Previous != null && instruction.Previous.OpCode == Mono.Cecil.Cil.OpCodes.Ldnull;
                         Check(!(called.DeclaringType.FullName == "System.Reflection.FieldInfo" && called.Name == "SetValue") ||
@@ -342,6 +353,33 @@ internal static class NativeReleaseAudit
         { yield return type; foreach (TypeDefinition nested in AllTypes(type.NestedTypes)) yield return nested; }
     }
 
+    private static void StaticWorldState(AssemblyDefinition native, Assembly provider)
+    {
+        foreach(string name in new[]{"TreeBase","MineRock","MineRock5","Destructible"})
+        {
+            TypeDefinition type=native.MainModule.GetType(name);
+            Check(type!=null,"Native static anchor missing: "+name);
+            MethodDefinition damage=ScopeMethod(type,name=="MineRock"?"RPC_Hit":"RPC_Damage");
+            Check(ScopeCall(damage,"ZNetView","IsOwner")>=0,"Native static damage no longer checks its owner: "+name);
+            if(name!="MineRock5")Check(ScopeCall(damage,"ZDO","GetFloat")>=0,"Native static damage no longer loads serialized health: "+name);
+        }
+        MethodDefinition area=ScopeMethod(native.MainModule.GetType("MineRock5"),"DamageArea");
+        Check(ScopeCall(area,"MineRock5","LoadHealth")>=0&&ScopeCall(area,"MineRock5","SaveHealth")>=0,
+            "MineRock5 no longer refreshes and saves authoritative area health per damage");
+        TypeDefinition destructible=native.MainModule.GetType("Destructible");FieldDefinition ttl=null;
+        foreach(var field in destructible.Fields)if(field.Name=="m_ttl")ttl=field;
+        Check(ttl!=null&&ttl.IsPublic&&ttl.FieldType.FullName=="System.Single","Timed-destructible exclusion contract changed");
+        MethodDefinition awake=ScopeMethod(native.MainModule.GetType("MineRock"),"Start");bool hit=false,hide=false;
+        foreach(var instruction in awake.Body.Instructions)if(instruction.OpCode==Mono.Cecil.Cil.OpCodes.Ldstr)
+        {hit|=(string)instruction.Operand=="Hit";hide|=(string)instruction.Operand=="Hide";}
+        Check(hit&&hide,"MineRock request/broadcast registrations changed");
+        using(var source=AssemblyDefinition.ReadAssembly(provider.Location))
+        {
+            MethodDefinition stats=ScopeMethod(source.MainModule.GetType("FiresGhettoNetworkMod.ServerAuthorityPatches"),"Game_IncrementPlayerStat_NoProfilePrefix");
+            Check(stats.ReturnType.FullName=="System.Boolean"&&stats.Parameters.Count==1&&stats.Parameters[0].ParameterType.FullName=="PlayerProfile",
+                "FiresGhettoNetworking dedicated no-profile stat guard changed");
+        }
+    }
     private static void SummonedRules(AssemblyDefinition native, AssemblyDefinition authority)
     {
         TypeDefinition tameable=native.MainModule.GetType("Tameable");
@@ -865,7 +903,13 @@ internal static class NativeReleaseAudit
         Type stations = fgn.GetType("FiresGhettoNetworkMod.StationRouter", true);
         MethodInfo route = stations.GetMethod("TryRoute", Static), deliver = stations.GetMethod("Deliver", Static);
         CheckMethod(route, typeof(bool), "ZRoutedRpc,ZRoutedRpc+RoutedRPCData");
-        CheckMethod(deliver, typeof(bool), "ZRoutedRpc,ZDO,ZRoutedRpc+RoutedRPCData,System.Int64");
+        if(deliver.GetParameters().Length==3)
+        {
+            CheckMethod(deliver, typeof(bool), "ZDO,ZRoutedRpc+RoutedRPCData,System.Int64");
+            foreach(string integrationType in new[]{"TooManyLags.FgnRpcIntegration","TooManyLags.PlayerSimulation.FgnRpcIntegration"})
+                CheckMethod(authority.GetType(integrationType,true).GetMethod("HeldStationCurrent",Static),typeof(bool),"ZRoutedRpc+RoutedRPCData,System.Int64,System.Boolean,System.Boolean&");
+        }
+        else CheckMethod(deliver, typeof(bool), "ZRoutedRpc,ZDO,ZRoutedRpc+RoutedRPCData,System.Int64");
         CheckMethod(integration.GetMethod("Station", Static), typeof(bool), "ZRoutedRpc,ZRoutedRpc+RoutedRPCData,System.Boolean,System.Boolean&");
         CheckMethod(integration.GetMethod("HeldStation", Static), typeof(bool), "ZRoutedRpc,ZRoutedRpc+RoutedRPCData,System.Int64,System.Boolean,System.Boolean&");
         CheckMethod(integration.GetMethod("Result", Static), typeof(void), "ZRpc,ZDOID,System.Boolean,System.String");

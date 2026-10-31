@@ -1,0 +1,14 @@
+{
+  "version": "1.0.79",
+  "baseline": "1.0.78",
+  "baselineDllSha256": "8EF3CA885F4DB44B91367DBE48D2DCE0CA1CFF09537F41072B26E613EC19DE1D",
+  "switch": "build.ps1 -DebugSystem",
+  "symbol": "TML_DEBUG_SYSTEM",
+  "default": false,
+  "normalOutput": "bin/TooManyLags.dll",
+  "debugOutput": "bin/debug-system/TooManyLags.dll",
+  "runtimeConfigAdded": false,
+  "guardBehaviorChanged": false,
+  "liveMultiplayerTested": false,
+  "published": false
+}

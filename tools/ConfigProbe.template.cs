@@ -92,7 +92,7 @@ namespace TooManyLags
                     throw new Exception("Removed protection switch must not become an active config entry.");
             }
             finally { if (File.Exists(legacyPath)) File.Delete(legacyPath); }
-            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 55 settings in eleven ordered English feature sections; automatic FGN setup enabled; object categories last; legacy protection=false is ignored.");
+            Console.WriteLine("PASS: actual BepInEx generation and identical reload/save; 57 settings in eleven ordered English feature sections; automatic FGN setup enabled; object categories last; legacy protection=false is ignored.");
             Console.WriteLine("PASS: movement defaults to 0.1, camera to 0.05; angular overlap defaults to 30 degrees (0-45); object categories stay last.");
             Console.WriteLine("PASS: actual BepInEx camera and server movement ranges accept 0.05 seconds and clamp to 0.05-5.");
         }
@@ -149,15 +149,16 @@ namespace TooManyLags
                 {"07 - Camera Heading/CameraDirectionOverlapDegrees", "30"},
                 {"07 - Camera Heading/CameraRotationPredictionSeconds", "0.1"},
                 {"03 - AI Mob Ownership/EnableAIOwnership", "true"}, {"03 - AI Mob Ownership/BossAlwaysServerOwned", "true"},
+                {"03 - AI Mob Ownership/EnableMobHandoffVisualBridge", "true"},
                 {"03 - AI Mob Ownership/BossPlayerRadius", "30"}, {"03 - AI Mob Ownership/ServerFallbackPingMs", "200"},
                 {"03 - AI Mob Ownership/ServerFallbackRadius", "6"}
             };
             foreach (string category in new[] {
                 "Doors", "Seats", "Beds", "Workstations", "Smelters", "CookingStations", "Fireplaces", "Beehives",
                 "SapCollectors", "Wards", "MapTables", "Wisplights", "TamedAnimals", "Containers", "ItemStands", "Signs",
-                "Portals", "Fermenters", "Incinerators", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables", "WorldMarkers", "LooseItems"
+                "Portals", "Fermenters", "Incinerators", "Defenses", "ShieldGenerators", "Pickables", "Offerings", "Vehicles", "OtherInteractables", "WorldMarkers", "LooseItems", "PhysicsObjects"
             }) expected.Add("10 - Object Categories/" + category, "true");
-            if (config.Count != 55) throw new Exception("Expected 55 config entries; found " + config.Count + ".");
+            if (config.Count != 57) throw new Exception("Expected 57 config entries; found " + config.Count + ".");
             int categoryNotes = 0;
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> entry in config) {
                 string key = entry.Key.Section + "/" + entry.Key.Key, value = Convert.ToString(entry.Value.BoxedValue, CultureInfo.InvariantCulture), wanted;

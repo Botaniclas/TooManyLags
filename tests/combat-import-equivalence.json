@@ -6,7 +6,7 @@
     {
       "file": "FgnCombatOwnership.cs",
       "source_sha256": "1EEEA58FF57EBBB0E8CC3A271A45D2D43C82BE94D97AEE1B579C6C87CBD70C14",
-      "import_sha256": "731F499A459B13C90F066E5C657C2DDEB211862ED7BB63B273F3EA8A01C1D743",
+      "import_sha256": "07D4121386E017D2832EF0087CAB098A316F4F01C8321DEB663C750516D6B420",
       "namespace_branding_protocol_only": false,
       "additional_changes": [
         "Config section/descriptions/default adapted for required FGN and 09 - AI Mob Ownership.",
@@ -26,16 +26,19 @@
         "1.0.55 initial-only assignment/retention uses ready native peer loading areas without waiting for the FGN greeting. Later live player target handoffs still require the unchanged matched-peer/capability/readiness checks; no owner is stolen and no new RPC is introduced.",
         "1.0.55 keeps an existing non-boss server-default lease while native players still load the area but the FGN greeting/eligible recipient is not ready. Targeted player transfers keep Candidate unchanged; departure with no native loading peer still releases ownership.",
         "1.0.56 seeds eligible unowned mobs at native server CreateObject entry before normal construction, accepts passive unowned created actors at native assignment, and retains current-server-origin zero-revision newborn Hostile Mobs through the existing initial lease. Client-created spawns and all existing owners keep guarded handoffs; no client protocol, spawn proxy, physics loop or attack/readiness bypass is added.",
-        "1.0.57 updates the shared ServerOwnedMobsByDefault description to include fixed native SpawnArea/CreatureSpawner roots. Executable combat, target, lease and handoff code is unchanged from 1.0.56; spawner defaults reuse the existing controller native/pre-construction paths, not the actor-target policy."
+        "1.0.57 updates the shared ServerOwnedMobsByDefault description to include fixed native SpawnArea/CreatureSpawner roots. Executable combat, target, lease and handoff code is unchanged from 1.0.56; spawner defaults reuse the existing controller native/pre-construction paths, not the actor-target policy.",
+        "1.0.63 adapts native fallback preflight to the FGN 1.5.72 combat guard and respects the provider prefab exclusions; target-based policy and attack guards are retained.",
+        "1.0.67 removes duplicate native/PUP collision-loading prerequisites from managed ownership selection; live actor validity, actual attacks, source commits and the independent PUP simulation module remain protected."
       ]
     },
     {
       "file": "FgnCombatBridge.cs",
       "source_sha256": "6DA9D9FFC3CE4456EE1CF0AD6B643B63FF142712503EC371E510A5298D0F90F1",
-      "import_sha256": "DF602C74D5D7E0E9971DC252DB04012FB78DF8441DC5B9EDE69F24376941FACF",
+      "import_sha256": "46334E5B04DB1B6DFAB8940FE51A057315F90CF09A946308DDD1F06568DA7486",
       "namespace_branding_protocol_only": false,
       "additional_changes": [
-        "Binds the native source-owner commit/result and key-only pending removal delegates once for identified mob handoffs. Existing timing, budget and eligibility contracts stay verified."
+        "Binds the native source-owner commit/result and key-only pending removal delegates once for identified mob handoffs. Existing timing, budget and eligibility contracts stay verified.",
+        "1.0.63 adapts native fallback preflight to the FGN 1.5.72 combat guard and respects the provider prefab exclusions; target-based policy and attack guards are retained."
       ]
     },
     {

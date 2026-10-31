@@ -8,9 +8,9 @@ using HarmonyLib;
 
 namespace TooManyLags
 {
-    // Observe actual target writes, not UpdateAI/FixedUpdate. Delivery waits for
-    // Unity's next synchronization-context dispatch: changing owners inside
-    // UpdateTarget or FGN's handover adoption would interrupt unfinished AI work.
+    // Observe actual target writes. Deliver after the completed AI/damage call
+    // when the negotiated boundary is active; other writers use Unity's context.
+    // Never dispatch an ownership change from an unfinished target-field store.
     internal static class FgnTargetEvents
     {
         private sealed class Pending
@@ -28,10 +28,14 @@ namespace TooManyLags
         private static Action<Exception> fail;
         private static SynchronizationContext context;
         private static long epoch;
+        private static int queuedCount;
         private static ConditionalWeakTable<BaseAI, Pending> pending = new ConditionalWeakTable<BaseAI, Pending>();
         private static readonly SendOrPostCallback dispatch = Dispatch;
         private static readonly Dictionary<MethodBase, int> expected = new Dictionary<MethodBase, int>();
+#if !TML_RELEASE || TML_TEST_METRICS
         internal static int PatchedMethods, ObservedWrites;
+#endif
+        internal static bool HasPending { get { return queuedCount != 0; } }
 
         internal static void Install(Harmony harmony, Assembly fgn, Func<BaseAI, bool> isWatched,
             Action<BaseAI> onChange, Action<Exception> onFailure)
@@ -74,13 +78,18 @@ namespace TooManyLags
             il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Stfld, targetField); il.Emit(OpCodes.Ret);
             writeTarget = (Action<MonsterAI, Character>)setter.CreateDelegate(typeof(Action<MonsterAI, Character>));
             watched = isWatched; notify = onChange; fail = onFailure; context = unity;
-            Reset(); PatchedMethods = ObservedWrites = 0;
+            Reset();
+#if !TML_RELEASE || TML_TEST_METRICS
+            PatchedMethods = ObservedWrites = 0;
+#endif
 
             HarmonyMethod transpiler = new HarmonyMethod(AccessTools.Method(typeof(FgnTargetEvents), "RewriteAssignments"));
             foreach (KeyValuePair<MethodBase, int> entry in expected)
             {
                 harmony.Patch(entry.Key, transpiler: transpiler);
+#if !TML_RELEASE || TML_TEST_METRICS
                 PatchedMethods++; ObservedWrites += entry.Value;
+#endif
             }
         }
 
@@ -100,7 +109,8 @@ namespace TooManyLags
             MethodBase __originalMethod)
         {
             List<CodeInstruction> rewritten = new List<CodeInstruction>(); int count = 0;
-            MethodInfo replacement = AccessTools.Method(typeof(FgnTargetEvents), "AssignTarget");
+            MethodInfo replacement = AccessTools.Method(typeof(FgnTargetEvents),
+                __originalMethod.DeclaringType == typeof(MonsterAI) ? "AssignTarget" : "AssignAdoptedTarget");
             foreach (CodeInstruction code in instructions)
             {
                 if (IsAssignment(code))
@@ -127,6 +137,20 @@ namespace TooManyLags
             // Only player acquisition/loss can change the Player/None report.
             // CLR type checks also include destroyed Unity player references.
             if (!(previous is Player) && !(value is Player)) return;
+            try { FgnTargetBoundary.Changed(ai, value); }
+            catch (Exception error) { Fail(error); }
+            Schedule(ai);
+        }
+
+        internal static Action<BaseAI, Character> FlightAdopt = null;
+        private static void AssignAdoptedTarget(MonsterAI ai, Character value)
+        {
+            Character previous = readTarget(ai);
+            writeTarget(ai, value);
+            if (FlightAdopt != null) FlightAdopt(ai, value);
+            if (ReferenceEquals(previous, value) || (!(previous is Player) && !(value is Player))) return;
+            // A new owner adopting the existing target is not choosing another
+            // player. Report it normally without delaying its first attack.
             Schedule(ai);
         }
 
@@ -137,9 +161,9 @@ namespace TooManyLags
                 if (ReferenceEquals(ai, null) || context == null || watched == null || !watched(ai)) return;
                 Pending item = pending.GetOrCreateValue(ai);
                 if (item.Queued) return;
-                item.Ai = ai; item.Epoch = epoch; item.Queued = true;
+                item.Ai = ai; item.Epoch = epoch; item.Queued = true; queuedCount++;
                 try { context.Post(dispatch, item); }
-                catch { item.Queued = false; throw; }
+                catch { item.Queued = false; queuedCount--; throw; }
             }
             catch (Exception error) { Fail(error); }
         }
@@ -147,8 +171,8 @@ namespace TooManyLags
         private static void Dispatch(object state)
         {
             Pending item = (Pending)state;
-            if (item.Epoch != epoch) return;
-            item.Queued = false;
+            if (item.Epoch != epoch || !item.Queued) return;
+            item.Queued = false; queuedCount--;
             try
             {
                 // A two-second FGN scan may have disarmed this mob since enqueueing.
@@ -156,6 +180,15 @@ namespace TooManyLags
                 if (watched != null && watched(item.Ai) && notify != null) notify(item.Ai);
             }
             catch (Exception error) { Fail(error); }
+        }
+
+        // Only completed native AI/damage operations call this. No ownership
+        // change can be dispatched from an unfinished target-field store.
+        internal static void Flush(BaseAI ai)
+        {
+            Pending item;
+            if (queuedCount == 0 || ReferenceEquals(ai, null) || !pending.TryGetValue(ai, out item) || !item.Queued) return;
+            Dispatch(item);
         }
 
         private static void Fail(Exception error)
@@ -168,6 +201,7 @@ namespace TooManyLags
         internal static void Reset()
         {
             unchecked { epoch++; }
+            queuedCount = 0;
             pending = new ConditionalWeakTable<BaseAI, Pending>();
         }
     }

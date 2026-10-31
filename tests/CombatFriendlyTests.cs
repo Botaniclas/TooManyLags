@@ -29,7 +29,8 @@ internal static partial class FgnCombatTests
         actor.Team=Character.Faction.PlayerSpawned;actor.gameObject.Add(new Tameable{m_unsummonDistance=50f});
         bool moved;
         Assert(!FriendlyCreatures.IsFriendly(actor)&&(bool)Call("Eligible",mob),"hostile PlayerSpawned summon remains eligible despite an unsummon marker");
-        Assert(Handle(out moved)&&!moved&&FgnCombatOwnership.ShouldOverride(mob.m_uid),"hostile summon retains ordinary current-player-target FGN path");
+        Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==2&&FgnCombatOwnership.ShouldOverride(mob.m_uid),"hostile summon uses guarded current-player-target handoff");
+        FgnMobHandoff.Reset(); FgnCombatOwnership.Fgn.ClearPending(mob.m_uid);
         target.Ping=400;
         Assert(!Handle(out moved)&&moved&&old.m_rpc.Destination==100,"hostile summon retains guarded high-ping server fallback");
 
@@ -108,7 +109,7 @@ internal static partial class FgnCombatTests
         Setup();target.Ping=400;Handle(out moved);ServerAccept();
         ZDOMan.instance.GetZDO(old.m_characterID).Position=ZDOMan.instance.GetZDO(other.m_characterID).Position=new Vector3(120,0,100);
         Handle(out moved);ZNetView forwardedView=ZNetScene.instance.FindInstance(mob);actor=forwardedView.GetComponent<Character>();actor.Team=Character.Faction.Players;
-        Assert((bool)Call("DamagePrefix",actor,new HitData())&&forwardedView.Forwarded==0,"a newly friendly actor receives native damage handling without late-hit forwarding");
+        Assert((bool)Call("DamagePrefix",actor,new HitData(),true)&&forwardedView.Forwarded==0,"a newly friendly actor receives native damage handling without late-hit forwarding");
 
         Setup();target.Ping=400;Handle(out moved);ServerAccept();
         actor=ZNetScene.instance.FindInstance(mob).GetComponent<Character>();actor.Team=Character.Faction.Players;int ownerWrites=mob.OwnerWrites;

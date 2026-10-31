@@ -1,0 +1,12 @@
+{
+  "commonBase": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags-1.0.64-pending-work",
+  "current": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags-1.0.70-rejected-cells",
+  "side": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags-1.0.66-solo-test",
+  "result": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags-1.0.71-combined",
+  "currentManifestSha256": "D1B38BEEB1E986995F4332E62CC18C6B87F5A1629F3926E00F9E1DAA9960DD1D",
+  "sideManifestSha256": "CFAF02D9F018E6FBD3469E251A741681C28E3AB6F301A14794C2BB9E7D8DD1E3",
+  "currentVerifiedDllSha256": "8877DA6240DD853526C630FF1A3094A1241CA1AA440110578130417039900252",
+  "method": "LF-normalized three-way source/test merge; version-only conflicts resolved to 1.0.71",
+  "retainedCurrentDecision": "No broad ServerReady/recipient loading ownership gate is restored",
+  "scope": "Local combined test build; no installed profile, publishing or remote Git changes"
+}

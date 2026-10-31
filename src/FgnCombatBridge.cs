@@ -22,6 +22,7 @@ namespace TooManyLags
         internal readonly EchoRtt MeasuredEcho;
         internal readonly Func<ZNetPeer, int> SocketPing;
         internal readonly Func<ZDO, bool> Held, Possessed;
+        internal readonly Func<int, bool> ExcludedPrefab;
         internal readonly Func<ZDOID, double, bool> Pending;
         internal readonly Action<ZDOID, long, double> MarkPending;
         internal readonly Action<ZDOID> ClearStreak, ClearOwned, ClearPending;
@@ -55,6 +56,9 @@ namespace TooManyLags
             Rtt = Bind<Func<ZNetPeer, float>>(Method(type, "Rtt", typeof(float), typeof(ZNetPeer)));
             Held = Bind<Func<ZDO, bool>>(Method(type, "IsHeld", typeof(bool), typeof(ZDO)));
             Type possession = assembly.GetType("FiresGhettoNetworkMod.ValcastPossession", false);
+            Type exclusions = assembly.GetType("FiresGhettoNetworkMod.ServerOwnershipPatchesV3", false);
+            ExcludedPrefab = exclusions == null ? (Func<int, bool>)NoExcludedPrefab :
+                Bind<Func<int, bool>>(Method(exclusions, "IsExcluded", typeof(bool), typeof(int)));
             Possessed = possession == null ? (Func<ZDO, bool>)NoPossession :
                 Bind<Func<ZDO, bool>>(Method(possession, "IsPossessed", typeof(bool), typeof(ZDO)));
             Type gate = assembly.GetType("FiresGhettoNetworkMod.FgnVersionGate", true);
@@ -119,6 +123,7 @@ namespace TooManyLags
             return (Action<ZDOID>)method.CreateDelegate(typeof(Action<ZDOID>));
         }
         private static bool NoPossession(ZDO data) { return false; }
+        private static bool NoExcludedPrefab(int prefab) { return false; }
         private static void RequireConstant(Type type, string name, object expected)
         {
             FieldInfo field = type.GetField(name, Flags);

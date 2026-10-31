@@ -23,7 +23,7 @@ internal static class ServerSessionTests
             Check(peer.m_rpc.Sends == 1 && peer.m_rpc.Last == Rpc && (int)peer.m_rpc.Values[1] == -1, "ready client requests startup choice");
             for (int i = 0; i < 1000; i++) ServerSession.Poll();
             Check(peer.m_rpc.Sends == 1 && Plugin.SessionApplies == applied, "waiting does not initialize features or repeat traffic each frame");
-            peer.m_rpc.Pair(Rpc, 2, 3, peer.m_rpc); peer.m_rpc.Pair(Rpc, 1, 2, peer.m_rpc); peer.m_rpc.Pair(Rpc, 1, 4, peer.m_rpc);
+            peer.m_rpc.Pair(Rpc, 3, 3, peer.m_rpc); peer.m_rpc.Pair(Rpc, 1, 2, peer.m_rpc); peer.m_rpc.Pair(Rpc, 1, 4, peer.m_rpc);
             peer.m_rpc.Pair(Rpc, 1, 3, new ZRpc());
             Check(Plugin.SessionApplies == applied, "unknown protocols, invalid combinations and foreign sockets rejected");
             peer.m_server = false; peer.m_rpc.Pair(Rpc, 1, 3, peer.m_rpc); peer.m_server = true;
@@ -45,6 +45,21 @@ internal static class ServerSessionTests
             Check(Plugin.SessionEnabled && Plugin.SessionMobs && !Plugin.SessionAutoFgn, "server disables automatic FGN setup without disabling grid or AI");
             peer = Client(13); peer.m_rpc.Pair(Rpc, 1, 5, peer.m_rpc);
             Check(Plugin.SessionEnabled && !Plugin.SessionMobs && !Plugin.SessionAutoFgn, "manual FGN setup also supports grid-only mode");
+            peer = Client(14); peer.m_rpc.Pair(Rpc, 2, 11, peer.m_rpc);
+            Check(Plugin.SessionEnabled && Plugin.SessionMobs && Plugin.VisualEnabled, "authenticated v2 carries server visual ON without modifying gameplay flags");
+            int visuals = Plugin.VisualApplies;
+            peer.m_rpc.Pair(Rpc, 2, 3, peer.m_rpc);
+            Check(Plugin.VisualEnabled && Plugin.VisualApplies == visuals, "confirmed visual startup cannot change mid-session");
+            peer = Client(15); peer.m_rpc.Pair(Rpc, 1, 3, peer.m_rpc);
+            Check(!Plugin.VisualEnabled && Plugin.SessionMobs, "legacy startup preserves gameplay without enabling visuals prematurely");
+            peer.m_rpc.Pair(Rpc, 2, 11, new ZRpc());
+            Check(!Plugin.VisualEnabled, "foreign socket cannot enable the visual mode");
+            peer.m_rpc.Pair(Rpc, 2, 11, peer.m_rpc);
+            Check(Plugin.VisualEnabled, "new visual confirmation follows a proactive legacy startup");
+            peer = Client(16); peer.m_rpc.Pair(Rpc, 2, 8, peer.m_rpc);
+            Check(!Plugin.SessionEnabled && !Plugin.VisualEnabled, "visual-only invalid startup rejected");
+            peer.m_rpc.Pair(Rpc, 2, 3, peer.m_rpc);
+            Check(Plugin.SessionMobs && !Plugin.VisualEnabled, "v2 server visual OFF leaves gameplay enabled");
             int clears = Plugin.SessionClears; ServerSession.Reset();
             Check(Plugin.SessionClears == clears + 1 && !Plugin.SessionEnabled && !Plugin.SessionMobs, "shutdown removes the old runtime decision");
 
@@ -67,6 +82,8 @@ internal static class ServerSessionTests
             Check((int)peer.m_rpc.Values[1] == 0, "disabled server still communicates OFF at join");
             Plugin.Flags = 7; ServerSession.Ready(peer);
             Check((int)peer.m_rpc.Values[1] == 7, "server transmits the manual-setup bit in its startup snapshot");
+            Time.realtimeSinceStartupAsDouble = 2; peer.m_rpc.Pair(Rpc, 2, -1, peer.m_rpc);
+            Check((int)peer.m_rpc.Values[0] == 2 && (int)peer.m_rpc.Values[1] == 15, "v2 request receives the visual bit; legacy replies keep their original wire values");
             ServerSession.Reset();
             Console.WriteLine("PASS: " + checks + " server-controlled startup, authentication, retries, OFF/AI modes, idle and reconnect assertions. Simulated transport; no Unity session."); return 0;
         }

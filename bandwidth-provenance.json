@@ -1,0 +1,6 @@
+{
+  "baseline": "C:\\Users\\Niclas\\Documents\\Codex\\2026-09-19\\ic\\work\\TooManyLags-1.0.61-physics-network-test",
+  "baselineDllSha256": "6201526DBE73E12FB43DDC5C97A01F7FBB65370E87316E8269B6BF1FC0298603",
+  "purpose": "Isolated bandwidth test: native same-reference deduplication, receiver-guarded owner-only state on the ordered native stream, scoped existing FGN compression; handoff results/guards retained.",
+  "published": false
+}

@@ -18,7 +18,7 @@ internal static partial class IntegrationTests
     private static ZNetView InteractionView(ZDO data)
     {
         var template=ZNetScene.instance.GetPrefab(data.GetPrefab());var root=new GameObject {name=template.name};root.transform.position=data.GetPosition();
-        var view=root.Add(new ZNetView {Data=data});
+        var view=root.Add(new ZNetView {Data=data,m_distant=template.GetComponent<ZNetView>().m_distant});
         foreach(Component component in template.Components)if(!(component is ZNetView))root.Add((Component)Activator.CreateInstance(component.GetType()));
         var incinerator=root.GetComponent<Incinerator>();if(incinerator)incinerator.m_container=root.GetComponent<Container>();return view;
     }

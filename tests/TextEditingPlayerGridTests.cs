@@ -46,9 +46,10 @@ namespace TooManyLags.PlayerSimulation
     }
     internal sealed class Handoffs
     {
-        internal int Requests;internal Handoffs(AuthorityController owner) { }
+        private readonly AuthorityController owner;
+        internal int Requests;internal bool Refuse;internal Handoffs(AuthorityController owner) { this.owner=owner; }
         internal bool Pending(ZDOID id) { return false; }
-        internal bool Request(ZDO data,long target,Kinds kind,ZDOID mob) { Requests++;data.SetOwner(target);return true; }
+        internal bool Request(ZDO data,long target,Kinds kind,ZDOID mob) { Requests++;if(Refuse) {owner.Rejected(data.m_uid);return false;}data.SetOwner(target);return true; }
         internal void Cancel(ZDOID id) { }internal void Observe(ZDO data) { }internal void Tick(float now) { }internal void Forget(ZDOID id) { }internal void Clear() { }
     }
     internal sealed class MobPolicy
@@ -62,6 +63,30 @@ namespace TooManyLags.PlayerSimulation
 
 internal static partial class IntegrationTests
 {
+    private static void RejectedPlayerGridCells()
+    {
+        foreach(bool keep in new[]{false,true})
+        {
+            Fresh(TooManyLags.Kinds.Signs,nativeSolo:true);var first=Peer(1);Peer(2);
+            var owned=Object(typeof(Sign),1,1,1);var refused=Object(typeof(Sign),2,1,2);
+            var mode=new Mode.AuthorityController(new Mode.Settings {Keep=keep,Directional=true});Mode.Plugin.Controller=mode;
+            var index=(Mode.AuthorityWorld)typeof(Mode.AuthorityController).GetField("index",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(mode);
+            Action<float> poll=delegate(float time){Time.unscaledTime=time;mode.Poll(time);Check("player refusal controller stays active",mode.Active);};
+            mode.Handoffs.Refuse=true;poll(0);poll(.1f);
+            Check("player-mode refusal leaves a partial field uncertified",mode.Handoffs.Requests==1&&refused.GetOwner()==2&&owned.GetOwner()==1&&index.Grid.RememberedCells==0&&index.PendingCount==0);
+            for(int frame=1;frame<=200;frame++)poll(.1f+frame*.1f);
+            Check("player-mode refusal has no idle retries",mode.Handoffs.Requests==1&&index.Grid.RememberedCells==0);
+            mode.Changed(refused);mode.Wake(refused.m_uid);poll(20.2f);
+            Check("player-mode object/router events cannot resurrect a refused grid request",mode.Handoffs.Requests==1&&index.Grid.RememberedCells==0);
+            mode.Handoffs.Refuse=false;MovePeer(first,8);poll(20.3f);poll(20.4f);
+            Check("fresh player coverage retries without requiring an unrelated owner revision",mode.Handoffs.Requests==2&&refused.GetOwner()==1&&owned.Writes==0&&index.Grid.RememberedCells==(keep?1:0));
+            mode.Handoffs.Refuse=true;refused.SetOwner(2);mode.Changed(refused);poll(20.5f);
+            Check("later player-mode refusal invalidates a previously complete field",mode.Handoffs.Requests==3&&refused.GetOwner()==2&&index.Grid.RememberedCells==0);
+            mode.Destroyed(refused.m_uid);
+            Check("player-mode unload removes the only incomplete member",index.Grid.RememberedCells==(keep?1:0));
+            mode.Stop();Check("player-mode stop clears rejected field listeners",index.Grid.Renewed==null);
+        }
+    }
     private static void TextEditingPlayerGrid()
     {
         foreach(Type type in new[]{typeof(Sign),typeof(TeleportWorld)})

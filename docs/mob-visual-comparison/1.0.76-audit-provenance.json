@@ -1,0 +1,14 @@
+{
+  "baselineVersion": "1.0.76",
+  "dllSha256": "F9EEAE13A2AC2AE005D4571545AD40EE1F342422790737C0EE1819E559F30094",
+  "unchangedProductionSources": true,
+  "setting": "EnableMobHandoffVisualBridge=true",
+  "sourceHashes": {
+    "src/MobVisualCurve.cs": "197316815A37C7496F087B9371FE91EC9464DEAB948C9DED680056B420D9799F",
+    "src/MobHandoffVisual.cs": "E0A1792BDF93E56729B9F2FBF8FBB80E43E4A766E0EED30695A3AC32FF4DCDE9",
+    "src/Plugin.cs": "4D0547C68C3923FB723C5BAE8586AE4B19090DD9CD858D5FFB1749D3DEA8BFAF",
+    "tests/MobVisualFixtures.cs": "7616E1558B9FAC7DA59B8AFDA1C61FE9A07B9C677DC1CC3F99EC11F9ED9F9313"
+  },
+  "gameSha256": "94998885B103D6E5F5480123EAEE0A093E82AF2DDEEEE37536C15BF555F24F3A",
+  "scope": "Production bridge executed with existing managed fixtures and a direct mathematical model of native free-root SyncPosition. No live Unity/physics/transport. Existing package and configuration unchanged."
+}

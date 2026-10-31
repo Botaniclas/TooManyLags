@@ -11,6 +11,7 @@ namespace TooManyLags
         private static ZNetPeer source;
         private static ZRpc socket;
         private static bool known;
+        private static bool visualKnown;
         private static int attempts;
         private static double retryAt;
 
@@ -22,35 +23,47 @@ namespace TooManyLags
             peer.m_rpc.Register<int, int>(RpcName, delegate(ZRpc rpc, int version, int flags)
             {
                 ZNet net = ZNet.instance;
-                if (version != 1 || !net || !peer.IsReady() || !ReferenceEquals(rpc, peer.m_rpc) ||
+                if ((version != 1 && version != 2) || !net || !peer.IsReady() || !ReferenceEquals(rpc, peer.m_rpc) ||
                     !ReferenceEquals(net.GetPeer(peer.m_uid), peer)) return;
                 if (net.IsDedicated())
                 {
                     if (flags != -1 || Time.realtimeSinceStartupAsDouble < nextRequest) return;
                     nextRequest = Time.realtimeSinceStartupAsDouble + 1;
-                    Send(peer); return;
+                    Send(peer, version); return;
                 }
                 if (!peer.m_server || !ReferenceEquals(net.GetServerPeer(), peer) ||
-                    (flags != 0 && flags != 1 && flags != 3 && flags != 5 && flags != 7)) return;
+                    flags < 0 || (flags & ~(version == 2 ? 15 : 7)) != 0 ||
+                    ((flags & 7) != 0 && (flags & 7) != 1 && (flags & 7) != 3 && (flags & 7) != 5 && (flags & 7) != 7) ||
+                    ((flags & 8) != 0 && (flags & 1) == 0)) return;
                 bool same = ReferenceEquals(current, net) && ReferenceEquals(source, peer) && ReferenceEquals(socket, rpc);
-                if (same && known) return; // Restart settings never change mid-session.
+                if (same && known)
+                {
+                    if (version == 2 && !visualKnown)
+                    { visualKnown = true; Plugin.ApplyVisualSession((flags & 8) != 0); }
+                    return; // Restart settings never change mid-session.
+                }
                 if (!same) Reset();
                 current = net; source = peer; socket = rpc; known = true;
-                try { Plugin.ApplyServerSession((flags & 1) != 0, (flags & 2) != 0, (flags & 4) == 0); }
+                visualKnown = version == 2 || flags == 0;
+                try
+                {
+                    Plugin.ApplyServerSession((flags & 1) != 0, (flags & 2) != 0, (flags & 4) == 0);
+                    if (version == 2) Plugin.ApplyVisualSession((flags & 8) != 0);
+                }
                 catch (Exception error)
                 { Plugin.ClearClientSession(); Plugin.Report("Server-controlled startup failed; native ownership retained. " + error.GetBaseException().Message); }
             });
         }
         internal static void Ready(ZNetPeer peer)
         { if (ZNet.instance && ZNet.instance.IsDedicated() && peer != null && peer.IsReady()) Send(peer); }
-        private static void Send(ZNetPeer peer)
+        private static void Send(ZNetPeer peer, int version = 1)
         {
-            try { if (peer.m_rpc != null) peer.m_rpc.Invoke(RpcName, 1, Plugin.SessionFlags()); }
+            try { if (peer.m_rpc != null) peer.m_rpc.Invoke(RpcName, version, version == 2 ? Plugin.VisualSessionFlags() : Plugin.SessionFlags()); }
             catch (Exception) { }
         }
         internal static void Poll()
         {
-            if (known) return;
+            if (known && visualKnown) return;
             ZNet net = ZNet.instance;
             if (!net || net.IsServer()) return;
             ZNetPeer peer = net.GetServerPeer();
@@ -60,12 +73,13 @@ namespace TooManyLags
             { Reset(); current = net; source = peer; socket = peer.m_rpc; retryAt = Double.NegativeInfinity; }
             if (attempts >= 15 || Time.realtimeSinceStartupAsDouble < retryAt) return;
             retryAt = Time.realtimeSinceStartupAsDouble + 2; attempts++;
-            try { socket.Invoke(RpcName, 1, -1); } catch (Exception) { }
+            // Legacy request remains available if an older server ignores v2.
+            try { socket.Invoke(RpcName, attempts <= 2 || known ? 2 : 1, -1); } catch (Exception) { }
         }
         internal static void Reset()
         {
             Plugin.ClearClientSession();
-            current = null; source = null; socket = null; known = false; attempts = 0; retryAt = 0;
+            current = null; source = null; socket = null; known = visualKnown = false; attempts = 0; retryAt = 0;
         }
     }
 }

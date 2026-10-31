@@ -13,7 +13,7 @@ internal static class FgnOwnerHandoffTests
         internal readonly Dictionary<long, ZNetPeer> Peers = new Dictionary<long, ZNetPeer>();
         internal readonly Dictionary<ZDOID, ZDO> Data = new Dictionary<ZDOID, ZDO>();
         internal double Time;
-        internal int Sends;
+        internal int Sends, Rejections;
         internal long LastTarget;
         internal bool Matched = true, ThrowSend;
         internal readonly FgnOwnerHandoff Bridge;
@@ -22,6 +22,7 @@ internal static class FgnOwnerHandoffTests
             Peers[10] = new ZNetPeer(); Peers[20] = new ZNetPeer();
             Bridge = new FgnOwnerHandoff(99, delegate(ZNetPeer ignored) { return Matched; },
                 FindPeer, FindData, Send, delegate { return Time; });
+            Bridge.Rejected = delegate { Rejections++; };
         }
         private ZNetPeer FindPeer(long id) { ZNetPeer peer; return Peers.TryGetValue(id, out peer) ? peer : null; }
         private ZDO FindData(ZDOID id) { ZDO data; return Data.TryGetValue(id, out data) ? data : null; }
@@ -115,11 +116,12 @@ internal static class FgnOwnerHandoffTests
         world.Bridge.Result(world.Peers[10].m_rpc, data.m_uid, false, "future veto");
         Check("unknown result remains pending", world.Bridge.Pending(data));
         world.Bridge.Result(world.Peers[10].m_rpc, data.m_uid, false, "owner fighting");
-        Check("known busy veto releases gameplay but reserves policy", !world.Bridge.Pending(data) && world.Bridge.Reserved(data) && !world.Bridge.Received(data));
-        world.Time = 5.999;
-        Check("known busy cooldown has no RPC", world.Bridge.Request(data, 20) == 1 && world.Sends == 1 && !world.Bridge.Pending(data));
-        world.Time = 6;
-        Check("known veto permits exactly one cooled retry", world.Bridge.Request(data, 20) == 1 && world.Sends == 2 && world.Bridge.Pending(data));
+        Check("known busy veto releases transaction and notifies policy once", !world.Bridge.Pending(data) && !world.Bridge.Reserved(data) && !world.Bridge.Received(data) && world.Rejections == 1);
+        world.Bridge.Result(world.Peers[10].m_rpc, data.m_uid, false, "held");
+        for (int i = 0; i < 10000; i++) { world.Time = i; world.Bridge.Pending(data); world.Bridge.Reserved(data); }
+        Check("settled rejection has no timed retry, status work or duplicate notification", world.Sends == 1 && world.Rejections == 1);
+        world.Time = 0;
+        Check("fresh explicit policy request has no six-second veto delay", world.Bridge.Request(data, 20) == 1 && world.Sends == 2 && world.Bridge.Pending(data));
         world.Time = 1000;
         Check("new unanswered retry never overlaps next request", world.Bridge.Request(data, 20) == 1 && world.Sends == 2);
         World.Commit(data, 20, 5);
@@ -130,11 +132,10 @@ internal static class FgnOwnerHandoffTests
         {
             world = new World(); data = world.Add(16, 10, 4); world.Bridge.Request(data, 20);
             world.Bridge.Result(world.Peers[10].m_rpc, data.m_uid, false, reason);
-            Check("known source-owner veto " + reason, !world.Bridge.Pending(data) && world.Bridge.Reserved(data));
+            Check("known source-owner veto " + reason, !world.Bridge.Pending(data) && !world.Bridge.Reserved(data) && world.Rejections == 1);
         }
         world = new World(); data = world.Add(17, 10, 4); world.Bridge.Request(data, 20);
         world.Bridge.Result(world.Peers[10].m_rpc, data.m_uid, false, "held"); world.Peers.Remove(20);
-        world.Time = 6;
         Check("known negative allows new ready policy after departed target", world.Bridge.Request(data, 99) == 1 && world.Sends == 2 && world.LastTarget == 99 && data.Owner == 10);
 
         world = new World(); data = world.Add(3, 10, 1);

@@ -9,6 +9,8 @@ namespace TooManyLags.PlayerSimulation
 {
     internal sealed class LocalAgent
     {
+        internal static Func<ZDO, long, object> VisualCapture;
+        internal static Action<object> VisualCommitted;
         internal static Func<ZDO, bool> TextEditBusy = null;
         private sealed class Ticket
         {
@@ -21,6 +23,8 @@ namespace TooManyLags.PlayerSimulation
         }
         private sealed class Lease { internal ushort Revision; internal float Until; }
         private sealed class Busy { internal Ticket Ticket; internal float Check; }
+        internal static Action<ZDO, long> FlightTransfer = null;
+        internal static Func<ZDO, bool> CombatForward = null;
         private sealed class Forward { internal long Owner; internal ushort Revision; internal float Until; internal Kinds Kind; }
         private sealed class Replay { internal int Result; internal float Until; }
         private readonly Dictionary<ZDOID, Ticket> prepared = new Dictionary<ZDOID, Ticket>();
@@ -31,7 +35,6 @@ namespace TooManyLags.PlayerSimulation
         private readonly Dictionary<long, Replay> replay = new Dictionary<long, Replay>();
         private readonly List<ZDOID> ids = new List<ZDOID>();
         private readonly List<long> tokens = new List<long>();
-        private readonly Dictionary<Vector2s, bool> areaReady = new Dictionary<Vector2s, bool>();
         private readonly ConditionalWeakTable<ZNetView, ViewState> views = new ConditionalWeakTable<ZNetView, ViewState>();
         private static readonly ConditionalWeakTable<ZNetView, Published> published = new ConditionalWeakTable<ZNetView, Published>();
         private sealed class Published { internal long Owner; internal ushort Revision; }
@@ -46,7 +49,6 @@ namespace TooManyLags.PlayerSimulation
             internal int Inventories;
         }
         private readonly OwnershipCadence cadence = new OwnershipCadence(.1f);
-        private int readinessFrame = -1;
         private float nextSweep;
         private bool mobWatch;
         internal bool MobsEnabled = true;
@@ -94,7 +96,7 @@ namespace TooManyLags.PlayerSimulation
             {
                 if (ticket.Target != me) return;
                 ZDO data = ZDOMan.instance.GetZDO(ticket.Id); ZNetView view = data != null ? ZNetScene.instance.FindInstance(data) : null;
-                if (data == null || !view || !view.IsValid() || !view.gameObject.activeInHierarchy || !AreaReady(data.GetPosition())) return;
+                if (data == null || !view || !view.IsValid() || !ReferenceEquals(view.GetZDO(),data) || !view.gameObject.activeInHierarchy) return;
                 if (data.GetOwner() == me && data.OwnerRevision == ticket.Revision + 1)
                 {
                     if (ticket.Kind == Kinds.None && data.GetLong(MobPolicy.WriterKey, 0) != me) Adopt(data, ticket.MobTarget);
@@ -107,8 +109,8 @@ namespace TooManyLags.PlayerSimulation
             {
                 if (ticket.Target != me) return;
                 ZDO data = ZDOMan.instance.GetZDO(ticket.Id); ZNetView view = data != null ? ZNetScene.instance.FindInstance(data) : null;
-                bool ready = data != null && data.IsValid() && data.GetOwner() == ticket.Source && data.OwnerRevision == ticket.Revision && view && view.IsValid() && view.gameObject.activeInHierarchy && AreaReady(data.GetPosition());
-                if (ready && ticket.Kind == Kinds.None) { Character target = TargetInstance(ticket.MobTarget); ready = MobsEnabled && State(view).Ai && MobPolicy.Eligible(data) && target is Player && !target.IsDead(); }
+                bool ready = data != null && data.IsValid() && data.GetOwner() == ticket.Source && data.OwnerRevision == ticket.Revision;
+                if (ready && ticket.Kind == Kinds.None) { Character target = TargetInstance(ticket.MobTarget); ready = view && view.IsValid() && view.gameObject.activeInHierarchy && MobsEnabled && State(view).Ai && MobPolicy.Eligible(data) && target is Player && !target.IsDead(); }
                 if (ready && prepared.Count < 4096) prepared[ticket.Id] = ticket; else ready = false;
                 Reply(Message.Prepared, ticket, delegate(ZPackage p) { p.Write(ready); }); return;
             }
@@ -119,12 +121,15 @@ namespace TooManyLags.PlayerSimulation
             float until; int result = Check(ticket, source, sourceView, out until);
             if (result == 1)
             {
+                object presentation = (ticket.Kind == Kinds.None || ticket.Kind == Kinds.TamedAnimals) && VisualCapture != null ? VisualCapture(source, ticket.Target) : null;
                 // Source-side commit publishes the latest object state and stops
                 // local simulation through the normal native owner revision.
-                ZDOMan.instance.ForceSendZDO(ticket.Id); source.SetOwner(ticket.Target);
+                ZDOMan.instance.ForceSendZDO(ticket.Id);
+                if ((ticket.Kind == Kinds.None || ticket.Kind == Kinds.TamedAnimals) && FlightTransfer != null) FlightTransfer(source, ticket.Target); else source.SetOwner(ticket.Target);
                 forward[ticket.Id] = new Forward { Owner = ticket.Target, Revision = source.OwnerRevision, Until = Time.unscaledTime + 5f, Kind = ticket.Kind };
                 blocked.Remove(ticket.Id);
                 replay[ticket.Token] = new Replay { Result = 1, Until = Time.unscaledTime + 10f };
+                if (presentation != null && VisualCommitted != null) VisualCommitted(presentation);
             }
             else if (result == 2 && blocked.Count < 4096) blocked[ticket.Id] = new Busy { Ticket = ticket, Check = until };
             ReplyResult(ticket, result);
@@ -156,13 +161,6 @@ namespace TooManyLags.PlayerSimulation
             if (refill.TryGetValue(ticket.Id, out lease) && lease.Revision == data.OwnerRevision && lease.Until > Time.unscaledTime) { until = lease.Until; return 2; }
             return 1;
         }
-        private bool AreaReady(Vector3 point)
-        {
-            if (readinessFrame != Time.frameCount) { readinessFrame = Time.frameCount; areaReady.Clear(); }
-            Vector2s zone = ZoneSystem.GetZone(point); bool ready;
-            if (!areaReady.TryGetValue(zone, out ready)) { ready = ZNetScene.instance.IsAreaReady(point); areaReady.Add(zone, ready); }
-            return ready;
-        }
         private static Character TargetInstance(ZDOID id)
         { GameObject root = !id.IsNone() && ZNetScene.instance ? ZNetScene.instance.FindInstance(id) : null; return root ? root.GetComponent<Character>() : null; }
         internal void Observe(ZDO data, bool final = true)
@@ -173,7 +171,14 @@ namespace TooManyLags.PlayerSimulation
                 (data.OwnerRevision == ticket.Revision || data.OwnerRevision == ticket.Revision + 1))
             {
                 if (!ticket.Adopted && ticket.Kind == Kinds.None) { Adopt(data, ticket.MobTarget); ticket.Adopted = true; }
-                if (final && data.OwnerRevision == ticket.Revision + 1) { prepared.Remove(data.m_uid); PublishOwned(data); Activation(ticket, data.OwnerRevision); }
+                if (final && data.OwnerRevision == ticket.Revision + 1)
+                {
+                    ZNetView activeView=ZNetScene.instance ? ZNetScene.instance.FindInstance(data) : null;
+                    // Owner metadata can precede scene creation. Activate routed
+                    // actions only when their native RPC receiver exists.
+                    if (activeView && activeView.IsValid() && ReferenceEquals(activeView.GetZDO(),data) && activeView.gameObject.activeInHierarchy)
+                    { prepared.Remove(data.m_uid); PublishOwned(data); Activation(ticket, data.OwnerRevision); }
+                }
             }
             if (blocked.ContainsKey(data.m_uid)) UseEnded(data.m_uid);
             if (final && data.GetOwner() == ZDOMan.GetSessionID() && MobsEnabled && mobWatch && MobPolicy.HostilePrefab(data.GetPrefab()))
@@ -269,6 +274,9 @@ namespace TooManyLags.PlayerSimulation
         internal bool ForwardDestination(ZDOID id, ZDO data, int method, out long owner, out ushort revision)
         {
             owner = 0; revision = 0; Forward stamp;
+            // An already-addressed mob hit must reach the new revision-aware
+            // combat router. The legacy receipt covers only one old handoff.
+            if (method == "RPC_Damage".GetStableHashCode() && CombatForward != null && CombatForward(data)) return false;
             if (!forward.TryGetValue(id, out stamp) || Time.unscaledTime > stamp.Until ||
                 (data != null && (data.GetOwner() != stamp.Owner || data.OwnerRevision != stamp.Revision))) return false;
             if (!(stamp.Kind == Kinds.None ? method == "RPC_Damage".GetStableHashCode() : ObjectCatalog.OwnerRequest(stamp.Kind, method))) return false;
@@ -306,6 +314,6 @@ namespace TooManyLags.PlayerSimulation
         { Plugin.Network.ToServer(message, delegate(ZPackage p) { p.Write(ticket.Token); p.Write(ticket.Id); write(p); }); }
         private static void ReplyResult(Ticket ticket, int result) { Reply(Message.Result, ticket, delegate(ZPackage p) { p.Write(result); }); }
         private static void Activation(Ticket ticket, ushort revision) { Reply(Message.Activated, ticket, delegate(ZPackage p) { p.Write(revision); }); }
-        internal void Reset() { prepared.Clear(); blocked.Clear(); refill.Clear(); opening.Clear(); forward.Clear(); replay.Clear(); areaReady.Clear(); mobWatch = false; }
+        internal void Reset() { prepared.Clear(); blocked.Clear(); refill.Clear(); opening.Clear(); forward.Clear(); replay.Clear(); mobWatch = false; }
     }
 }

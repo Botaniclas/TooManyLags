@@ -72,7 +72,11 @@ internal static class HandoffRuntimeTests
         target.Dead=false;Plugin.Local.SetMobWatch(true);Plugin.Local.TargetChanged(ai);Check(view.Data.GetZDOID(MobPolicy.TargetKey)==target.GetZDOID(),"Initial live player target report");
         var reloadedRoot=new GameObject();var reloadedView=reloadedRoot.Add<ZNetView>();reloadedView.Data=view.Data;reloadedRoot.Add<Character>();var reloadedAi=reloadedRoot.Add<MonsterAI>();reloadedAi.Init();ZNetScene.instance.Views[view.Data.m_uid]=reloadedView;
         Plugin.Local.Instance(reloadedView);Check(view.Data.GetZDOID(MobPolicy.TargetKey).IsNone(),"Reload cannot preserve a stale target publication marker");
-        Reset();view=Object(Kinds.Doors);var receiver=new LocalAgent();ZDOMan.Session=22;ZNetScene.instance.Ready=false;receiver.Receive(Message.Prepare,Ticket(view.Data,Kinds.Doors,++token));var msg=Plugin.Network.Sent[Plugin.Network.Sent.Count-1];msg.Data.ReadLong();msg.Data.ReadZDOID();Check(!msg.Data.ReadBool(),"Receiver cannot approve unloaded area");
+        Reset();view=Object(Kinds.Doors);var receiver=new LocalAgent();ZDOMan.Session=22;ZNetScene.instance.Ready=false;ZNetScene.instance.Views.Clear();receiver.Receive(Message.Prepare,Ticket(view.Data,Kinds.Doors,++token));var msg=Plugin.Network.Sent[Plugin.Network.Sent.Count-1];msg.Data.ReadLong();msg.Data.ReadZDOID();Check(msg.Data.ReadBool(),"Matching state can prepare ownership without a local instance or broad ready area");
+        view.Data.SetOwner(22);Plugin.Network.Sent.Clear();receiver.Observe(view.Data);
+        Check(view.Data.Owner==22&&Plugin.Network.Sent.Count==0,"Ownership is assigned without prematurely activating an absent RPC receiver");
+        ZNetScene.instance.Views.Add(view.Data.m_uid,view);receiver.Instance(view);
+        Check(Plugin.Network.Sent.Count==1&&Plugin.Network.Sent[0].Message==Message.Activated,"Native instance creation releases routed actions despite broad area unreadiness");
         // Thousands of traversed handoffs leave no long-lived local leases.
         Reset();for(int i=0;i<2000;i++) { view=Object(Kinds.Smelters,i+1);Plugin.Local.Refilling(view.Data,"RPC_AddOre".GetStableHashCode()); }
         Time.unscaledTime=30;Plugin.Local.Tick(30);Check(!Plugin.Local.HasWork,"Expired station leases are fully released");
@@ -93,7 +97,7 @@ internal static class HandoffRuntimeTests
 
         Reset();view=Object(Kinds.Doors);view.Data.Owner=33;var controller=Plugin.Controller;var receiver=new LocalAgent();
         Check(controller.Handoffs.Request(view.Data,22,Kinds.Doors,ZDOID.None),"Vanilla source can hand a simple door to a compatible player");controller.Handoffs.Tick(0);
-        var prepare=Plugin.Network.Sent[Plugin.Network.Sent.Count-1];Check(prepare.Message==Message.Prepare && prepare.Uid==22,"Compatible receiver still provides actual area readiness");
+        var prepare=Plugin.Network.Sent[Plugin.Network.Sent.Count-1];Check(prepare.Message==Message.Prepare && prepare.Uid==22,"Compatible receiver confirms the expected source state");
         ZDOMan.Session=22;receiver.Receive(prepare.Message,prepare.Data);var prepared=Plugin.Network.Sent[Plugin.Network.Sent.Count-1];controller.Handoffs.Receive(22,prepared.Message,prepared.Data);
         ZDOMan.Session=11;view.Data.Owner=22; // Simulate a native import's owner half.
         controller.Handoffs.Tick(.1f);Check(view.Data.OwnerRevision==0,"Owner-half import cannot authorize a second native owner write");
@@ -129,8 +133,81 @@ internal static class HandoffRuntimeTests
         var deferred=Object(Kinds.Doors,4097);deferred.Data.Owner=33;Check(!controller.Handoffs.Request(deferred.Data,34,Kinds.Doors,ZDOID.None),"Capacity saturation defers extra native work");
         controller.Handoffs.Tick(0);Check(controller.Handoffs.Request(deferred.Data,34,Kinds.Doors,ZDOID.None),"Deferred native work can start as soon as capacity is released");controller.Handoffs.Tick(.1f);Check(deferred.Data.Owner==34,"Dense native batch completes its deferred transfer");
     }
+    private static long StartCoordinator(ZNetView view,Kinds kind,ZDOID mob=default(ZDOID))
+    {
+        var controller=Plugin.Controller;Check(controller.Handoffs.Request(view.Data,22,kind,mob),"Coordinator starts a guarded request");controller.Handoffs.Tick(0);
+        var prepare=Plugin.Network.Sent[Plugin.Network.Sent.Count-1];long value=prepare.Data.ReadLong();prepare.Data.SetPos(0);
+        var receiver=new LocalAgent();ZDOMan.Session=22;receiver.Receive(prepare.Message,prepare.Data);
+        var ready=Plugin.Network.Sent[Plugin.Network.Sent.Count-1];controller.Handoffs.Receive(22,ready.Message,ready.Data);
+        ZDOMan.Session=11;Time.unscaledTime=.1f;controller.Handoffs.Tick(.1f);
+        Check(controller.Handoffs.Committing(view.Data.m_uid),"Coordinator source command is in flight: "+kind);return value;
+    }
+    private static void CoordinatorResult(ZNetView view,long value,int result)
+    {
+        var packet=new ZPackage();packet.Write(value);packet.Write(view.Data.m_uid);packet.Write(result);packet.SetPos(0);
+        Plugin.Controller.Handoffs.Receive(11,Message.Result,packet);
+    }
+    private static void DiscardedGridRefusals()
+    {
+        foreach(int result in new[]{0,2,3,4})
+        {
+            Reset();var view=Object(Kinds.Containers);long value=StartCoordinator(view,Kinds.Containers);CoordinatorResult(view,value,result);
+            var controller=Plugin.Controller;
+            Check(!controller.Handoffs.Pending(view.Data.m_uid)&&controller.Rejections==1&&controller.Wakes==0&&view.Data.Owner==11,"Processed grid refusal discards without a wake or owner write");
+            int messages=Plugin.Network.Sent.Count;
+            Time.unscaledTime=20;controller.Handoffs.Tick(20);
+            Check(Plugin.Network.Sent.Count==messages&&!controller.Handoffs.Pending(view.Data.m_uid),"No timed replay survives a discarded grid refusal");
+            var wake=new ZPackage();wake.Write(value);wake.Write(view.Data.m_uid);wake.SetPos(0);controller.Handoffs.Receive(11,Message.Wake,wake);
+            CoordinatorResult(view,value,result);Check(controller.Rejections==1&&controller.Wakes==0,"Late use-end and duplicate refusal cannot revive an old command");
+            Check(controller.Handoffs.Request(view.Data,22,Kinds.Containers,ZDOID.None),"Fresh coverage can request unchanged source owner/revision");controller.Handoffs.Tick(20);
+            var next=Plugin.Network.Sent[Plugin.Network.Sent.Count-1];Check(next.Message==Message.Prepare&&next.Data.ReadLong()>value,"Fresh grid attempt uses a new token without a veto cooldown");
+        }
+        Reset();var actor=Object(Kinds.None);actor.gameObject.Add<Character>();var ai=actor.gameObject.Add<MonsterAI>();ai.Init();
+        var target=Object(Kinds.None,2).gameObject.Add<Player>();ai.Target=target;
+        long attack=StartCoordinator(actor,Kinds.None,target.GetZDOID());CoordinatorResult(actor,attack,2);
+        Check(Plugin.Controller.Handoffs.Pending(actor.Data.m_uid)&&Plugin.Controller.Rejections==0,"Hostile Mob attack waiting remains separate from grid refusal policy");
+        foreach(bool complete in new[]{false,true})
+        {
+            Reset();var view=Object(Kinds.Containers);long value=StartCoordinator(view,Kinds.Containers);view.Data.Owner=22;if(complete)view.Data.OwnerRevision=1;
+            CoordinatorResult(view,value,2);
+            Check(Plugin.Controller.Rejections==0&&Plugin.Controller.Handoffs.Committing(view.Data.m_uid),"Late refusal cannot discard a real native receipt or half import");
+        }
+    }
     public static void Main()
-    { try { LooseItemSource();TextEditingSource();InventoryProtection();RefillAndUse();ReceiptAndRouter();MobAndUnload();OptionalClients();Console.WriteLine("PASS: "+checks+" production handoff/runtime assertions: inventory opening race, refill leases, active use, text editing, cancel/replay, receiver activation, optional-client native fallback, routed payloads and cache expiry."); } catch(Exception error) { Console.Error.WriteLine(error);Environment.ExitCode=1; } }
+    { try { CombatRouterSelection();VisualCommitOrdering();DiscardedGridRefusals();LooseItemSource();TextEditingSource();InventoryProtection();RefillAndUse();ReceiptAndRouter();MobAndUnload();OptionalClients();Console.WriteLine("PASS: "+checks+" production handoff/runtime assertions: inventory opening race, refill leases, active use, text editing, cancel/replay, receiver activation, optional-client native fallback, routed payloads and cache expiry."); } catch(Exception error) { Console.Error.WriteLine(error);Environment.ExitCode=1; } }
+    private static void CombatRouterSelection()
+    {
+        Reset();var target=Object(Kinds.None,2).gameObject.Add<Player>();target.Side=Character.Faction.Players;
+        var view=Object(Kinds.None);var ai=view.gameObject.Add<MonsterAI>();ai.Init();view.gameObject.Add<Character>();ai.Target=target;
+        Commit(Plugin.Local,view.Data,Kinds.None,++token,target.GetZDOID());Check(Result()==1&&view.Data.Owner==22,"mob source transition establishes real legacy forward receipt");
+        ZNet.instance.Server=false;Plugin.Network.Sent.Clear();
+        var hit=new ZRoutedRpc.RoutedRPCData{m_msgID=123,m_senderPeerID=33,m_targetPeerID=11,m_targetZDO=view.Data.m_uid,m_methodHash="RPC_Damage".GetStableHashCode()};
+        Check(!RequestRouter.Handle(ZRoutedRpc.instance,hit,true)&&Plugin.Network.Sent.Count==1&&Plugin.Network.Sent[0].Message==Message.Forward,"legacy endpoint retains its native receipt relay");
+        int probes=0;LocalAgent.CombatForward=delegate(ZDO value){probes++;return ReferenceEquals(value,view.Data);};
+        try
+        {
+            Plugin.Network.Sent.Clear();
+            Check(RequestRouter.Handle(ZRoutedRpc.instance,hit,true)&&Plugin.Network.Sent.Count==0&&probes==1,"updated combat route reaches Character handler without competing one-receipt relay");
+            LocalAgent.CombatForward=delegate(ZDO value){return false;};
+            Check(!RequestRouter.Handle(ZRoutedRpc.instance,hit,true)&&Plugin.Network.Sent.Count==1,"missing or expired new route retains the legacy fallback");
+        }
+        finally {LocalAgent.CombatForward=null;}
+    }
+    private static void VisualCommitOrdering()
+    {
+        Reset();var view=Object(Kinds.TamedAnimals);var tame=view.gameObject.Add<Tameable>();var actor=view.gameObject.Add<Character>();var ai=view.gameObject.Add<MonsterAI>();ai.Init();actor.Tamed=true;
+        int captured=0,completed=0;object marker=new object();
+        LocalAgent.VisualCapture=delegate(ZDO data,long target){Check(data.Owner==11&&target==22,"capture precedes the sole native ownership write");captured++;return marker;};
+        LocalAgent.VisualCommitted=delegate(object value){Check(ReferenceEquals(marker,value)&&view.Data.Owner==22,"presentation starts only after real successful source commit");completed++;};
+        try
+        {
+            tame.Rider=true;long n=++token;Commit(Plugin.Local,view.Data,Kinds.TamedAnimals,n);Check(captured==0&&completed==0,"protected handoff creates no visual bridge");
+            tame.Rider=false;Commit(Plugin.Local,view.Data,Kinds.TamedAnimals,n);Check(captured==1&&completed==1,"idle tamed handoff invokes presentation once");
+            Commit(Plugin.Local,view.Data,Kinds.TamedAnimals,n);Check(captured==1&&completed==1,"duplicate transaction cannot restart presentation");
+            view=Object(Kinds.Doors,9);Commit(Plugin.Local,view.Data,Kinds.Doors,++token);Check(captured==1&&completed==1,"non-mob handoffs do no presentation work");
+        }
+        finally {LocalAgent.VisualCapture=null;LocalAgent.VisualCommitted=null;}
+    }
     private static void LooseItemSource()
     {
         Reset();var view=Object(Kinds.LooseItems);var drop=view.gameObject.Add<ItemDrop>();drop.Invoking.Add("PickupUpdate");

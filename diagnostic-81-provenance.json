@@ -1,0 +1,15 @@
+{
+  "version": "1.0.81",
+  "baseline": "1.0.80",
+  "baselineDllSha256": "5EBC4F27F9E6FFDDB638324D9A9B5535D05080F6FCF9F3288C494045E174D500",
+  "baselineDebugDllSha256": "0431A6D9AFEEB88D0207552AF486A62207D9958505E0777F16EF67FAB123AEDD",
+  "scope": [
+    "Omit pure runtime/startup statistics in normal builds",
+    "Derive diagnostic pending count from real request queue, no mirror",
+    "Local warning/error reports independent of optional EnableLogs",
+    "Drop unused player-simulation log flag; retain all guards, queues and collision preparation budgets"
+  ],
+  "published": false,
+  "liveMultiplayerTested": false,
+  "installedProfilesChanged": false
+}

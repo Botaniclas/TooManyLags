@@ -20,12 +20,14 @@ namespace TooManyLags.PlayerSimulation
             Type station = assembly.GetType("FiresGhettoNetworkMod.StationRouter", true);
             MethodInfo route = station.GetMethod("TryRoute", flags, null, new[] { typeof(ZRoutedRpc), typeof(ZRoutedRpc.RoutedRPCData) }, null);
             MethodInfo deliver = station.GetMethod("Deliver", flags, null, new[] { typeof(ZRoutedRpc), typeof(ZDO), typeof(ZRoutedRpc.RoutedRPCData), typeof(long) }, null);
+            bool compactDeliver = deliver == null;
+            if (compactDeliver) deliver = station.GetMethod("Deliver", flags, null, new[] { typeof(ZDO), typeof(ZRoutedRpc.RoutedRPCData), typeof(long) }, null);
             if (original == null || process == null || process.ReturnType != typeof(void) || route == null || deliver == null || route.ReturnType != typeof(bool) || deliver.ReturnType != typeof(bool))
                 throw new NotSupportedException("FiresGhettoNetworking's station routing contract changed.");
             Rewrite(PatchProcessor.GetOriginalInstructions(process)); Rewrite(PatchProcessor.GetCurrentInstructions(process));
             harmony.Patch(process, transpiler: new HarmonyMethod(typeof(FgnRpcIntegration), "Transpiler"));
             harmony.Patch(route, prefix: new HarmonyMethod(typeof(FgnRpcIntegration), "Station") { priority = Priority.First });
-            harmony.Patch(deliver, prefix: new HarmonyMethod(typeof(FgnRpcIntegration), "HeldStation") { priority = Priority.First });
+            harmony.Patch(deliver, prefix: new HarmonyMethod(typeof(FgnRpcIntegration), compactDeliver ? "HeldStationCurrent" : "HeldStation") { priority = Priority.First });
         }
         private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> source) { return Rewrite(source); }
         private static List<CodeInstruction> Rewrite(IEnumerable<CodeInstruction> source)
@@ -42,5 +44,7 @@ namespace TooManyLags.PlayerSimulation
             if (!__runOriginal || RequestRouter.Handle(__0, __2, __3 == ZDOMan.GetSessionID())) return true;
             __result = true; return false;
         }
+        private static bool HeldStationCurrent(ZRoutedRpc.RoutedRPCData __1, long __2, bool __runOriginal, ref bool __result)
+        { return HeldStation(ZRoutedRpc.instance, __1, __2, __runOriginal, ref __result); }
     }
 }

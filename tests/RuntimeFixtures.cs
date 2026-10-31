@@ -35,7 +35,8 @@ namespace UnityEngine
         public T[] GetComponentsInChildren<T>(bool inactive) where T : Component { return gameObject.GetComponentsInChildren<T>(inactive); } public T GetComponentInChildren<T>(bool inactive) where T : Component { T[] values=GetComponentsInChildren<T>(inactive); return values.Length==0?null:values[0]; }
     }
     public class MonoBehaviour : Component { public bool enabled = true, isActiveAndEnabled = true; public readonly HashSet<string> Invoking=new HashSet<string>(); public bool IsInvoking(string name){return Invoking.Contains(name);} }
-    public class Rigidbody : Component { public bool isKinematic=true,useGravity; }
+    public class Rigidbody : Component { public bool isKinematic=true,useGravity; public bool Sleeping; public int SleepReads; public bool IsSleeping(){SleepReads++;return Sleeping;} }
+    public class Joint : Component { }
     public class GameObject : Object
     {
         public static int Scans, Lookups;
@@ -131,6 +132,12 @@ public sealed class ZDO
     public void SetOwnerInternal(long value) { owner=value; }
 }
 public sealed class Piece : UnityEngine.MonoBehaviour { }
+public sealed class TreeBase : UnityEngine.MonoBehaviour { public UnityEngine.GameObject m_logPrefab; }
+public sealed class TreeLog : UnityEngine.MonoBehaviour { }
+public sealed class MineRock : UnityEngine.MonoBehaviour { }
+public sealed class MineRock5 : UnityEngine.MonoBehaviour { }
+public sealed class Destructible : UnityEngine.MonoBehaviour { public float m_ttl; public UnityEngine.GameObject m_spawnWhenDestroyed; }
+public sealed class Projectile : UnityEngine.MonoBehaviour { }
 public sealed class WearNTear : UnityEngine.MonoBehaviour
 {
     public bool m_staticPosition = true;
@@ -171,7 +178,8 @@ public class Character : UnityEngine.MonoBehaviour
     public Faction m_faction = Faction.ForestMonsters;
     public Faction GetFaction(){return m_faction;}
     public virtual bool IsPlayer(){return this is Player;}
-    public bool Tamed=true, Dead, Attached, Riding;
+    public bool Tamed=true, Dead, Attached, Riding, Attacking, Staggering;
+    public bool InAttack(){return Attacking;} public bool IsStaggering(){return Staggering;}
     public ZDOID ActorId; public ZDOID GetZDOID(){return ActorId;}
     public virtual bool IsTamed(){return Tamed;}
     public virtual bool IsDead(){return Dead;}
@@ -191,6 +199,8 @@ public static class ZDOExtraData
     public static readonly HashSet<int> SessionHashes=new HashSet<int>();
     public static void AddSessionHash(int key){SessionHashes.Add(key);}
 }
+public class Humanoid : Character { internal Attack m_currentAttack; }
+public class Attack { public bool Done; public bool IsDone(){return Done;} }
 public sealed class Tameable : UnityEngine.MonoBehaviour
 {
     public bool m_commandable, m_startsTamed;
@@ -204,7 +214,16 @@ public sealed class Sadle : UnityEngine.MonoBehaviour
     public bool HaveValidUser(){return User;}
 }
 public class BaseAI : UnityEngine.MonoBehaviour { }
-public sealed class ZSyncTransform : UnityEngine.MonoBehaviour {public bool m_syncPosition=true;}
+public sealed class ZSyncTransform : UnityEngine.MonoBehaviour
+{
+    public bool m_syncPosition=true,m_syncRotation=true,m_syncBodyVelocity=true;
+    private ZNetView m_nview;
+    public void SetView(ZNetView value){m_nview=value;}
+    private bool m_wasOwner; public int Syncs;
+    public void SetWasOwner(bool value){m_wasOwner=value;}
+    public void SyncNow(){Syncs++;m_wasOwner=true;}
+    [MethodImpl(MethodImplOptions.NoInlining)] public void CustomFixedUpdate(float dt){ }
+}
 public static class ZDOVars {public const int s_tamed=10001,s_user=10002,s_follow=10003,s_state=10004,s_inUse=10005,s_health=10006,s_attachJointHash=10007;}
 
 public sealed class UnknownModScript : UnityEngine.MonoBehaviour { }

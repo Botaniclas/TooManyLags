@@ -28,7 +28,7 @@ namespace TooManyLags.PlayerSimulation
             }
             if (!ReferenceEquals(node.Data, data) || (node.Kind != Kinds.Signs && node.Kind != Kinds.Portals)) return false;
             node.TextOwner = TextEditTarget == null ? 0 : TextEditTarget(data); node.TextHeld = false;
-            ForgetTextWait(node); node.RejectedOwner = 0; node.NotBefore = Time.unscaledTime;
+            ForgetTextWait(node); node.NotBefore = Time.unscaledTime;
             index.Received(node, Time.unscaledTime); cadence.Request(); return true;
         }
         internal void EndTextEdit(ZDO data)
@@ -217,7 +217,7 @@ namespace TooManyLags.PlayerSimulation
         }
         internal void Wake(ZDOID id) { Node node; if (nodes.TryGetValue(id, out node)) index.Received(node, Time.unscaledTime); Mobs.Wake(id); }
         internal void Rejected(ZDOID id)
-        { Node node; if (nodes.TryGetValue(id, out node)) { node.RejectedOwner = node.Data.GetOwner(); node.RejectedRevision = node.Data.OwnerRevision; } Mobs.Forget(id); }
+        { Node node; if (nodes.TryGetValue(id, out node)) { index.Dismiss(node); WaitForCoverage(node); } Mobs.Forget(id); }
         internal void Stop()
         { failed = true; Handoffs.Clear(); Mobs.Clear(); nodes.Clear(); textWaiting.Clear(); index.Grid.Renewed = null; sectors.Clear(); interest.Clear(); regions.Clear(); cameras.Clear(); Players.Clear(); gridPeers.Clear(); regionPeers.Clear(); }
         internal static bool Finite(Vector3 value) { return !(Single.IsNaN(value.x) || Single.IsNaN(value.y) || Single.IsNaN(value.z) || Single.IsInfinity(value.x) || Single.IsInfinity(value.y) || Single.IsInfinity(value.z)); }
@@ -231,8 +231,6 @@ namespace TooManyLags.PlayerSimulation
             internal long SeenOwner;
             internal ushort SeenRevision;
             internal bool SeenUse;
-            internal long RejectedOwner;
-            internal ushort RejectedRevision;
             internal bool TextWait;
             internal long TextOwner;
             internal bool TextHeld;
@@ -248,7 +246,7 @@ namespace TooManyLags.PlayerSimulation
                 if (TextHeld) { Managed = false; return ApplyResult.Done; }
                 if (TextOwner != 0) target = TextOwner;
                 if (target == 0) return ApplyResult.Done;
-                if (Data.OwnerRevision == UInt16.MaxValue || (RejectedOwner == Data.GetOwner() && RejectedRevision == Data.OwnerRevision)) return ApplyResult.Dropped;
+                if (Data.OwnerRevision == UInt16.MaxValue) return ApplyResult.Dropped;
                 if (!owner.Available(target, Data.GetPosition())) return ApplyResult.Done;
                 if (Data.GetOwner() == target && !owner.Handoffs.Pending(Data.m_uid)) { Managed = true; ManagedOwner = target; return ApplyResult.Done; }
                 if (!owner.Available(Data.GetOwner(), Data.GetPosition())) return ApplyResult.Done; // Native reassignment owns departures/disconnects.
@@ -258,7 +256,7 @@ namespace TooManyLags.PlayerSimulation
                 if (Kind == Kinds.LooseItems && (!Plugin.Network.SupportsLooseItems(Data.GetOwner()) || !Plugin.Network.SupportsLooseItems(target))) return ApplyResult.Done;
                 // Queue/transport saturation is temporary. Preserve the node's
                 // pending job until the requested handoff can actually start.
-                owner.Handoffs.Request(Data, target, Kind, ZDOID.None); return ApplyResult.Pending;
+                owner.Handoffs.Request(Data, target, Kind, ZDOID.None); return TextWait ? ApplyResult.Done : ApplyResult.Pending;
             }
         }
     }

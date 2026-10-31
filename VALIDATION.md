@@ -1,837 +1,1907 @@
-# TooManyLags 1.0.57 release verification (2026-10-21)
+## Release-only verification maintenance
 
-Final release build: all 29 verification groups passed. DLL SHA256: `FAFFA234FEDA8B66472A5F809EED4CB801C4C56019DDA551FB72628BAA9D95F4`. The full-controller/grid/router suite passed 31,059 assertions; combat fixtures passed 1,925 assertions on CLR and embedded Valheim Mono. Actual native contracts passed with FiresGhettoNetworking 1.5.36, 1.5.53 and 1.5.65, including the PUP FPS 1.0.36 reference. The native audit identifies the same final DLL and reports no build mutation during verification.
+The current test-stop paths call MobBridgeProtocol.Cancel; the older standalone
+combat-policy fixture lacked this dependency and failed to compile in debug.
+The disposable fixture now models the existing cancellation boundary, and the
+solo test asserts presentation cancellation without resetting ownership. Focused
+actual-source combat suite passes 2,200 policy/runtime assertions and 226 native
+IL contracts. No production source was edited. The fresh complete verifier run
+follows this fixture repair; prior partial-run results are not substituted for it.
 
-All 55 configuration values are preserved. The final README pair includes the compact animated ownership examples, and the configuration wiki remains byte-identical to the user's supplied final page. Existing clients and configs remain compatible; update and restart the server. Automated fixtures and native IL checks do not constitute live multiplayer, Unity physics or real-network testing.
+Source packages include both continuity test script and release provenance JSONs.
+Prepared output ZIP collisions are rejected before any staging/output writes.
+Earlier prepared 2.0.0 archives will be preserved before replacing current aliases.
+## Exact user-supplied test build, 2026-10-31
+
+Required test SHA256:
+56128F3962930854925E76EF475B549A37FE8A1A47EF43D5E15493DB80632DB6.
+Confirmed identical installed client DLL and original half-speed build-mode.json.
+Fresh snapshot debug build has a different PE hash, so byte hashes alone cannot
+establish executable equivalence after this legacy compiler rebuild. The added
+ReleaseBuildEquivalence tool compared 6,022 assembly/reference/type/field/method
+entries, including IL, constants, attributes and handlers: all matched. PE/MVID
+and compiler GUID spelling are ignored; initializer byte data remains compared.
+No runtime source changes. User-reference DLL is pinned only under bin; it is
+not installed, published or substituted after verification. Release variant uses
+the same source with diagnostics/test symbols excluded by the normal mode audit.
+
+Release verifier scope omitted existing MobBridgeWarmup.cs; that reviewed file is
+now included. This is a validation-script correction, not a runtime edit. Source
+package additionally includes test-bridge-continuity.ps1 and release-input.json.
+Fresh full verification receipt remains definitive for the release/debug hashes.
+## Release snapshot, 2026-10-31
+
+Independent preparation folder TooManyLags-2.0.0-release-2026-10-31 copies all
+140 runtime sources from current TooManyLags-2.0.0-half-speed exactly. The old
+14:57 full receipt predates seven changed files; it is not reused as proof for
+this snapshot. release-input.json stores the exact current source hashes.
+No gameplay edits, active test-folder builds, installed profile changes,
+publication or Git push are part of this task. README, development instructions
+and changelog describe the current final behaviour; historical .86 test text
+is removed from the new test-package README, not from archived releases.
+
+Fresh verify.ps1 -Release will determine both DLL hashes and all suite results.
+Headless/native contract coverage cannot prove zero pauses or live Unity
+rendering/physics/transport behaviour. Earlier Wolf investigation describes a
+prior candidate; current owner-gain/continuity tests must be considered separately.
+# TooManyLags 2.0.0 release preparation
+
+## 2.0.0 release candidate (2026-10-29)
+
+### Source cutoff velocity at ownership gain (2026-10-31, current)
+
+Independent candidate `TooManyLags-2.0.0-half-speed` keeps the finite
+half-speed bridge and source-pose checkpoint. Retired-source smoothing and the
+new owner now start from the same position, rotation and velocity.
+
+Final smoothing now uses two independent timing bounds. The normal duration is
+still the fake simulation horizon. A measured owner-ready floor covers the next
+native `PhysicsStep / OwnerRate`, observed destination update interval, sender
+and receiver frame spacing. A large position/rotation residual may expand the
+blend to twice that horizon; the hard limit is `500 ms`. A sub-frame result
+still receives one render frame. Small residual keeps the normal horizon and is
+not slowed merely because the larger cap exists.
+
+The target is not frozen when smoothing begins. Every frame uses the current
+native root and authoritative velocity, while the stored world-space correction
+and rotation offset decay relative to that root. Target changes therefore remain
+continuous; the initial residual determines the time budget, not repeatedly
+restarting the blend from each packet.
+
+Low-latency server-to-player retest exposed a separate owner-gain ordering
+fault. The checkpoint source pose was applied when ownership metadata arrived,
+but native `ZSyncTransform.OwnerSync` could subsequently overwrite that root
+and body velocity from the delayed ZDO before the first local simulation step.
+That produced the observed short pause followed by a small forward correction.
+
+The bridge now arms the checkpoint pose only when native `m_wasOwner` is still
+false. Its finalizer restores the source position, rotation and velocity
+immediately after `OwnerSync`, before presentation rebase code reads the root.
+The immediate checkpoint application and initial owner clock remain unchanged;
+the post-sync repeat is one-shot, bounded, pruned and scoped to the owning
+endpoint. This path also runs when no visual fake track exists, which is the
+ordinary server-to-player case.
+
+Server-to-player still showed a small forward jump because the authoritative
+source cutoff is newer than the visible replica. Root/body correction must stay
+immediate for local simulation authority. A separate one-shot visual offset now
+starts at the pre-owner model pose, follows the moving native root and decays to
+zero with a monotone smoothstep. Duration is the larger of owner-ready/frame
+time and a movement/turn estimate, capped at `500 ms`. AI, physics, hits and
+native simulation continue on the corrected local root throughout. The initial
+offset is applied synchronously at owner gain, before the first camera callback,
+so a frame ordering change cannot expose one raw authoritative jump frame.
+
+Bridge eligibility is now separated from ownership policy. Initial native owner
+creation (`OwnerRevision == 0`) is not bridged. Every later owner adjustment may
+run the source recording, checkpoint, fake simulation and observer relay
+regardless of whether the AI target is a player, an NPC Character or currently
+different from the destination owner. Normal ownership-transfer decisions still
+retain their existing player-target policy; the bridge no longer adds a second
+player-only veto after a transfer has happened. Observer readiness no longer
+calls `TargetAllowsOwnership`.
+
+Root cause of the short stop at smoothing-to-server release: checkpoint origin,
+rotation and velocity were applied together behind one pose-equality return.
+When the destination replica had already reached the source transform, the
+method returned before restoring body velocity. The first new-owner clock then
+captured the stale/zero body tangent, so final smoothing approached a stopped
+root and native movement resumed only after another owner simulation step.
+
+`ApplySourcePose` now restores checkpoint rigidbody position, rotation and
+linear velocity independently from the root-transform equality check. The rules
+are unchanged: one owner-gain application, no periodic correction, no extra
+network traffic and no body write while the actor is a non-owner after gain.
+Checkpoint version 5 carries source position/rotation/velocity; versions 1-4 are
+rejected before state decode.
+
+Fixtures assert the source pose/rotation/velocity round trip, old checkpoint
+rejection, velocity assignment before the transform early-return path, the
+owner-ready floor, two-horizon geometric expansion, `500 ms` hard cap, one-frame
+minimum, post-`OwnerSync` pose reapplication ordering and the existing 20%
+recording reserve. Native audit rejects player type checks in non-initial bridge
+eligibility, fake simulation and observer readiness. `test-bridge-timing.ps1`
+reports 40,955 checks; debug/release mob-bridge and observer suites include the actual emitted IL and
+Valheim Mono Harmony contracts. Combat suites retain 2,199 debug and 1,978
+normal-build assertions. `verification.json` is definitive for the final build
+hashes and complete suite result. Live multiplayer retest remains required; this
+is not a zero-pause claim for unrelated network stalls.
+
+### Debug diagnostics restored (2026-10-30, current)
+
+Independent copy `TooManyLags-2.0.0-debug-logging` retains reserve-window runtime
+sources unchanged. Only the debug compiler defines add TML_BRIDGE_DIAGNOSTICS.
+AI-test start/progress/completion/wait messages, bridge summaries, draw/capture
+measurements and client-to-debug-server diagnostic relay are restored regardless
+of EnableLogs. Active diagnostics intentionally have measurement/output costs.
+Inactive AI/latency polls retain their first-operation return guards. No gameplay,
+timing, simulation, animation, packet cadence or reserve policy changes.
+
+Release compiler defines remain TML_RELEASE;TML_MOB_BRIDGE. Its assembly-wide
+audit rejects informational log/profiling calls, diagnostic argument evaluation,
+per-frame diagnostic fields and active report sinks. Errors/warnings and explicit
+command replies remain. Debug policy audits now positively require test/bridge
+logs and relay, while retaining inactive guards. Normal/debug comparisons exempt
+methods containing named diagnostic calls/fields; unrelated bodies still match.
+verification.json is definitive for the completed suites and build hashes.
+No profile installation, packaging, publication or live Unity test.
+
+### Predicted arrival and20% recording reserve (2026-10-30, previous)
+
+Independent copy `TooManyLags-2.0.0-reserve-window` starts from the verified
+short-buffer sources (debug receipt197D15C05DAC232F0A184644444207C12068BCFF1774DFE691F8DDACEF38DF1D).
+User authorizes improved arrival prediction,20% extra recording and handoff only
+at matching observed progress. Entering reserve alone must not slow playback.
+
+MobBridgeTiming separates route RTT, first positive-state arrival, expected
+matching arrival, required recording, reserved recording and native game horizon.
+Prediction uses cached CPU rate, native step, sender/receiver main-loop spacing,
+first successful positive clock delay/progress and ordinary50ms publication phase.
+It jumps between candidate matching frontiers rather than scanning native ticks;
+bounded refinement includes useful native-step notifications near the actual
+reserved horizon. A first packet can still trail the fake display, so its arrival
+alone does not define a successful match.
+
+RequiredWindow=max(0.5*ExpectedMatch,nativeStep/ownerRate).
+RecordingWindow=1.2*RequiredWindow, Horizon=RecordingWindow*ownerRate.
+The motor-step minimum prevents a sub-step-only recording from skipping all
+native controller work. It is capacity, never a minimum visible fake phase.
+Route stays unchanged for target input prediction. A20ms needed window records
+24ms, not a longer fictitious network RTT. A closed recording stays immutable.
+
+Existing0.5s peer-rate broadcasts carry four extra floats (step, frame, first
+ready delay and first progress):32-byte body instead of16, same RPC count/cadence.
+Local cache and known-peer lookups reuse their entries; fallback/prediction occurs
+only at handoff. Measured readiness expires after2s and is replaced by current
+native/frame estimates. First success is measured once per active local epoch.
+No new per-mob polling, native AI/body hooks, timers or routine logs. Dynamic
+forecasting runs on accepted changed delivery estimates without allocating a new
+plan; it does not grow the fixed recording or authorize an unreceived state.
+
+Timeline uses the predicted matching deadline with full capacity including
+reserve. Receive-frame quantization is budgeted once, not added again as latency.
+Known actual states covering the next frame bypass needless future-packet braking.
+Visual advances the current frame before joining; the old previous-frame shortcut
+could repeat a displayed pose. Healthy sufficient buffers keep0.5x, including
+reserve use. Updated predictions that cannot fit within the full remaining buffer
+brake smoothly; exhausted buffers may wait. Prediction errors or delays beyond
+20% are not guaranteed invisible.
+
+Checkpoint v4 / bridge capability v5 carry route, first arrival, recording window,
+reserved game horizon and owner native step. Target/RNG matching scopes receive
+the same game horizon. Source match does not discard remaining observer RNG/
+target scope while an observer still demands recorded reserve. Scope is mob-only;
+no duplicate authoritative hits/effects/attacks introduced.
+Observer capability v2 carries separate recording/startup/matching timing and
+accepts samples through the reserved recording bound. It forwards the same
+recording, does not rerun AI and uses actual received progress for takeover.
+All endpoints require this candidate. Old capabilities fail closed to native.
+
+New test-bridge-timing.ps1 checks prediction across1..2000ms routes,0.1..1.5
+cached game rates,10/20/33ms physics steps and4..100ms sender/receiver frames;
+exact20% size, full native interval, first-packet-vs-match distinction, readonly
+capacity, healthy playback, unused reserve/early join, improved and delayed route,
+and later actual matching after reserve use. Actual checkpoint production code
+round-trips the new header with a native field-codec seam and rejects old/truncated
+headers. Actual extracted LocalTiming/TimingFor/PollRate/ReceiveRate bodies check
+cache-hit identity, expiry/fallback,32-byte wire order, unchanged broadcast count,
+trust, malformed inputs and server relay. Existing native audits check actual DLL
+wiring, extended scopes, no per-frame prediction and release/debug boundaries.
+
+10ms/20ms-native/8ms-frame modeled example: positive state arrives by40ms,
+required recording20ms, reserved recording24ms. Healthy playback joins at actual
+progress20ms without playing the unused4ms. This is deterministic fixture evidence,
+not a live rendering/physics/transport result. Existing animation/body/native
+controller implementation is unchanged; only its recording budget is longer.
+LateUpdate publication remains as in the prior build; earlier publication was a
+read-only separate audit and is not silently installed here.
+
+Full verify.ps1 -Release now includes28 suites; verification.json records final
+results, source and DLL hashes. No profiles/packages/publication/push changed.
+
+### Prior low-latency position near-stop follow-up (2026-10-30)
+
+Independent copy `TooManyLags-2.0.0-short-buffer` starts from verified
+performance-safe debug B13E7723C3A1A47B692EE6662BA59E371BBE6A15F58004E713C8C21A4BA37B2D.
+User clarified this is position movement, independent of the continuing animation.
+Latest Player.log is menu/startup-only and provides no bridge timeline; no claim
+that it proves the exact live pause. No animation/body/AI recording code changed.
+
+Reproduced timing causes and changes:
+
+- Owner clocks were sent only by MonsterAI callbacks despite carrying body
+  progress. Publish completed fixedTime progress after physics through existing
+  LateUpdate Maintain, only for active epochs. AI tick and AI dt remain separate;
+  running physics cannot invent an AI decision or release an unsupported barrier.
+- First-progress/attack packets reset the regular send deadline. Maintain a
+  distinct periodic phase. Normal publication remains50ms, independent of AI
+  rate. No-progress duplicates are omitted. A bounded native-step notification
+  tail uses the checkpoint's handoff timing hint within one ordinary interval
+  of its horizon; it ends when crossed. No extra global mob/physics hook/poll.
+  Reusable epoch snapshots avoid mutation during synchronous transport callbacks;
+  current owner/revision is checked again before a due send. Failed sends retry.
+- Receiver/observer permits same AI tick only with strictly newer body progress
+  and sample time and identical AI elapsed time. Stale, duplicate, reversed or
+  invented-AI packets cannot refresh the frontier. Wire layout is unchanged;
+  deploy the candidate to every endpoint for these semantics.
+- Visual.Advance checks the already displayed horizon before spending another
+  frame of fake time. A newly received actual match no longer becomes behind
+  again and waits for an extra packet; Frozen barriers retain their old gate.
+- Short-buffer planning uses the next completed native physics endpoint (a
+  fractional fake endpoint has no corresponding fractional real physics packet),
+  the cached route and measured short publication spacing. Remainder is readonly.
+  Known feasible deadlines use nonnegative constant deceleration:
+  a=2*(remaining-entrySpeed*wait)/wait^2, with wait>=frame and
+  2*remaining>=entrySpeed*wait; apply only braking. Position/speed stay continuous.
+  Missing/late/infeasible budgets retain the original critically damped outage
+  path and finite-buffer waiting. No speed floor, distance/rotation cap, future
+  authoritative pose or unobserved takeover. Base remains0.5x.
+
+PhysicsPublicationChecks model native20ms physics independently of50ms AI,
+sender/receiver4/8/16/33ms frames,1/5/10/20/33/49/50/100/500/1000ms cached routes,
+AI phase offsets, half-rate CPU/game progress and improved/delayed routes.
+50ms/8ms-frame modeled counterexample: old AI-bound publication/advance ordering
+reaches zero; current minimum0.334x. This is a deterministic timing reproduction,
+not a live speed/FPS measurement or guarantee of constant0.5x under missing data.
+Observer ordering, default idle/debug checks and actual addon/native wiring are
+also checked; extracted actual PublishPhysicsClock body runs with clock/transport
+seams for first progress, separate AI dt/tick, horizon, invalid epoch and retries.
+
+Full verify.ps1 -Release records final status/hashes in verification.json.
+Prior comparison builds/ZIPs/profiles unchanged. No installation/publication/push.
+Live Wolf low-latency movement still needs retesting on matching endpoints;
+native rendering/physics/transport are not proved by headless fixtures.
+
+### Prior safe performance follow-up (2026-10-29)
+
+Independent copy `TooManyLags-2.0.0-performance-safe` starts from verified
+performance debug E9F3132FBE092ECBA99F2373629EE42DDB5843B1E76463158EA22978DFB9F1A3.
+Only two production files change in this follow-up:
+
+- Animation.RigPaths enumerates each current sibling set once and counts exact
+  same-name ordinals. Single-child chains need no sibling enumeration. Temporary
+  value-type name/ordinal entries avoid extra segment strings. The table ends
+  with the call; renamed/reordered/new FX/equipment retain fresh exact paths.
+- Effects.NativeFxScope reuses at most eight successfully unwound scopes/lists.
+  Empty/idle/unbound callbacks still allocate none. Every active nested callback
+  owns a distinct scope; depth beyond eight still works through ordinary allocation.
+  Values.Clear removes Unity references before pooling; session teardown drops
+  the pool. Failed cleanup leaves Harmony's original out-state intact and is not
+  recycled, preserving retry/error behavior and original callback order.
+
+test-bridge-performance.ps1 extracts actual production RigPaths, NativeFxScope,
+BeforeContinuous and AfterContinuous bodies from both this candidate and its
+hash-verified prior source. Allocation instrumentation only wraps construction.
+Managed Transform/attachment seams compare 155828 assertions over duplicate and
+delimiter/Unicode names, current hierarchy changes/subsets, native success/failure,
+reentry during Enter/Exit, 24 nested scopes, teardown and failed cleanup retry.
+Emitted DLL audits check actual pool wiring/teardown in both build variants.
+
+Operation/allocation examples from the fixtures, not live FPS measurements:
+256 same-parent bones reduce GetChild calls 32896 -> 256 and native name reads
+65792 -> 256. 1000 consecutive matched FX callbacks reduce scope/list pairs
+1000 -> 1, with no loss of callback/effect processing. Check verification.json
+for full-suite status and current hashes. Playback rates, sub50ms clocks, native
+AI/physics, packets, hitboxes and rendering/IK boundaries are unchanged in this
+follow-up. Live Wolf/Troll/FX performance/rendering retest remains open.
+
+Other reviewed candidates (checkpoint reflection, recipient pass consolidation,
+physics/Animator pooling) are not implemented: event-only or smaller uncertain
+benefits do not justify additional state/transport/lifetime changes here.
+Prior DLLs, prepared ZIPs and installed profiles remain unchanged.
+
+### Prior performance and sub-50ms candidate (2026-10-29)
+
+Independent copy `TooManyLags-2.0.0-performance` starts from the verified
+low-latency debug DLL 50F850C6F92ACB52BECF69F8B2AAD68BC42B409E89154AE5805CC6C490FFBE96.
+Earlier candidate and prepared release/source ZIPs remain unchanged.
+
+Implemented performance changes preserve capture frequency and precision:
+
+- Full native locomotion (realWeight=1) skips interpolation of recorded bones
+  that contribute zero to the display. TryPose reads the same live native
+  transforms before Apply and its same late saved snapshot afterwards. Apply's
+  snapshot timing, root/model placement, attack/partial blending, IK, hitbox and
+  FX chain handling remain intact. A fixture extracts actual Prepare/TryPose/
+  Apply/Restore bodies from this source and the hash-verified prior source,
+  then compares them over weights, times, root rotations, nonuniform scale,
+  uncaptured equipment attachments and external late bone changes. Only engine
+  Transform/matrix behavior and a history-call counter are modeled.
+- Server observer decoding consumes and validates the same fields, masks,
+  inherited baseline, finite values, counts, order and trailing bytes without
+  constructing dense bone arrays it never uses. Clients retain the original
+  full decoding. Dedicated server still relays original ZPackage bytes. Tests
+  compare full/lean accept-reject results under truncation and byte mutations,
+  nonfinite vectors/quaternions/scales, all control kinds, then check raw relay
+  identity with a64-frame/130-bone batch. That modeled batch avoids192 bone
+  arrays and332800 raw pose bytes; this is allocation arithmetic, not a live
+  server memory/FPS benchmark.
+- Recorded frames share unchanged immutable scale snapshots. Position/rotation
+  arrays still copy every sample. Tiny actual scale changes create a new owned
+  snapshot; mutable source scratch arrays never enter the recording. Export
+  only reads these arrays. In a50-frame/100-bone constant-scale example, arrays
+  fall150->101 and raw pose storage200000->141200bytes. No cross-recording pool
+  or early recycling is introduced, avoiding playback/export lifetime hazards.
+
+Below50ms, two additional timing boundaries were corrected:
+
+- A recording shorter than the native20ms motor step previously had only t0
+  until its deadline, despite full motor endpoints being primed at startup.
+  CaptureClock can now prime the existing partial final physics endpoint when
+  no earlier AI decision is pending. The partial step still skips the full
+  controller pass, stays inside the sealed endpoint and is not integrated twice.
+- SettleForPose no longer adds a fixed20ms minimum on top of half-playback
+  timing. Its existing1ms numerical epsilon and geometric position/rotation
+  extension remain. Real residuals still receive sufficient correction time;
+  matching continues to require observed new-owner progress.
+
+Timing tests cover1/2/5/10/15/19/20/25/33/40/49ms capture windows at4/8/16/20/33ms
+render steps, plus1-49ms playback with varying first-positive owner progress.
+They verify moving initial interpolation, native controller cadence, exact
+integrated duration, monotonic sealed playback and observed matching. A very
+short finite recording can still slow/wait when no matching state is available;
+no future world state is invented to avoid that constraint.
+
+Full verification includes the new extracted-body differential suite. Source
+and DLL hashes/pass counts are in verification.json. Live Wolf/Troll rendering
+still needs an in-game retest. No installed profiles or prepared ZIPs changed.
+
+### Prior low-latency playback candidate (2026-10-29)
+
+Current independent copy: `TooManyLags-2.0.0-low-latency`. Prepared release copy,
+root output ZIPs and installed profiles remain unchanged. User reports Wolf
+playback nearly stopping early in 50/100ms tests. This candidate changes timing
+bookkeeping only; native AI/physics, animation speed, prediction, half-speed base,
+sealed recording and observed-horizon takeover remain unchanged.
+
+Two code-level defects were reproduced:
+
+1. ApplyPending sent its initial clock without recording the send timestamp.
+   First AI finalizer then sent again immediately, even with zero new body time.
+   ObserveClock treated the sub-period gap as ordinary cadence and also used it
+   as the playback-rate filter response. An occasional burst could therefore
+   replace the expected 50ms clock spacing with a tiny value, distort ageing of
+   owner progress, and aggressively brake a short recording.
+2. Buffer availability was compared from the start of a presentation frame,
+   against packet wait measured at its end. Near a packet deadline, a short
+   buffer could be spent before the expected packet callback. For observed
+   budgets, the comparison now includes this frame's advance and the damping
+   horizon includes that frame. A sufficient healthy buffer avoids damping;
+   only numerical float-roundoff tolerance is used. Unknown/outage envelopes
+   and their frame-subdivision-invariance behavior remain unchanged.
+
+MobBridgeClockCadence is value state inside active ClockEpoch, no allocation or
+global scan. Initial/AI/event sends share scheduling, with the original double
+wall timestamp retained rather than reconstructing it from float packet time.
+First useful positive simulation progress and new attacks still send immediately;
+only redundant zero-progress startup sends are suppressed. Regular scheduling
+remains50ms. Early useful/event packets retain their full pose/progress, but
+cannot redefine the ordinary send interval or rate-filter response as sub-period.
+Genuine slower periodic cadence and later recovery are still accepted. There are
+no additional packets, polls, diagnostic logging, or changes to network payloads.
+
+Managed regression uses actual timeline code with a startup/event burst followed
+by normal50ms sends. Over the first80% of each recording, unfiltered cadence gave
+minimum0.294x/0.357x for50/100ms windows; corrected cadence gives0.474x/0.474x in
+that specific scenario. This comparison isolates cadence handling in the new
+integrator; it is not a live Wolf performance measurement. Ordinary no-burst
+50/100ms handoffs retain0.5x at4/8/16/20/33ms frame durations. Event-burst checks
+also reject a zero-speed endpoint hold before the received matching state.
+Existing delayed-update/CPU/monotonicity/correction/native-isolation tests remain.
+
+Full release/debug verification results and new hashes are recorded below by
+verification.json. Live Wolf retest remains necessary; no universal no-pause
+claim for finite buffers with missing updates. Existing prepared release ZIPs
+are deliberately not replaced during this candidate test.
+
+Independent working copy: `TooManyLags-2.0.0-release`, based on verified
+1.0.94 debug-idle DLL E953BF9A7F1503ED4CE29481DC5417E673CB21CEF135FD4AE830942D07ECFE0E.
+Prior copy and installed profiles remain unchanged. This task prepares packages;
+it does not authorize publication, installation or Git push.
+
+Assembly, plugin metadata, manifest, Thunderstore metadata, package naming and
+verification receipt use 2.0.0. New changelog entries use short user-facing
+Markdown rather than fenced implementation notes; 2.0.0 deliberately includes
+a longer overview. Historical released entries remain unchanged. PhysicsObjects
+is the real config key: movable world props and destructible sources of physical
+successors; ordinary loot, projectiles and cosmetic debris stay excluded.
+
+### Native bridge promoted to release
+
+Previously the native bridge lived under TML_DEBUG_SYSTEM, so simply building
+-Release would have removed the feature described in the changelog. Build.ps1
+now defines TML_MOB_BRIDGE in both variants. Solo commands, artificial transport
+latency, test overrides, test polls and selected-mob tracing stay debug-only.
+Native capture, physics, target prediction, shared observer recording, hitboxes,
+HUD/FX positioning and matching/correction run in release too. Routine profiling
+and logging stay compiled out. Native gameplay authority and the 0.5 playback
+rate/half-playback smoothing policy remain unchanged.
+
+Build-boundary checks compare unchanged debug IL against verified .94 DLL,
+normalizing version metadata. Only explicit config text, test-guard expression
+layout and presentation RTT selection changes are exempted. Release/debug IL
+parity covers shared gameplay methods; explicit test seams remain exceptions.
+Full bridge/native presentation/weapon audits run against both actual DLLs.
+Error-only/idle instrumentation audit runs against release as well as debug.
+
+### Low-latency presentation RTT correction
+
+Native FGN 1.5.72 IL confirms CreatureOwnership.Rtt returns 400ms when echo and
+LinkController status have no useful sample. That conservative ownership policy
+value previously sized the visual recording. A cold LAN connection could get a
+400ms fake recording rather than its real RTT. Taking Max with active injected
+RTT could also keep a stale large echo when starting a 50ms test. This establishes
+a code-level cause, not attribution of a particular unlogged live frame.
+
+MobBridgeLatency.Measure uses current injected test timing first, otherwise real
+FGN measured echo/link data, then connected native socket quality. Rounded 0ms
+socket timing uses a numerical 1ms recording epsilon. Only unavailable/invalid
+routes retain the prior 100ms unknown fallback. Active injected timing bypasses
+an earlier route cache for the solo client->server test. Server route timing
+replies also use measured presentation data instead of policy RTT. No new poll,
+packet or cache is added; work occurs at existing ownership events. Policy
+eligibility/ping thresholds are unchanged.
+
+Focused fixtures cover cold zero/4ms LAN, valid echo, stale 500ms echo replaced
+by a 50ms test, invalid/disconnected routes and no unnecessary socket reads.
+Real 50ms clock/AI send cadence and geometric residual correction can still
+exceed ideal 2L + L timing at very low latency. Matching continues to require
+received progress; no shortened timer forces a snap. Live feedback at ai_test 0
+and 50ms motivates this check; no live retest claimed.
+
+Final suite results, DLL/source hashes and publication/install flags are recorded
+in verification.json. Package audits verify manifest/content hashes and ensure
+the main ZIP contains release DLL rather than development DLL.
+
+## 1.0.94 mob bridge rebuild
+
+### Idle debug and error-only logging audit (2026-10-29, current candidate)
+
+Independent copy: `TooManyLags-1.0.94-debug-idle`, from the verified
+owner-gain-continuity candidate A63F3777AB8ACA88F5FD5A6A570684EF520DAE1B4F0801D97D0EE4C4CCEF0110.
+Prior copy and installed profiles remain unchanged.
+
+Default debug previously executed bridge cost allocation, Stopwatch phase
+timings, StringBuilder reports, per-frame pose-history divergence comparisons,
+per-camera bone rotation probes and routine diagnostic RPC/log formatting during
+ordinary handoffs. These are now excluded from the default emitted DLL.
+`TML_BRIDGE_DIAGNOSTICS` explicitly opts a source build back into instrumentation;
+normal build.ps1 does not define it. Compiler-conditional calls omit argument
+evaluation as well as the logging call. The legacy diagnostic RPC has a stateless
+empty receive sink so older clients do not produce unknown-RPC errors.
+
+Pure boundary/boss/patch counters are now fixture-only unless TML_TEST_METRICS is
+explicitly defined. The selected-test PUP postfix checks active test state before
+Unity liveness, actor component or server lookups. Inactive solo test/latency
+polls already return before Unity clocks or queue work. Explicit start/stop/status
+and cadence feedback continues through the requesting console, without duplicate
+BepInEx log output. EnableLogs still gates on-demand console endpoints, with no
+continuous informational logging. Genuine native frame failures, unsupported
+visual attacks, invalid native movement and artificial-latency buffer exhaustion
+remain warnings even with EnableLogs=false.
+
+Functional simulation-rate caching, capability negotiation, matching/observer
+clock traffic and normal bridge capture/playback are retained. These are gameplay
+requirements, not idle diagnostics. No literal zero CPU claim: inactive test polls
+and empty native hooks retain their cheap guards, and the rate cache still samples
+and exchanges its required low-frequency timing data.
+Capability retries remain independent of main bridge readiness: a connected peer
+may still need to negotiate the separate observer protocol.
+
+Build-policy emitted-DLL audit checks all nested method bodies for retained
+routine log/profiling calls, camera probes, diagnostic object creation, timers,
+metric fields and early idle guards. A negative control confirms reintroduced
+diagnostic calls are detected. Managed PUP fixtures cover a formerly selected mob
+while the test is inactive, followed by normal tracing when active. Full suite
+results and source/DLL hashes are recorded in verification.json after verification.
+No live Unity performance measurements or multiplayer validation claimed.
+
+### Rare ownership overlap correction (2026-10-29, preceding candidate)
+
+Independent work copy: `TooManyLags-1.0.94-owner-gain-continuity`, based on the
+fully verified observer candidate7447FA316BCAD7C1ACF1C84570D16BBAF1D2567F410E8E504FBDCF84948FECCD.
+That prior copy and installed profiles remain unchanged.
+
+Live client log showed an old correction with matched discrepancy3.062m and
+duration2.187s still active through server->player completion20. Installed DLL
+and prior observer candidate share the same old AdvancePosition/Progress IL.
+An isolated managed scenario reproduced a1.547m backwards display step in10ms
+when native root restoration and velocity reversal interrupted that correction.
+The exact reported live backwards frame was not logged, so attribution remains
+an inference supported by the overlap and reproduction, not a live pose trace.
+
+Active correction validity now compares the native owner revision. Only a changed
+epoch creates ownership state. Local gains inspect the existing ZSyncTransform's
+m_wasOwner field once: if native OwnerSync has not yet restored its root, a lazy
+watcher uses the already-installed FX sync finalizer. Callback is null otherwise;
+there is no new Harmony patch, per-mob scan, global pose history or network packet.
+Pending native reset cannot retire an apparently aligned old correction early.
+Track retirement and world shutdown remove the watcher.
+
+After the observed native reset, a separate presentation-only position/rotation
+correction begins at the last displayed pose and velocity. Its finite Hermite
+steps use the current displayed state rather than a stale absolute curve, so
+previous direction protection cannot accumulate a jump released by a later turn.
+The remaining duration and residual distance/angle guide scheduling; actual
+native reversal can brake continuously, and a stopped successor cannot pull a
+forward display backwards. Settlement still requires current geometry. The
+original animation clock and native-bone weighting continue unchanged. Model-local
+offset/tilt also join from the current display without resetting skeletal weights.
+Hit proxies, HUD point and attached FX use the existing shared presented pose.
+
+Normal fake capture, matching, ordinary final-correction trajectory, target/RNG
+locks, native root/physics and replication are unchanged. Only active correction
+frames retain two value samples for an on-demand displayed-velocity estimate;
+there is no normal-path velocity calculation or exceptional-state allocation.
+The extra epoch check applies to existing visible tracks, not every mob/AI pass.
+
+Focused timing/reproduction tests pass29,846 assertions including3D axes, multiple
+render cadences, entry pose/velocity, unchanged animation clocks, native reversal,
+stopped-successor waits and final geometric alignment. Native checks exercise
+the existing sync finalizer with null/armed callbacks, failed native sync, actual
+m_wasOwner field access, pre-reset waiting and watcher cleanup. Emitted DLL audits
+check allocation/hook/gameplay isolation. The headless watcher fixture uses a
+reference-key comparer for uninitialized Unity objects; native instance-ID hashing
+is unavailable outside the engine. Production cleanup uses ReferenceEquals so a
+destroyed Unity component is still removed from its pending dictionary.
+Focused DLL audit passes1,708 assertions; native presentation audit passes122.
+Full result/hash: verification.json.
+Live Unity overlap and frame-cost confirmation remain open; no install/package.
+
+### Recorded third-party observers (2026-10-29, current candidate)
+
+Work copy: `TooManyLags-1.0.94-observer-recording`; based on the independently
+verified `TooManyLags-1.0.94-ai-test-verified-20261029` snapshot, including the
+newer read-only OwnerDebug phase API. Installed profiles remain untouched.
+
+Old-owner recording inputs, native AI/physics, finite capture window and display
+clock retain their existing policy. Source presentation now exports immutable
+pose samples. Observers reference their own loaded model and reuse the existing
+render, hit proxy, HUD point, attached FX and correction path. They create no
+private simulation world, cloned actor, animation graph or gameplay authority.
+Locomotion remains native skeletal passthrough; buffered visual attacks carry
+exact bone data, with source-relative paths tolerating extra local FX/equipment.
+
+Transport uses separate negotiated reliable RPCs, authenticated source UID and
+ownership revision/token. Server relays to ready compatible peers selected by
+native `ZNetScene.InActiveArea`, excluding old/new owners. No observer stream in
+solo sessions. Initial samples prime interpolation, then source batches target
+the native 50ms ZDO send-round interval; this is not a guaranteed per-object
+network cadence or an AI tick change. Server does not create fake world ZDOs.
+
+Each observer has its own bounded incoming recording, playback cursor, measured
+destination clock arrival and shared adaptive slowdown/wait behavior. Only an
+accepted observed frontier permits takeover. Correction uses half actual local
+playback duration as its base, with existing residual-size behavior. Destination
+clock demand may survive old-owner completion until the recording endpoint has
+actually been sent; source completion still removes RNG/target matching locks.
+Clock relay exceptions are isolated from the native AI finalizer. One cached
+latest frontier retries after a failed recipient send, including the final clock;
+duplicates remain rejected by the existing monotone destination-frame contract.
+Active matching never expires merely because the initial latency estimate ended.
+Unloaded pending receivers expire; disconnects seal accepted prefixes, retire
+recipients and release demand. New ownership epochs supersede old streams.
+
+Focused tests: 26,729 existing timing/recording assertions and native presentation
+hook/weapon audits passed before final integration. New managed transport tests
+cover codec truncation/finite checks, exact pose delta values, relevant recipients,
+wrong source/revision/sequence, failed-send cursor retry, immutable seals,
+early clocks, delayed matching, vanilla bypass, disconnects and buffer recovery.
+Actual Valheim Mono audit also roundtrips all packet kinds using native ZPackage.
+Latest recorded-observer fixtures pass 22,853 assertions on CLR and Valheim Mono;
+native observer audit passes 880 contracts, including separate source/observer
+capacity, exact source-presence epoch/token and attachment-independent rig mapping.
+The final complete result and DLL hash are recorded in `verification.json`.
+
+Open: live three-client target-switch rendering, packet costs and actual frame
+costs. Managed RPC doubles and native hook installation do not validate those.
+`ai_test` retains its existing solo guard; use real target-driven handoffs for
+the three-client scenario. Joining the active area after the descriptor is not
+bootstrapped into an in-progress recording; it keeps ordinary native display.
+Server-origin handoffs and unsupported recordings retain the legacy observer
+fallback. The new path applies when a client old owner has a native recording.
+See `docs/observer-recording.md` for timing and transport details.
+
+### Attached visual effects presentation (2026-10-29, current)
+
+User observed burning behind the displayed mob during a 500ms test and asks
+for mob-attached visual FX to follow the displayed body. Installed vfx_Burning
+asset has its own ZNetView/ZSyncTransform, nested local/world-space particle
+systems, a light and child audio. Native EffectList supports direct parenting
+and ParentConstraint follow sources. Moving only Character.Visual did not move
+an effect attached to Character.transform or a separate network-rooted FX.
+
+MobBridgeEffects now creates transform-only presentation anchors for actual
+attachment sources, including bones. Existing FX objects move under those
+anchors; native follow-constraint sources are redirected while retaining their
+weights/offsets and unrelated sources. No particle system, effect identity,
+status, timer or sound is cloned/restarted. Actor/root/Rigidbody and gameplay
+objects are unchanged. Visual-only admission excludes Character/Projectile/Aoe/
+ItemDrop and hierarchies containing colliders/Rigidbodies; physics/gameplay
+attachments are not repositioned as visual FX. Ordinary unattached world impact
+effects are not adopted. Embedded mixed gameplay/visual components sharing the
+same physics object remain native rather than moving gameplay geometry.
+Anchors remain below the original source hierarchy so parent-Character lookups
+and source activation still work. Anchor placement refreshes before camera
+culling, after final bone application and after render restoration, preventing
+double offsets when the model itself is temporarily moved/restored.
+
+The live source SEMan is already cleared before MobBridgeVisual.Start. Status
+shadow now retains only the existing FX ZDOIDs from the already captured payload.
+Those references discover preexisting FX and late arrivals without reinstating
+status gameplay. Existing child emitters/lights/audio are scanned once on the
+affected mob. New vanilla EffectList outputs use native enabled/variant order,
+preserving same-prefab entries attached to different bones. New network FX
+receive attachment parent/path/local-pose metadata only for the affected owner
+epoch, lasting through the source's final visual-completion notice. No periodic
+RPC was added; inactive epochs do not tag ordinary FX. Tagged scene arrivals
+and captured FX IDs discover remote instances. Delayed attachment tags are
+retried only for newly created visual FX associated with an active mob.
+Existing native water/slide/flight instance arrays are read once as well.
+
+ZSyncTransform callbacks temporarily restore each registered effect's native
+parent/local pose and original constraint sources. Finalizers save native
+updates and reattach presentation even after exceptions. Owner-sync scopes run
+only on owned FX; replica-sync scopes only on unowned FX. Unrelated/idle objects
+take a dictionary/count fast path without Unity component/transform lookups.
+There is no whole-scene scan and no per-mob AI work. Effect instances, original
+parents and constraint bindings restore on normal completion/stop; vanilla
+external detach is respected. Anchors follow source activation and are destroyed
+after effects have been restored. Session hooks/loop entry stay warm between
+handoffs and are removed on world shutdown.
+Character.SetupContinuousEffect has its own scoped restore because vanilla
+directly rewrites existing water/slide/flight FX positions there. Successful
+updates retain native attachment-offset changes instead of leaving effects on
+the hidden root. Native reparent/detach changes retire presentation ownership.
+
+Anchor preparation is inserted before the first native constraint/particle
+update phase in the existing PlayerLoop. This matters for world-space particle
+births: render-only movement would leave emission at the hidden root. Existing
+world-space particles remain in world space as a vanilla trail. The shared
+presentation clock still advances once per frame. Late draw refreshes bone
+anchors against the actual drawn pose; the FPS/skin/rotation fixes and half-
+playback final correction remain. Only this callback is removed from the current
+loop, preserving other plugins' entries. Both endpoints need this build for
+attachment metadata on effects newly created by the destination.
+
+Validation includes managed attachment/native-scope/constraint/nested-callback/
+partial-failure/cleanup/external-detach fixtures; status FX ID retention after
+source relinquishment; actual native Harmony installation for EffectList parent
+parameter __2, scene arrivals and all three ZSyncTransform entrypoints; modeled
+native PlayerLoop insert/remove order/idempotence; final epoch fencing; emitted
+checks excluding FX cloning, particle re-simulation, damage and ownership claims.
+No live Unity particle, audio or network/render fidelity claim; in-game 500ms
+burning and mid-bridge new status tests remain necessary. Setup/presentation
+cost logs now include attachedFx counts for live diagnosis. See verification.json
+for completed full verification and exact DLL hash.
+
+Primary Unity phase reference: https://github.com/Unity-Technologies/UnityCsReference/blob/master/Runtime/Export/PlayerLoop/PlayerLoop.bindings.cs
+
+### Half-playback final correction trial (2026-10-29, current)
+
+User requests final correction base of 1/2 instead of 1/4 of stretched playback.
+BeginTakeover now passes the full elapsed presentation duration to the explicit
+SettleForPlayback helper, whose base is half that duration. Before this change
+the caller halved elapsed duration before SettleForPose halved it again.
+Example: actual 200ms playback -> 100ms base correction (previously 50ms);
+1000ms playback -> 500ms (previously 250ms). Existing geometric extension for
+large position/rotation residuals, minimum duration and completion rules remain.
+Inherited-pose entry smoothing still uses its original separate timing path.
+No fake playback rate, recording window, native animation or attack-bone fade
+change. This is a duration experiment, not a fix for the other audited stalls.
+Managed checks cover 40/100/200/400/1000/2000ms playback and large residuals;
+emitted wiring verifies the final caller does not halve playback twice.
+See refreshed verification receipt for completed checks; live result remains open.
+
+### Continuous playback-rate updates (2026-10-29, current)
+
+User confirms native locomotion presentation improves animation but reports
+occasional small movement jerks during stretched playback. Found a concrete
+clock discontinuity: ObserveRealRate immediately replaced playbackRate whenever
+the destination rolling estimate changed. MatchHorizon also reset playbackRate
+to scheduledRate each frame. Position interpolation remained linear and frame
+driven, but an estimate update could instantly change rendered trajectory speed.
+
+ObserveRealRate now sets only the target rate and a response interval derived
+from successive accepted destination-local sample timestamps. Render advances
+the current rate exponentially toward that target and analytically integrates
+its elapsed distance in simulation time. This avoids both an instantaneous speed
+change and subdivision-dependent progress. MatchHorizon no longer bypasses the
+transition. Invalid/nonpositive sample spacing is ignored. Cached initial rate,
+monotonic fake time, recorded poses, native physics, simulation cadence, observed
+takeover frontier and native locomotion presentation remain unchanged. Response
+uses measured sample spacing, not a fixed simulation raster or movement cap.
+
+Fixtures cover faster/slower target rates, 20/50/113/400ms sample spacing,
+one 200ms frame versus twenty 10ms frames, monotonic progress, invalid spacing
+and horizon-matching calls during transitions. Native emitted checks require
+continuous integration and measured-spacing wiring. Per-bridge presentation
+summaries now add bufferStarvedFrames, endpointHeldFrames, maxPlaybackRateStep
+and maxFrameMs, accumulated without per-frame string/log allocations. The first
+counter includes startup frames with no completed native motor sample; the
+endpoint counter records waiting for an observed owner frontier after sealed
+recording exhaustion. These cases remain distinct from rate-update kinks.
+
+Current Player.log also includes dungeon generation and other world work during
+the test, plus native fake contacts against logs/terrain with substantial speed
+changes. Those can cause real frame/motor pauses; no live per-frame evidence yet
+assigns each reported jerk to this clock defect. No unbounded extrapolation,
+buffer rewrite, extra physics tick, collision-curve approximation or new root
+speed/rotation limit was added. Live smoothing quality remains to be tested.
+
+### Continuous native locomotion presentation (2026-10-29, current)
+
+User prioritizes continuous animation and matching native-to-fake poses over
+equal animation/root speed. Ordinary locomotion now keeps native bones throughout
+the bridge. The existing live Animator continues its walk/turn cycle and native
+procedural head/foot pose; presentation no longer substitutes the private rig's
+different walking pose at handoff. Root recording/playback, decisions, physics,
+target prediction and authority are unchanged. Native animation can therefore
+run faster than slowed root movement, as explicitly accepted by the user.
+
+Visual attack playback remains available. Immutable animation frames carry an
+attack/pending flag, interpolated into a smooth contribution around sampled
+attack boundaries. Private bones contribute only there. Entry also fades over
+half the planned simulation horizon in wall time; the last quarter of the
+simulation horizon fades back to native, reaching full native at the endpoint.
+Final takeover weight can only further remove private contribution. No frozen
+endpoint is reintroduced while waiting for observed owner progress or during
+final correction. Before a first animation interval exists, native bones remain
+fully selected. All bones/hitboxes still share the prepared policy and fresh
+late native sample. No extra graph, AI, clip event evaluation or buffer mutation.
+
+This prevents bridge-imposed whole-rig locomotion freezes/pose replacement. It
+does not force native idle/attack clips to move when vanilla intentionally holds
+them, and root-position holds remain a separate issue. Native flight/attack
+animation can differ from the predicted slowed body; visual attacks near the
+buffer end fade early rather than freeze. Existing private transition/IK parity
+limitations are now confined to the partial predicted-attack contribution.
+Managed fixtures cover locomotion passthrough from start through exhausted
+buffer, attack metadata interpolation, fade continuity and endpoint/native
+takeover behavior over 20/50/100/500/1000ms. Emitted checks verify policy wiring;
+live animation/render quality still requires the user's game test.
+
+### Further stall/backstep and animation-start audit (2026-10-29)
+
+Found and reproduced a missing initial direction in MobBridgeTakeover. Existing
+protection only learned direction after a nonzero replica-root delta. A displayed
+lead of x=1, stationary replica root x=0 and 100ms correction produced x=0.896
+after 20ms, even though the accepted owner state could already report positive
+velocity. BeginTakeover now passes the paired destination-frame velocity (actor
+velocity only for an epoch-change fallback). The constructor seeds direction
+from that finite nonzero velocity. Subsequent actual root deltas retain their
+existing behavior. No new smoothing limit, trajectory prediction, timer hold or
+fake-speed change. Regression fixtures cover both horizontal signs, vertical
+and sideways movement, waiting for the first root delta, eventual catch-up and
+zero-velocity correction. Emitted wiring checks require passing owner velocity.
+This closes the initial backward step; an existing correction can still hold a
+displayed lead until the root catches it. That tradeoff is not a new stall fix.
+
+Animation findings, deliberately separate from this position fix:
+- The visual-attack experiment introduced recording of the complete rig. Run
+  cycles now follow the slowed fake clock; the earlier movement-only path left
+  native skeletal animation running at full speed. This audit does not change
+  animation speed. Later skin refresh made buffered poses reliably visible.
+- Animation history starts with the native visible pose, while subsequent samples
+  come from the private graph without native CharacterAnimEvent head look-at or
+  foot IK. The first interpolation interval can therefore remove a native
+  procedural pose, even with identical controller state. This is a real parity
+  gap and plausible head-reset cause; no live per-bone proof yet.
+- Constructor copies current state/time and parameters, but merely counts active
+  Animator transitions; it does not restore their next state/blend progress.
+  This can change a partially blended pose at recording start. Latest Player.log
+  inspection contains 60 setup reports, all transitionLayers=0, so this gap is
+  not supported as the cause in that session. No approximate CrossFade restore
+  or replacement transition duration introduced.
+- Immutable recording end still clamps body/bones while an observed destination
+  frontier is behind. A fully replayed bone sample also stays at its endpoint
+  as the final native blend starts at zero weight. These can look like a stop;
+  continuously producing new fake states after closure would violate the current
+  fixed live-input/immutable-buffer contract. No silent extension or extrapolation.
+- Model-local tilt is another incomplete pose component: ApplyPose keeps the
+  initial visual LocalRotation through correction, while native UpdateGroundTilt
+  can keep changing the restored native visual. Private motor does not invoke
+  UpdateGroundTilt. For mobs with ground/flying tilt, releasing presentation can
+  reveal a different native model-local rotation even after actor-root correction
+  completes. This is a source-level gap, not established as this Troll symptom;
+  no speculative private-scene raycast or root/bone timing rewrite included.
+
+Checked native update ordering: nonowner ZSyncTransform.ClientSync runs during
+CustomFixedUpdate; its CustomLateUpdate invokes OwnerSync. A claim that normal
+replica position is always finalized after HUD preparation is not supported by
+these sources. Latest Player.log has 60 presentation reports with zero measured
+draw-bone gaps and no reported frame/unsupported-decision errors. This rules out
+those logged failures in that session, not every visible animation artifact.
+
+The user-installed DLL hash during this audit matched the preceding verified
+748FE6 build; profiles remain untouched. Focused/full outcomes for this patch
+are recorded by the refreshed verification receipt. No live Unity validation.
+
+### Smoothing regression comparison (2026-10-29, current)
+
+Compared current MobBridgeVisual with task workspace/work/before-multi-hitboxes
+(the snapshot directly before collider admission). Ignoring whitespace/comments,
+Advance, BeginTakeover, ComputePose and CurrentPose are unchanged. The nearby
+pre-visual-attack snapshot also has identical Timeline, Recording and CaptureClock;
+Takeover only adds animation weight/time methods. The no-backwards position
+hold and sealed-buffer endpoint hold are existing behavior, not proof of the
+user's new regression. User now confirms FPS spikes and rotation flicker are
+fixed, but reports roughness/brief stops, possibly animation only and possibly
+near handoff start. Preserve the working performance/collider/rotation fixes.
+
+A specific post-collider change was isolated: UpdatePresentation began mixing
+all native bone values early in the HUD/LateUpdate preparation and caching that
+blend. The camera subsequently applied that mixed pose after culling, when
+native animation/IK may have newer transforms. The original pre-Troll path read
+native bone values at application time. This ordering difference is a concrete
+regression candidate; the log does not prove it explains all root movement.
+
+Prepare now stores recorded pose, frame weight/time and model matrix, without
+reading/blending native bone locals. Apply uses the fresh native local values
+it already saves for restoration, mixing only then at the working late camera
+boundary. The fake sample/weight are not advanced again. Pure fake (weight 0)
+remains exactly the recorded pose. During a nonzero blend, hitbox shapes refresh
+from the same saved native sample after bone application; they remain math-only
+and do not re-evaluate AI, physics or animation. No extra full-rig blend pass or
+native-bone reads in early preparation. Same restore/finalization semantics.
+
+The installed Troll prefab enables CharacterAnimEvent head rotation and foot IK.
+The private rig has no CharacterAnimEvent. Per-render skin refresh introduced
+after collider admission makes private recorded bone poses reliably visible;
+previous cached native skinning could mask their differences. This is a separate
+incomplete procedural-pose parity limitation, particularly for pure fake start,
+not a confirmed new native AI or position-smoothing error. No head-bone exclusion,
+normal-speed locomotion override or untested IK reimplementation was introduced.
+
+Emitted regression checks reject native local-position/rotation reads in Prepare,
+require native rotation sampling + blending in late Apply, and require hitbox
+refresh on the late blend path. Existing independent actor, callback, record
+immutability, binary lookup and hook lifetime suites remain. See verification.json
+for completed checks/hash. No live Unity confirmation or profile installation.
+
+### New Troll log and further setup optimization (2026-10-29, previous verified build)
+
+User attachment 3d424a4c-d767-4e3a-9170-a02126523122 contained five presentation
+reports. maxDrawModelGapDeg is zero in all five; maxDrawBoneGapDeg is 8.238,
+3.463, 22.479, 10.150 and 39.661 degrees. This proves a difference between the
+cached intended skeleton-root rotation and the measured draw-boundary root,
+not a duplicate model or the identity of an overwriting callback. Actor root
+takeover yaw is 0.0-0.6 degrees in these samples. Active Animator transitions
+were not reported at capture in this log (transitionLayers=0).
+
+Root placement remains in onPreCull for spatial culling. Buffered bone
+application/save now occurs once in onPreRender, after culling, retaining
+post-render restoration. The early callback no longer applies bones, avoiding
+a duplicate rig write. Diagnostic MeasureDraw remains read-only and runs at
+pre/post boundaries. maxApplyBoneGapDeg additionally measures the immediate
+post-application discrepancy: it can distinguish a cached pose reconstruction
+mismatch from a later writer if flicker remains. Unity documents the callback
+order and per-render skin matrix refresh requirement:
+https://docs.unity3d.com/cn/6000.0/ScriptReference/Camera-onPreRender.html
+https://docs.unity3d.com/ja/6000.0/ScriptReference/SkinnedMeshRenderer-forceMatrixRecalculationPerRender.html
+No live render confirmation of this timing change; no rotation clamp, LOD or
+global graphics setting change. Existing renderer-free recording rig remains.
+
+The same live log isolates snapshotCreate at 98.743 ms on the first sample and
+39.068-50.807 ms on repeated samples. Ground remapping was only 0.011-0.362 ms,
+so the earlier suspicion of expensive ground remapping is not supported here.
+Snapshot construction now caches exact slot constructor delegates by field
+type. Each request still validates its field list and allocates fresh per-actor
+slots with current native values; no actor or mutable snapshot is cached.
+
+A native-class headless benchmark of 100 snapshot creations previously took
+134.200 / 139.485 / 137.476 ms warm. With cached constructor dispatch, warm
+passes took 12.716 / 7.610 / 14.087 ms; first-use pass was 34.127 ms. This is a
+constructor microbenchmark, not a prediction of the remaining live frame cost.
+Native tests exercise independent actors, fresh state, duplicate-field
+rejection and restoration after injected failure.
+
+PoseHistory uses lower-bound binary search over the existing circular data,
+preserving capacity and interpolation arithmetic. 1,520 differential checks
+compare exact vector/quaternion output with the former linear algorithm over
+190 appends, repeated timestamps, tiny spans, endpoints and multiple wraps.
+Existing recordings, prediction, RNG, collision coverage and clocks unchanged.
+See verification.json for current completed suites and DLL hash.
+
+### Troll render flicker follow-up (2026-10-29, previous diagnostic build)
+
+User confirmed the club alignment is fixed, but reported rotation flicker or an
+apparent second model at takeover. Motion Blur is off; no TAA/upscaling mod is
+used. The private recording rig copies transforms plus an Animator/receiver,
+never renderers. Installed Troll prefab inspection found Body and Hair skinned
+renderers with the same root bone, in one LOD level. This does not prove the
+absence of third-party runtime renderers or identify the remaining artifact.
+
+Added active-track-only draw boundary diagnostics, not a speculative rotation
+correction: camera pre/post render compare actual visual/skeleton-root rotation
+with the cached intended pose, accumulating maxDrawModelGapDeg and
+maxDrawBoneGapDeg. The once-per-bridge presentation report includes drawSamples;
+zero means no camera measurement, not absence of a mismatch. These callbacks
+read poses only, allocate no per-sample report, and unsubscribe with the track.
+A live log from this build is required to distinguish late pose overwrite from
+a skin/render artifact. No global graphics, LOD or motion-vector changes.
+
+Latest live logs also showed repeated snapshot phase costs around 42-46 ms.
+A separate headless 100-creation benchmark measured warm ShadowSnapshot.Create
+around 134-139 ms total (about 1.34-1.39 ms per call), so it does not explain
+that entire live phase. Added snapshotCreate / snapshotCallbacks /
+snapshotInstall / snapshotGround phase timings to isolate construction from
+ground-collider remapping/cooking and final state capture. No unmeasured pool
+or collision omission was introduced. Prior performance changes remain.
+
+### Active preview field/lookup overhead (2026-10-29)
+
+Motor Step, animation-event processing and animation-hash hooks now use cached
+exact-type FieldAccess delegates for the same native fields. Callback isolation
+has per-actor typed capture/clear/restore slots, reusing the existing accessor
+cache. It still captures the latest native delegates before each step, clears
+all of them during the isolated motor, and restores them inside the existing
+finally chain. Reflection remains in setup/metadata work; it is removed from
+these repeated paths without changing field coverage or state order.
+
+A headless benchmark on the real native Humanoid field ran 50,000 identical
+float read/add/write pairs. Reflection took 20.677 / 22.327 / 28.619 ms versus
+0.358 / 0.445 / 0.552 ms for typed access (three passes, warm loop). Final float
+values matched exactly. This measures dispatch only, not a live frame, Unity
+physics, total bridge CPU or FPS. The benchmark is included in the native
+presentation audit output; no timing threshold controls test success.
+
+Collision-shape Mirror now uses the existing membership table as a direct
+source-to-Shape dictionary, preserving creation order and all copied geometry.
+Observe retains each collider's stable Transform reference and reads the target
+pose once per synchronous observation; changes/reparenting remain visible.
+Pure fake playback samples the recording and model matrix as before, but skips
+real-bone reads/blending at exactly zero real weight. Any nonzero weight retains
+the original native-pose blend and its continuous timing.
+
+Native checks compare every new scalar/vector/quaternion accessor with its
+actual field. All game callback fields are exercised across capture, nulling,
+restoration and recapture of changed/null callbacks. Emitted checks require
+callback restoration in finally and no reflective field lookup in the motor
+paths; direct collider lookup must not enumerate the scene. Existing timing,
+RNG, weapon, status, collider and renderer checks still apply. See the current
+verification.json receipt for completed suites/hash. No installation, live
+Unity/multiplayer run or measured live FPS claim.
+
+### Ownership-edge cost investigation (previous verified build)
+
+Measured the former install/remove paths against native game methods under
+Valheim's embedded Mono (headless, omitted Unity-only static initializers).
+No third-party Harmony graph or live Unity scene is loaded by this benchmark.
+Repeated native-recording + presentation installation alone took 52.853 and
+70.568 ms; their removal took 52.187 and 56.929 ms. Solo-test and destination
+AI hook costs are additional, separately listed in the timing output. Do not
+sum endpoint phases into a claim about one live client frame.
+
+Hooks now warm at enabled world connection and persist across individual
+transfers, capture completion and idle gaps. The solo-test hooks warm on test
+start and clear only at stop/reset. Shutdown/feature stop removes session
+hooks. Ordinary AI callbacks with empty epoch dictionaries return before any
+actor lookup or Unity clock access; native isolation prefixes retain their
+existing empty-scope guards. Persistent wrappers have a small dispatch cost;
+this is not a claim of zero overhead or a live CPU benchmark.
+
+The retained lifecycle benchmark measured 2.280 ms on its first managed seam
+call, then 0.040 / 0.031 ms on two repeated edges (including reflection). It
+moves compilation to session start/end instead of removing required guards.
+Reproduce with tools/benchmark-mob-bridge-hooks.ps1 after building. Native
+hook tests cover retention, idempotence, stop cleanup and idle fast paths.
+Native field/delegate metadata is cached. Private collision geometry now
+receives pose/enable writes only when those exact values change; no motion
+threshold, missing collision shapes, physics-rate reduction or AI cap added.
+
+Debug `bridge cost` reports separate checkpoint seed/status/portable/send,
+setup hitboxes/hooks/scene/geometry/body/rig/snapshot/context, capture AI/motor
+and largest capture frame, plus disposal. Setup includes shape/bone counts.
+Reports are queued until LateUpdate instead of writing between timed phases.
+These reports are needed to identify the remaining Unity scene/rig, allocation
+and first-capture costs in the actual mod stack; headless results cannot prove
+the entire live spike is gone. Capture time includes existing diagnostic work
+and recording close; detailed AI/motor totals need not sum to that total.
+
+The user localized the Troll rotation flicker to the beginning of takeover
+blending and reported a floating club after the multi-collider fix. Its 15
+logged takeover yaw corrections range from -3.7 to +10.6 degrees; those samples
+do not prove the cause of a one-frame rotation excursion. Two concrete gaps
+were found: render callbacks resampled bone blending with a later wall time
+than the root/hitboxes, and multi-collider FollowHit temporarily overwrote the
+whole visible rig a second time before rendering. The latter also invalidates
+the assumption that cached skin matrices describe the current bone transforms.
+
+UpdatePresentation now prepares the complete bone/root blend once per frame;
+all cameras apply cached local values with no repeated sampling/blending.
+Bone hitboxes compose only their requested ancestor chains from prepared
+local TRS values and an actor-parent-aware model matrix. They never write the
+live rig. Existing partial construction/cleanup/weak-spot routing is retained.
+Hit proxy poses/scales and environment shapes skip only exactly unchanged
+writes. No epsilon threshold, collision omission or reduced simulation cadence.
+
+A bridge-local MobBridgeSkin enables forceMatrixRecalculationPerRender on
+existing skinned renderers, including inactive LOD meshes, and restores the
+original setting at disposal. It is not polled for ordinary mobs and adds no
+BakeMesh, per-frame rig scan, equipment spawning or animation reevaluation.
+Official Unity API documentation explicitly calls for this flag when a skinned
+mesh is rendered with multiple poses within one update:
+https://docs.unity.com/en-us/engine/6000.5/script-reference/unityengine/skinnedmeshrenderer/forcematrixrecalculationperrender
+This addresses the matrix-cache contract, but resolution of the observed Troll
+rotation/club symptoms still requires a live Unity render test. No measured
+live GPU cost or claim that every renderer/third-party attachment is covered.
+
+40 managed hitbox/skin tests include cached bone-position/scale delegation,
+no visible-rig mutation and idempotent restoration of original renderer flags.
+Emitted audits verify once-per-update preparation, clock-free camera readers,
+math-only bone queries and renderer cleanup. Native lifecycle tests cover
+retained hooks and shutdown. The private Animator still seeds current states
+without reconstructing active transitions; that separate parity limitation was
+not changed speculatively. Debug diagnostics retain transition-layer count,
+initial root pose gap and maximum actor/skeleton-root angular steps.
+
+See verification.json for the completed suite/hash. No installation or live
+Unity/multiplayer test was performed by the agent.
+
+### Multi-collider preview admission (2026-10-28, previous verified build)
+
+The blanket collider/Rigidbody rejection below the visual is removed. Admission
+now copies mob-owned capsule (all axes), sphere, box and mesh query shapes.
+Nested Character/ZNetView entities are excluded. Native shapes are suppressed
+only after complete construction; partial failure disposes copies and preserves
+the original enable states. Unsupported custom collider classes still report a
+shape-specific failure instead of silently rejecting every multi-collider mob.
+
+Hitbox sampling applies the same buffered/blended bone pose as rendering and
+restores the source rig in finally. Root/attack shapes retain actor-relative
+transforms; bone shapes follow sampled animation. Proxies remain independent
+kinematic hitbox-layer bodies, preserving geometry, scale, trigger state and
+shared materials. Character.FindWeakSpotIndex receives the original collider
+identity for this Character only; HitData keeps the proxy reference. Native
+physics restoration immediately disables every proxy and runs only once, so
+late disposal cannot overwrite the returned owner's collider changes.
+
+34 managed regression checks cover shape fidelity, head movement, hidden-hit
+rejection, weak-spot identity, nested entity exclusion, inactive/disabled shapes,
+repeated cleanup and partial construction failure. Native hook audit includes
+installation/removal of FindWeakSpotIndex. DLL audit checks shared pose use and
+finally restoration. Installed Troll prefab was read directly: root capsule
+on layer 9, attack capsule and head sphere on layer 27. See verification.json
+for the completed full suite and current DLL hash. No live Unity physics/query
+or multiplayer test; no profile installation, packaging or publication.
+
+### Visual-only preview attacks (2026-10-28, previous verified build)
+
+Completed full debug verification: all 19 suites passed. DLL SHA256:
+`9CD2736BB66A1471925967D6F4CBCAC7A399439925A835F61DC2FDD9FB163B61`.
+Focused results: 2089 timeline/recording/blend checks, 434 emitted isolation/
+wiring checks, 46 native hook/scope/event checks and 498 native weapon/variant/
+chain/snapshot checks. Receipt: verification.json. No live Unity world test.
+
+The user's newer request supersedes the earlier attack barrier and decision to
+omit animation recording. Predicted attacks now continue capture until the
+normal latency deadline or observed takeover; they do not close/freeze capture.
+Unsupported unrelated AI actions retain their previous safe-stop path.
+
+A transform-only copy of the visual rig has a private native Animator and a
+manually evaluated AnimatorControllerPlayable. It contains no Character,
+CharacterAnimEvent, ZNetView, equipment, colliders or renderers. The selected
+attack trigger uses the native random variant, chain precedence/cooldown and
+native ammunition eligibility check. The private graph supplies attack tags,
+movement/rotation factors, root motion, speed/stop and jump/flight events to the
+private native movement producer. Attack age follows that physical animation
+timeline. Source Actor fields, physics, RNG and authority still restore.
+
+Animation events resolve only to MobBridgeAnimationRoot: Hit/OnAttackTrigger
+can update private flight-toggle metadata, never invoke Attack.OnAttackTrigger.
+Native jump is admitted only through its ground/water branch, excluding its
+unrelated global local-player grapple fallback. No preview Attack.Start/Update,
+hit tests, health/resource payments, ammunition consumption or projectile spawns.
+Attack VFX/audio and weapon trails are outside this first visual-only attempt.
+
+Vanilla controllers contain RandomIdle, AnimSetTrigger and StateController.
+Scoped handlers map the first two into private graph parameters and preserve
+per-preview idle phase/random state. StateController child/FX actions are skipped
+on the private graph. These handlers pass through for every real Animator.
+Unknown custom state behaviours reject preview before capture. Three-argument
+declared callbacks are bound explicitly; Unity's inherited four-argument state
+callback overloads otherwise cause AmbiguousMatchException during hook install.
+Initial graph seeding does not replay state-entry triggers or reroll idle values.
+
+Local bone transforms are copied into immutable pose frames on the simulation
+timeline, interpolated for render and restored after rendering. Incoming real
+animation keeps running independently. At observed horizon takeover, recorded
+pose time continues from its existing phase and accelerates 0.5x -> 1x while its
+weight fades into the real pose over the existing correction window. Rendering
+does not execute any preview graph or animation events. No wire-schema change.
+
+Focused validation covers zero-time attacks continuing capture for 20-1000ms,
+bone interpolation/immutability, monotone mid-attack takeover and speed ramp,
+native random/chain trigger selection, pending/in-attack deduplication, private
+cooldowns, actual native hook installation, scope isolation and safe clip-event
+handlers. Full verification receipt is verification.json when complete.
+
+Live Unity Animator/PlayableGraph evaluation, skinned rendering, blend timing,
+scene cost and multiplayer combat remain untested. This is a visual trial, not
+a claim that unpredictable target movement yields identical future decisions.
+Native ground tilt/foot IK, equipment model changes and controller child-visibility
+actions are not newly replicated by the pose-only renderer. Existing combat hit
+forwarding remains with the real owner. No profiles installed or modified.
+
+### Native movement recording producer (2026-10-28)
+
+Completed full debug verification: 19 suites passed. DLL SHA256:
+`7AE07E5AFC6BFA6B41C7466E527565BCB85DDBCF30EE83E5E3FD9E33D5B16639`.
+Receipt: verification.json, 2026-10-28 21:13:54 local. Focused checks include
+1566 timeline/recording, 209 emitted wiring, 36 native hook/guard and 490
+native weapon/snapshot assertions; 91 status-state checks include retained
+private native liquid effects. No live Unity world or multiplayer validation.
+
+User scope: change the source of buffered positions/rotations. Keep existing
+target prediction, AI decisions, attack barrier, stretched playback, observed
+destination horizon, hit/HUD routing and final correction. No animation-state
+recording. Recorded poses are append-only; neither live target updates nor
+destination packets rewrite them.
+
+The source Character's original UpdateMotion (walking/flying/swimming),
+UpdateWater, CalculateLiquidDepth, UpdateGroundContact, UpdateLayer,
+UpdateLookTransition and OnCollisionStay execute against a transaction-local
+field snapshot and a private Rigidbody/capsule in a local Physics3D scene.
+There is no duplicate Character/MonsterAI/ZNetView and no copied custom motor.
+Read-only nearby collider geometry is mirrored into that scene; moving inputs
+are sampled only while the recording window is open. Target geometry uses the
+same forward prediction as AI. Native Character root turning is copied into the
+private Rigidbody before simulation. Source fields, callbacks, root/body pose,
+velocity, root layer and global RNG restore in nested finally blocks. The native
+motor sees the same owner collision layer on its Character root and private body.
+Ground-body references
+are remapped to private copies so native motor impulses cannot push real bodies.
+Own RPCs, ZDO writes, damage, knockback, FX and animation writes are suppressed
+only within the synchronous native step. Newly added private liquid statuses
+persist in the private effect timeline; real status-manager contents restore.
+Session hooks and private scene/resources are removed when recording ends.
+
+For L=100ms at game rate 1: capture native movement for 100ms wall time while
+playback advances at half speed. At wall 100ms capture seals at sim 100ms while
+playback is around sim 50ms. At wall 200ms replay reaches sim 100ms; takeover
+still requires the observed destination frontier. An earlier observed matching
+frontier may start existing takeover earlier. An attack seals at its decision
+horizon; ahead production never jumps playback to that barrier immediately.
+Native motor ticks use Time.fixedDeltaTime, independent of render callbacks and
+cached AI cadence. A fractional final interval integrates private physics only,
+without applying a second controller/acceleration tick. The buffer keeps all
+poses until disposal, so ahead capture cannot overwrite early replay after 64
+samples. A closed buffer rejects every append and stops sampling live inputs.
+
+Verification covers recording endpoints at 20/50/100/500/1000ms under four render
+cadences, exact fixed motor tick counts, fractional physics tails, retained early
+poses, read-only replay, attack endpoint playback, actual native delegate binding
+and Harmony installation/removal, scoped ownership/side-effect guards, and
+original-game scalar/reference snapshot restoration after injected failure.
+Tests replace the obsolete handwritten contact-solver fixtures.
+
+Limits: headless tests do not execute Unity PhysicsScene, render frames or live
+multiplayer. Nearby shape copies do not clone gameplay components; external
+moving bodies are kinematic inputs rather than reciprocally simulated bodies.
+Ship/component-dependent contact behavior, scene setup cost and live collision/
+water continuity need in-game verification. This is a native movement producer,
+not a claim of deterministic full-world replication. Protocol 4/checkpoint 3 and
+wire field schema remain unchanged. Profiles were not installed or modified.
+
+### Short-handoff frame-clock regression (2026-10-28)
+
+AdvanceFrame previously used min(Unity deltaTime, wall time since its previous
+callback) every frame. EnemyHud.UpdateHuds runs in EnemyHud.LateUpdate and the
+plugin also prepares the frame in LateUpdate. Variable callback phase therefore
+entered the clock: an earlier callback shortened a step while a later callback
+could not recover the lost time. Even steady native frames could produce uneven
+and systematically slow playback. The comparison build's wall clock did not
+have this particular frame-delta truncation.
+
+Only the first frame is now shortened to exclude pre-handoff time. Subsequent
+frames consume native deltaTime exactly once; cached readers still do not advance
+time and Unity's own bounded delta still prevents unrendered wall-gap catch-up.
+A 50ms-window regression drives 120 steady 16ms frames with alternating 6ms
+callback-phase offsets and requires an 8ms fake increment on every frame.
+This proves clock continuity under callback jitter, not live render smoothness.
+
+### Terrain-contact start-stall follow-up (2026-10-28)
+
+Current Player.log contains 153 early motion samples, including 11 with terrain
+contact and zero allowed motion despite an active movement command. In one
+handoff, fake progress advances .061 -> .177s and body progress .076 -> .188s,
+while visible displacement remains .033m between wall .151s and .411s.
+CanMove=True and attackHeld=False identify a body/contact stall in that case.
+Eight attack-held samples are a separate, intentional barrier; their unstepped
+body's CanMove diagnostic now initializes from the source instead of default false.
+
+Unity documents that initial-overlap CapsuleCastAll results have distance zero
+and a normal opposite the sweep, not an actual surface normal:
+https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Physics.CapsuleCastAll.html
+The former body projected both physical velocity and controller m_currentVel
+onto that artificial normal, zeroing motion. It also snapped the root to a
+flat-foot height after each step. On a slope, a capsule needs different support
+height; that snap can re-embed its lower sphere repeatedly.
+
+The isolated body now uses OverlapCapsule and ComputePenetration at the fake
+pose, resolves the minimum translation, then sweeps remaining motion through
+contact planes. Only inward physical velocity is removed; controller input is
+unchanged and outward/tangential velocity survives. Queries use the complete
+native capsule geometry (including rotated axis), native contactOffset and the
+mob Rigidbody's solverIterations. Overflow queries retry with complete arrays.
+Native walking gravity stays enabled. The flat-foot snap and radius shrink are
+removed. No authoritative root, Rigidbody or scene collider is moved by queries.
+ComputePenetration accepts explicit poses without moving scene colliders:
+https://docs.unity.com/en-us/engine/6000.0/script-reference/unityengine/physics/computepenetration
+
+Analytic capsule/plane regressions reproduce the zero-distance opposing-normal
+failure, then cover 400 slope-contact steps, floor/wall corners, real wall stops,
+outward separation and takeoff. Emitted checks require overlap/penetration
+wiring and forbid the former flat-foot snap. These are numerical contact tests,
+not an executed Unity physics world. Rigidbody friction, dynamic-body impulses,
+terrain seams and live start-motion quality remain in-game validation work.
+
+### Native attack-selection and start-motion follow-up (2026-10-28)
+
+Bridge protocol 4/checkpoint 3 adds every inventory weapon cooldown, unarmed
+fallback cooldown, selected weapon and native candidate ordering. Destination
+rebases ages to its game clock and restores equipment without equip effects.
+Different weapon identities/counts fail explicitly instead of silently binding
+the equipped weapon's age to a different attack. Ordinary mob templates must
+provide the same candidate inventory on both peers.
+
+The preview copies native `MonsterAI.SelectBestAttack` and
+`Humanoid.EquipBestWeapon` IL. Only equipment mutation, inventory views and
+temporary candidate buffers are replaced with transaction-local state. Range,
+minimum range, priorities, angle checks, cooldowns, eligibility and native
+Random.Range calls stay in that copied graph. Native foreach try/finally
+regions are preserved; catch/filter/fault regions remain rejected. Friend
+queries now follow native iteration/range rules at the fake mob position,
+instead of aborting friend/healing attacks.
+
+Fake own-actor InAttack is isolated from newer replicated animations. Matching
+starts at an attack-free source boundary and freezes at its own attack decision.
+Body attack factors are captured at that boundary rather than re-read from
+future owner animations. Attack age advances by elapsed physical game time,
+not 50ms per AI call. Stagger/other live environment inputs and future Animator
+root motion remain limitations; this is not a full second Unity physics world.
+
+Near-horizon clock matching no longer briefly sets fake playback to zero.
+Observed destination progress still gates takeover; only attack/unsupported
+action barriers pause the fake. Two early motion samples per active preview
+report fake/body progress, displayed displacement, steering, desired speed,
+velocity, CanMove and blocking contact. No new per-mob idle work is introduced.
+
+Latest pasted log (attachment 76d7bdf1-a875-4812-93ec-2f100d7c6479) contains
+29 bridge starts and 3 attack barriers, including one at fake time zero.
+It records fake flyingslam versus real land, and fake claw versus real takeoff.
+Other apparent start freezes cannot be proven from that log's pose-free clock
+messages. The new motion samples distinguish zero steering, animation gates,
+collision blockage and a stationary display; no universal live fix is claimed.
+
+Weapon tests execute native and copied selection against declared Unity
+clock/pose/random-sequence, attack-state, health/altitude and equipment seams.
+They check selection, random-call count, untouched real equipment/cooldowns,
+candidate order and cooldown rebasing. Separate fork tests exercise finally on
+early return and exception. Live Unity physics, animation and multiplayer
+still need an in-game test.
+
+### Dynamic matching and hitbox follow-up (2026-10-28)
+
+The fake body queries `Floating.GetLiquidLevel` at its own position with native
+wave factor 1 and `LiquidType.All`. It no longer reads `Character` liquid-contact
+cache: that cache belongs to the replicated root and disabling its capsule can
+clear it through native water-trigger exit. Swimming decisions and buoyancy use
+the same per-step sample. Native water/tar query contracts were inspected; wave,
+shoreline and trigger behavior still require in-game physics validation.
+
+Game-time progress and AI pass progress are separate clocks. The pre-handoff
+cache contains game-time rate and expected AI-per-game-time rate (from the peer's
+smoothed frame interval); live paired packets refine both. Movement/position
+matching uses elapsed native game time since checkpoint restoration. AI-dt
+accumulation only measures decision cadence. Under 80ms frames with 50ms AI dt,
+body progress .16s and AI progress .10s remain distinct; the fake schedules
+native AI calls accordingly while body integration stays continuous. Attack
+release requires the physical horizon, completed decision index and an actual
+native attack marker. No 50ms duration is added to a physical-time boundary.
+
+The initial paired pose is sent when applying the checkpoint, outside the
+per-mob RNG scope. All network traffic stays outside native-AI random save/restore.
+
+
+Completion sends that throw are retried through the existing active maintenance
+path. Completion before instance loading still applies the native AI checkpoint;
+only matching hooks are skipped. Committed pending checkpoints do not expire
+merely because instance loading exceeds initial L. Stage-one completion removes
+matching clocks/RNG/target hooks immediately at the receiving endpoint; ordinary
+world updates own the remaining source-side visual correction. Proxy dictionary
+cleanup also handles already-destroyed Unity objects.
+
+The fake decision cadence is continuous for the active session; the legacy
+bounded cadence remains unchanged. Active matching epochs end on a source
+completion RPC, not initial L. Per-mob Unity RNG is saved/restored around each
+matching AI pass; other game RNG is not locked. Destination applies the end when
+that reliable message arrives, so cleanup necessarily includes its transport
+latency. Ownership revision, token and source/destination fence completion; peer
+loss, actor destruction and session shutdown retire obsolete epochs.
+
+Protocol 3 clock messages carry sampled owner position/rotation/velocity and a
+real successful attack marker. A zero-time sample at checkpoint application precedes the first AI pass.
+Duplicate/old samples cannot refresh the frontier. Attack barriers require the completed
+native AI pass index and an observed attack; they do not start a fake
+attack. Paired pose history supplies matching-time diagnostics. The replicated
+root is still used only as the moving endpoint of the subsequent visual
+correction, not as proof of simulation agreement. A mismatched attack animation
+is reported and presentation resumes at the observed native attack frontier.
+
+Fake native cooldown ages now advance from the captured source game-time epoch,
+without adding network delay to ages already rebased at destination restore.
+Remote target prediction uses the sample's elapsed phase, route estimate and
+simulation horizon (wall-route seconds are converted using the destination game-time rate); local test targets remain forward-predicted from the cutoff snapshot. Their
+current live position is not advanced again by fake progress, and no position
+history is replayed. New observed direction changes steer that forecast smoothly. Matching is
+not a proof of identical future player input or Unity collision outcomes.
+
+The local-player/server test still includes movement latency. With transfer
+delay dT, target movement delay dM and destination elapsed wall time s, the
+server approximately sees source input from dT + s - dM. Equal one-way delays
+cancel to s, so the cutoff-based local forecast does not assume zero movement
+latency. Packet cadence, interpolation and asymmetric delays add uncertainty.
+Server-to-player starts no old-server fake presentation; the destination
+applies the native checkpoint and runs real simulation.
+
+Unity returns empty bounds for disabled capsules. Fake AI now computes centers
+from configured capsule geometry instead. HUD preparation is once per Unity frame and runs before EnemyHud projection,
+not only in LateUpdate. Clock-zero samples initialize pose history but not CPU
+rate measurement, avoiding a spurious first-tick rate increase.
+
+The hit proxy is an independent
+kinematic Rigidbody and uses native Projectile.FindHitObject routing back to the
+mob. Rigidbody pose setters keep hit queries current without global physics
+synchronization. All HUD/hit/render consumers read one cached presentation pose.
+Dispose disables the proxy before deferred destruction. A rapid owner return
+restores the native physical collider; a new bridge inherits the prior displayed
+pose rather than retaining duplicate tracks or resetting to its hidden root.
+
+Slope normals and a saturated NonAlloc query no longer abort movement time;
+queries retry with a complete result array only on overflow. Swimming deceleration,
+gravity, native attack movement/turn factors and captured root-motion residue
+follow native rules more closely. Root motion is included in the portable
+checkpoint. Ongoing future Animator root motion is not claimed to be predicted;
+knockback in the fake body remains intentionally omitted as requested.
+
+Live fake progress uses Unity's native frame delta, so a local wall-time stall
+cannot produce a catch-up burst. Active correction no longer expires at 4L+1;
+its base duration follows one quarter of the actual stretched phase, extended
+for substantial pose differences. Actor deletion/session teardown still dispose
+presentation objects. No live Unity multiplayer/render quality guarantee.
+
+
+The 2026-10-28 client-log follow-up fixes two independently reproduced gaps:
+unobserved destination zero released four zero-time attacks; repeated presentation
+reads could bypass the takeover direction guard when the replica root stayed
+unchanged. Attack release now requires an observed matching clock (no attack
+wall-time release). Position correction advances in the update path; presentation
+reads are side-effect-free and the last observed movement direction survives
+unchanged-root updates. Regression fixtures cover zero-time/no-clock/late-clock
+attacks, repeated readers, stale/duplicate updates and real-root catch-up. Emitted
+DLL checks verify observation wiring and read/update separation. Existing track
+invalidation/expiry remains the lifecycle fallback; this does not guarantee a
+matched pose after actor removal or clock loss through the entire track lifetime.
+The reported metre-scale residuals remain a separate simulation/replication
+investigation. Live visual improvement requires a new in-game run.
+
+The `.94` branch starts from the verified `.86` source and replaces the old
+preview architecture with an event-triggered old-owner bridge:
+
+- continuous fake playback at base `0.5x`;
+- native `MonsterAI` decisions in an isolated transaction;
+- 62-field portable AI/control/root-motion checkpoint;
+- target ID and deterministic per-handoff RNG seed;
+- transient simulation-clock heartbeats and bounded CPU-rate estimation;
+- monotone post-takeover position/yaw alignment;
+- no permanent idle `MonsterAI.UpdateAI` hook.
+
+The full debug verifier passes for the final status/FX/hit pass. The release
+DLL omits the entire bridge implementation. Debug DLL SHA256 is recorded in
+`verification.json`.
+
+An earlier verifier run failed in `ConfigProbe` with
+`UnauthorizedAccessException`. Isolation showed ordinary write/delete/move
+worked, while Windows `File.Replace` was denied even with no Valheim process.
+The failure was caused by the execution sandbox; the same verifier passed
+outside that sandbox.
+
+Headless fixtures do not execute live Unity multiplayer, Animator, physics or
+transport timing. Fake attack visualization remains an explicit unresolved
+policy item.
+
+The final 50/500 ms timing pass adds authoritative-clock takeover, a
+`L + 250 ms` clock-loss fallback, adaptive takeover settle duration and complete
+integration of partial fixed steps. The mob-bridge timeline/takeover suite and
+emitted DLL audit pass after these changes. A full verifier receipt was
+generated for the final combat-decision parity build.
+
+The final pacing correction evaluates fake AI on simulation time and renders
+interpolated position/rotation between fixed pseudo-physics steps. A fixed step
+changes simulation command/state, but never directly changes the rendered pose
+at a frame boundary.
+
+The target-input correction predicts a fast direction change by integrating a
+smoothed measured velocity that turns toward the target's current `GetMoveDir`.
+The target collider center is captured in target-local space and transformed by
+the same predicted root and rotation. Fixtures assert a monotone turn with no
+backward predicted-position jump. The native target-search timer remains part of
+the transferred checkpoint and is decremented by the fake native `UpdateAI`
+cadence; the handoff target stays pinned while the expected new owner remains
+valid.
+
+The combat-decision parity pass transfers 44 audited AI fields and 13 control
+fields (portable schema hash `774526275`). Native absolute-time fields are
+encoded relative to the destination, fake native code reads destination-
+predicted game time instead of old-owner wall `Time`, and the attack gate copies
+`CanUseAttack`. Attack age, current-weapon cooldown, weapon-review timer,
+flight/water/lava state and the target-search timer are preserved. Shadow AI
+uses the same Unity `Random.Range` and `Random.value` calls from the shared
+per-handoff state; the state protocol is version 2 and requires matching
+updated endpoints.
+
+At the first fake attack request, the old-owner simulation freezes at that exact
+simulation frontier and consumes no later movement. Destination clock
+heartbeats use the native `0.05 s` AI cadence; the visual takeover begins when
+the destination reports the same frontier. A one-time bounded fallback handles
+clock loss. Destination target and RNG epochs are counted in simulation `dt`,
+not wall time: both lock for `L`, then vanilla target selection and RNG resume.
+The final bridge fixture contains 157 timeline/takeover assertions and 244
+emitted wiring/no-live-mutation assertions.
+
+The rewind audit rejects wall-clock and extrapolated-future takeover
+completion. A live bridge now takes over only from the latest observed
+destination simulation frontier. Rate extrapolation remains useful diagnostic
+and clock-loss context, but cannot start takeover early when latency suddenly
+improves. Post-takeover correction decays a relative fake/real position and
+rotation offset around the moving real root. This keeps real forward velocity
+during correction instead of blending two absolute poses, which could visually
+stop or reverse while the real root advanced.
+
+The target-lock Harmony prefix now uses the exact native `UpdateTarget`
+parameter names: `canHearTarget` and `canSeeTarget`. The emitted wiring audit
+checks all five prefix parameter names. AI hook installation is transactional:
+both `UpdateAI` and `UpdateTarget` patches must succeed, otherwise the candidate
+Harmony instance is unpatched and the apply remains retryable.
+
+Runtime teleport diagnosis found zero-second presentation timing poisoning the
+visual window. Timing samples below `0.02 s` per half-route are rejected, the
+active solo-test RTT supplies the initial route duration, and cached windows
+below `0.04 s` fall back to a valid estimate. Fake `MobBridgeBody` now follows
+`SteeringFrame.Flying`; takeoff/landing changes ground/fly speeds and gravity
+mode instead of leaving the body in its initial locomotion mode. The final
+fixtures contain 463 timeline/takeover assertions, 286 emitted wiring/no-live-
+mutation assertions and 41 production source-handoff assertions.
+
+The locomotion parity audit also found that Run outranked Walk, near-zero move
+input could still sprint, `CanMove` was ignored by the fake body, flying speed
+incorrectly received walking status-effect movement modifiers, and takeover
+correction duration depended only on latency. Fake locomotion now mirrors native
+mode selection, and residual correction is bounded by configured mob movement
+and turn rates using the same smoothstep curve.
+
+Fake collision response now projects velocity/control direction onto the
+collision plane and uses the native character/vehicle collision layers.
+Previously the first blocking hit zeroed all velocity, while the real
+Rigidbody slides along the contact. That divergence was especially visible for
+flying Seekers near terrain and obstacles.
+
+Takeover position correction is also monotone relative to current real-root
+motion. If residual decay would move the display backward while the real root
+advances, the residual remains held until the real root catches the displayed
+projection. This prevents the final cleanup from looking like a teleport.
+
+Swimming now uses the native swim depth threshold and swim timer, native swim
+speed/acceleration/turn speed, status modifiers and the same water-level
+buoyancy targets as `Character.UpdateSwimming`. Temporary vertical dips below
+the water surface no longer fall through the ground-mode gravity path.
+
+The status audit found that `MobCombatState.CompleteTransfer` relinquishes the
+old owner's live `SEMan` immediately after commit, while the fake simulation
+continues afterward. The Bridge now captures the same status payload before
+commit and clones it into a transaction-local shadow. Fake AI/body reads
+temporarily swap in that shadow, advance only effect time/speed state and then
+restore the live manager. This preserves slows and expiry during the fake
+window without source-side DoT damage, setup effects or gameplay writes.
+
+Melee/projectile routing previously queried the replicated root collider while
+the model was drawn at the fake pose. Bridge tracks now create a collider on the
+native dedicated `hitbox` layer at the displayed pose and temporarily disable
+the hidden replicated collider. `Character.Damage` rejects a hit carrying the
+hidden collider and allows the fake-pose collider; `HitData`, status hash,
+damage/effect forwarding and one-shot attack FX continue through vanilla paths.
+The original collider is restored on takeover/cleanup.
+
+The nameplate audit inspected vanilla `EnemyHud.UpdateHuds`: it is screen-space
+and calls `Character.GetTopPoint`, not a transform parented under the visible
+model. Moving the actor root would therefore be unnecessarily invasive. The
+bridge instead redirects `GetTopPoint` only inside `EnemyHud.UpdateHuds`, using
+the fake root, scaled collider center and configured visual-top height. The
+authoritative root, Rigidbody, ZSyncTransform, physics and network writes remain
+untouched. A native Mono audit installs the actual `Character.Damage`,
+`EnemyHud.UpdateHuds` and `Character.GetTopPoint` patches and verifies all three
+are removed on shutdown. This audit also caught and corrected an existing
+`Character.Damage` prefix bug (`__1` used for a one-argument method).
+
+The 500 ms teleport log contained one second-handoff window of `0.079 s`,
+followed by normal approximately `0.5 s` windows. Root cause was the existing
+five-second per-destination presentation timing cache: server-to-client timing
+from before the new latency test could survive while client-to-server timing
+was already fresh. Artificial-latency start, stop and reset now clear all
+presentation timing entries on both client and server. Fixtures assert that an
+invalidated cache returns the current fallback instead of stale pre-test RTT.
+
+Latency-change fixtures cover both directions. With a cached `500 ms` window
+but actual first state at `100 ms`, fake is `0.05 s`, observed destination is
+already `0.08 s`, and takeover is immediate at that observed horizon. With a
+cached `100 ms` window but actual first state at `500 ms`, fake continues past
+the old `0.10 s` horizon to `0.25 s` instead of freezing; observed destination
+moves `0.05 -> 0.25 -> 0.45 s` and takeover occurs at `0.45 s` when fake also
+reaches `0.45 s`.
+
+Fresh focused results: 478 bridge timeline/takeover assertions, 306 emitted
+bridge wiring/no-live-mutation assertions, 42 source assertions, 454 native
+source contracts, 89 status-state assertions, 2498
+native status contracts, 115 combat-state assertions and 930 native combat
+contracts all pass, plus five actual game presentation hook inspections. Source,
+observer, solo-latency and flight suites also pass. These remain headless
+transport/physics/Mono checks; live fake-pose hits, HUD placement and FX
+continuity still require two-endpoint testing.
+
+Baseline: hash-verified 1.0.85 (`94EDCFADE44059322930873CCDEB1521276AFF056896611DD2E67F269C62590E`). The verifier restricts the production delta and records fresh suite/source/DLL/artifact hashes. Local debug only; no publication, Git push or installed-profile changes.
+
+The combat-state native installation audit uses a disposable game assembly with Character/Player/MonsterAI static initializers omitted because Unity Animator calls are unavailable in the headless host; patched method bodies and field layouts remain native.
+
+Source fixtures execute the actual no-grant protocol and native publication on CLR and Valheim Mono: source-time-zero cutoff, begin/checkpoint/owner/final-state order, unfinished-action deferral, refusal/cancellation, postcommit exceptions without rollback, authenticated source/target/prefab/revision fences, replay and expiry, watch rebinding during native receipt, and exact one-object native serialization. Presentation timing tests cover route RTT sums, cold/expired fallback, five-second cache expiry, stale/foreign/nonfinite replies and session reset without delaying authority. Native audits inspect real Plugin/Observe/attack-end wiring and install/remove actual lifecycle hooks. Protocol authentication is retained; server target-policy approval is absent.
+
+Observer fixtures execute the production descriptor/preview transport and visual bridge: committed owner/data cutoffs, source/new-owner exclusions, capabilities, delayed actor/data arrival, stale/newer state, bounds/expiry/world reset, actual flight mode, flying turn factor, throttled subsequent preview frames, duplicate/foreign-source suppression, local render adoption without native owner/position writes, and finite lifetime. Native audits install the real common transfer/connection/replication/Awake hooks.
+
+Visual fixtures exercise zero initial target lead, progressive latency-sized compensation, smooth monotonic weighting, gradual cached-to-current RTT changes, non-rewinding preview time on lower RTT, frozen recovery windows after native arrival, local-player exclusion, rejection of invalid velocity, target identity changes/loss, ground/flight changes, signed turns, flight-factor easing, finite recovery, render restoration and no world/physics/AI writes. Numerical trajectories remain models, not live Unity observations. Common combat checkpoints restore the target and remaining native search timer before the first AI step, including a regression that confirms it is applied only once.
+
+The shortcut deliberately skips server ping/boss/loading approval. The existing destination guards and subsequent server policy still apply; a loading destination can pause, or the server can later correct the direct target-owner choice. There is no guarantee that a second AI would choose identical movement. Existing five-second checkpoint/event expiry and bounded buffers remain limits during extreme stalls/disconnects.
+
+Immediate complete native state can duplicate a later scheduled record. Spectator descriptors and up-to-20Hz short preview frames add traffic; they do not replace new-owner world updates. Empty queues return immediately, source previews are bounded by active local render tracks, and no extra global mob/player scan is added. No measured CPU/FPS/bandwidth improvement is claimed. All applicable effect/combat/PUP/flight/player-only/grid/config/state-transfer suites are rerun before packaging. Real multiplayer and full third-party patch interactions remain untested.
+
 
 ---
 
-# TooManyLags 1.0.57 fixed-spawner defaults candidate
+# Historical baseline: active-effect handoff candidate 1.0.85
 
-Based on verified local 1.0.56. The ServerOwnedMobsByDefault setting now also selects a server default for eligible fixed SpawnArea/CreatureSpawner network roots. It uses the raw setting even if the TamedAnimals category is disabled. Spawners stay outside all player-field decisions; interactive/static defaults do not opt them in. Setting false retains native ownership. Server-Side Simulation remains required; general SpawnSystem is excluded because it requires a local player.
+Baseline is the verified debug build `TooManyLags-1.0.84-mob-continuity` (SHA256 `55A7CA0654601BEB86D7938A85C82E7D82E985785E39AE8801DC8023CA10604B`). Its source and DLL hashes are checked before verification. The production delta is limited to the new MobStatusState codec, MobCombatState integration, the post-commit MobFlightHandoff callback, removed blanket effect vetoes in FgnCombatOwnership/TamedMobHandoff/PlayerSimulation.LocalAgent, and Plugin wiring/version. Movement forecasts, attacks, grid behavior and PUP collision protection retain the baseline implementation.
 
-Reuses the existing native first-owner selector, pre-construction event, area retention/cache and native owner-departure predicates. It does not steal an active client spawner mid-spawn. No new hook, timer, background scan, RPC, physics guard or per-world-object queue is introduced. Prefab classification is cached only when enabled and missing prefabs remain retryable. Live grid/actor/interaction/attack protocols and scheduling remain unchanged; the imported combat source changes only its config description. Native spawn methods, limits and conditions are not replaced.
+Active effects no longer hold the old owner until expiration. Checkpoints carry native scalar/struct runtime state and existing network-reference IDs. The destination creates shallow template clones, binds the new actor and restores state without Setup/ResetTime/SetLevel or processed-damage replay. The old manager detaches only after a confirmed native owner write with the expected revision. A refused native handoff leaves source effects intact. Empty snapshots remove stale effects from an earlier ownership epoch. Protocol 2 requires matching server/clients for complete migration.
 
-All 29 final verification groups pass on DLL SHA256 2B502E0B5C0F262B8E6DA7537A58C5EF63DE6777535658D37C739A260A82D3E4. Production-controller tests pass 31,059 assertions; combat tests pass 1,925 on both CLR and embedded Valheim Mono. Native IL checks confirm owner gates, spawn linkage, absence of direct local-player dependency for the two fixed types, general SpawnSystem's local-player requirement, native damage/destruction and FiresGhettoNetworking's dedicated OutsideActiveArea query: 190 contracts pass with provider 1.5.36 and 192 with 1.5.53/1.5.65 and the PUP 1.0.36 reference. The separate forced-prefix native audit passes on the same DLL. Compiled combat policy differs from 1.0.56 only in one configuration-description string. Generated config includes the new spawner explanation; all 55 config values remain identical to 1.0.56. Invalid-position/revision, active-owner, scene-cache cleanup and ordinary grid/interaction guards are retained. No live Unity/PhysX/multiplayer spawn test, installed-profile change, publication or Git push is claimed. See docs/SPAWNER-DEFAULTS.md.
+## Focused validation
 
-Historical validation below applies to its own versions.
+The new suite executes the actual production codec on CLR and embedded Valheim Mono. Cases include poison/fire unpaid budgets and tick phase, frost/shield state, initial healing/spawn suppression, repeated and empty handoffs, unloaded FX and repeated unresolved-ID transfers, network-reference ownership, expiry before FX arrival, real destruction before/after adoption, broken harpoons, displaced destination-local FX cleanup, world replacement, different template scalar defaults, malformed/bounded payloads and unsupported custom reference graphs. Reference identity is tested against native Unity template-clone equality so effects on different mobs do not share deferred state.
 
----
-# TooManyLags 1.0.56 mob-load paths candidate
+The actual emitted debug DLL is also audited against installed Valheim status types: every native field is classified; generated accessors and scalar/struct codecs round-trip values; Harmony hooks install/remove; migration methods contain no reward/damage/spawn replay calls. This status-specific native audit needs no rewritten native assemblies. The separate combat-handler hook audit retains its documented disposable static-initializer workaround described below.
 
-Uses the verified 1.0.55 source and changes only AuthorityController, FgnCombatOwnership and Plugin (including version metadata). Grid schedulers, field batching, send priority, camera, both simulation modes and all client/interaction/attack/collision protocols are unchanged. All 55 config values are retained. The separate 1.0.50 pool/future-job-skip and shelved packet-catchup changes remain excluded.
+Managed common-transport checks cover effects inside the real checkpoint, no source detach before commit, destination restoration before first damage, unchanged native refusal behavior, revision fences and duplicate late packets. They supplement rather than replace the codec suite. Final exact counts, fresh regression suites and artifact/source/DLL hashes are recorded in verification.json.
 
-The new native CreateObject prefix seeds only eligible unowned mobs before normal server construction. Tamed animals keep settled player fields. Hostile native assignment no longer excludes an unowned ZDO merely because its passive server instance exists. Fresh server-origin, zero-owner-revision persistent Hostile Mobs retain their existing server owner through the existing initial lease; no duplicate owner write is made. Creation order, terrain/type gates, Awake, attack/readiness protection and unload/reset cleanup remain active. There is no new polling loop, spawn proxy, client protocol or handoff RPC.
+## Cost and limits
 
-Native IL proves a separate limitation: SpawnSystem requires a local player and creates new ZDOs on the creating client, whose session is the initial owner. Client-created spawns and existing nonzero owners keep guarded handoffs. This server-only build does not eliminate the creator-first ownership of those spawns. See docs/INITIAL-MOB-LOAD-PATHS.md for confirmed paths, scope and exclusions.
+No new global mob polling, effect update stream or network acknowledgement. Cached schemas are built per effect type; value/reference snapshots are made at actual handoffs. No-effects checkpoints add one presence flag. Complete checkpoints are capped at 16 KiB. Deferred live bindings and ID-only cleanup records are bounded and cleared on world replacement/shutdown. Ordinary reference refreshes skip empty collections and reuse existing FX arrays; late cleanup is driven by matching scene arrival, rather than rescanning all cleanup IDs on every world packet. Actual native ZDO deletion events record recent IDs in a bounded 10-second/2,048-entry FIFO to distinguish deletion from loading, including the interval before checkpoint adoption. It uses no periodic scan; capacity overflow warns once per world and evicts the oldest ID.
 
-The old-source reproduction fails at the created/unowned selector. Corrected combat tests pass 1,925 assertions on CLR and embedded Valheim Mono; controller/router tests pass 29,905 assertions. All 29 final verification groups pass on DLL SHA256 8138DA6833885DC8333BFA2AC2BBC77D423AE1B67CDFA9F67FDD66AD2A3A4AB8. Actual native/FGN combat IL checks pass 180 contracts for FiresGhettoNetworking 1.5.36 and 182 for 1.5.53/1.5.65 and the PUP 1.0.36 reference. The actual-native forced-prefix audit passes on the same DLL. The native hook audit permits exactly the new CreateObject prefix alongside the previous 55 core targets. All 55 config values remain identical to 1.0.55. These are managed/native-contract tests, not live Unity/PhysX or multiplayer tests. No installed profiles, publication or Git push are changed.
-
-Historical validation below applies to its own versions.
-
----
-# TooManyLags 1.0.55 initial-mob assignment candidate
-
-Integrates the separately reviewed 1.0.51 initial-mob candidate into the verified 1.0.54 priority/field-batching baseline. The 1.0.54 grid schedulers, send-priority hook, camera and interaction/readiness protocol remain unchanged. The reverted 1.0.50 field-pool/future-job-skip changes and shelved packet-catchup prototype are not reintroduced.
-
-Only native first assignments of eligible unowned mobs select a different target owner. Tamed defaults use the existing interactive/mob-default settings, saved tame/use/follow/health state and scene-scoped prefab traits; settled player-grid ownership still wins. Tamed actors do not enter the stationary pre-instantiation object/harvest path. Existing active owners and subsequent actor handoffs retain the original loading/use/follow/riding guards.
-
-Hostile initial defaults require ServerOwnedMobsByDefault, AI ownership and active dedicated Server-Side Simulation. They reuse the already installed native owner-write wrapper. An initial lease in the existing table keeps the new server owner until the normal scene creates the actor; AI Awake/deferred target observation adopts it into normal target ownership. Existing balance/scene/unload paths clear departed, stale or invalid leases. No fake actor, early creation, physics-state writer, readiness bypass for later transfers, new per-frame loop or new handoff RPC is added. Instantiated/existing-owner Hostile Mobs, bosses, friendly magic summons and held/possessed creatures retain existing handling. Settings and client protocol are unchanged.
-
-Focused controller/router tests pass 29,891 assertions, including native assignment before readiness, both tamed-default settings, retained server ownership without repeated jobs/writes, settled player/overlap ownership and all category/use/follow/summon/native-active-owner exclusions. Focused combat tests exercise the production source on both CLR and embedded Valheim Mono; final counts and full native verification are recorded below when complete. Native IL audits require exactly one existing owner write, original creation gates and deferred target observation. These are managed/native-contract tests, not a live Unity/PhysX or multiplayer test.
-
-
-The delayed-greeting audit reproduced another first-owner gap in the earlier isolated candidate: a ready native player with an unfinished FiresGhettoNetworking greeting still received ownership first. Initial assignment and retention now use native ready-player loading areas, without requiring an eligible FGN recipient. The previous helper that mixed these two purposes is removed. Loaded non-boss server defaults also remain server-owned while native loading players exist but no compatible recipient is ready. Actual player handoffs keep Candidate, participation, readiness and attack checks unchanged; no loading player still releases the mob normally. Tests cover pending greetings before and after actor creation, a target becoming compatible, readiness still blocking that later transfer, idle zero-repeat-write/collision work and unready/far/non-finite loading references.
-All 29 final verification groups pass on DLL SHA256 394B21ABB1C3F54595130C234EF79C8337EC1ECE02122F06ABA9604EB3ED626C. Combat tests pass 1,891 assertions on both CLR and embedded Valheim Mono. Actual native/FGN IL checks pass 175 contracts for FiresGhettoNetworking 1.5.36 and 177 for 1.5.53/1.5.65 and the PUP 1.0.36 reference. The separate actual-native forced-prefix priority audit passes on the same DLL. All 55 config values and the client protocol remain unchanged. No live multiplayer test was performed. Server-only update; no installed profile changes, publication or Git push requested.
-
-Historical validation below applies to its own versions.
-
----
-# TooManyLags 1.0.54 field-batching candidate
-
-Based strictly on the local 1.0.53 priority candidate. Changes are limited to AuthorityGrid, PlayerSimulation/AuthorityGrid, AuthorityController and plugin version metadata. All 1.0.53 priority rules remain; the 1.0.50 policy-pool and future-job-skip changes remain reverted. No additional early-mob or client packet-catchup prototype is included.
-
-Shared field priority is calculated once per batch for fields containing multiple loaded objects; singleton fields bypass the cache. Changed-field scheduling calculates its common wait once and avoids the redundant pending-set lookup. Final native owner writes, live target reads and object-specific safeguards retain their existing paths. No handoff quota, new deadline, timer or RPC is introduced. Stable fields with no pending work add no object scan.
-
-The node references its existing loaded-object bucket. Movement updates that reference; removal clears it. Priority scratch lists clear flags and references before native callbacks and after packet classification, including exceptions. Buckets are removed through the existing unload path. There is no new historical cell/owner map. Additional storage is one bucket reference per loaded node and small per-loaded-field/scratch state.
-
-Focused scheduling tests pass 8,269 assertions per simulation mode; forced-prefix tests pass 2,019. Full-controller/grid fixtures pass 29,829 assertions, including scoped packet cache reuse, unrelated native slots, zero extra writes/RPCs and world teardown. The differential audit passes 40,000 event steps in each simulation mode: baseline and candidate binary traces match exactly, SHA256 16494C79B5EAAA326175E6337A1D06A37DAA292539772B7981AF93D020F57716. This includes both retention modes, twelve players, guard blocking, replies, callbacks, mobile nodes, clock rollback and changing delays.
-
-The CLR scheduling benchmark reports about 8–22% less scheduling time for 4,096 pending objects across 1–64 fields. At one object per field it reports about 3–5% overhead (approximately 0.005–0.011 ms for 4,096 jobs). The singleton bypass avoids the rejected first draft's 22–24% sparse-case regression. All benchmark Apply counts/traces match. These numbers exclude Unity, the actual server Mono runtime, transport and live multiplayer latency; no server/FPS improvement or fix for the reported intermittent delay is established. See docs/FIELD-BATCHING-AUDIT.md and the reproducible audit/benchmark scripts.
-
-All 29 final verification groups pass on DLL SHA256 0CBDCD8170E876A1EC65344C37FA4D9652E08FC2212329E927765F7C032E982F. The separate actual-native forced-prefix audit passes on the same DLL. Production diagnostics are compiled out; all 55 existing config values and the client protocol remain unchanged. No live multiplayer test was performed. Server-only update; no client/config replacement, publication or Git push requested.
-
-Historical notes below describe their own versions.
-
----
-# TooManyLags 1.0.53 priority candidate
-
-All 29 final verification groups pass on DLL SHA256 50E54DEB61F2AE7891BFE60D11A2ABDCFB35558B648E3483A42B449DA168ACA4. The separate forced-prefix native contract audit passes on that same DLL. No live multiplayer latency measurement is claimed.
-
-This isolated test starts from the 1.0.52 comparison source. The 1.0.50 field-pool and future-job-skip optimisations remain reverted. The separate early-mob candidate and packet-catchup prototype are not included. The only runtime additions beyond version metadata are coverage-tier work ordering and the dedicated server's native forced-prefix ordering.
-
-Pending jobs use four reused lanes: red, forward/orange, outer/yellow, then no live coverage. Tier comes from current contribution counts, not distance calculations, owner UID or a possibly equal delay. Every due lane runs in the same pass: there is no new count budget, time budget, timer or starvation. Existing deadlines, acceleration, replies, inventory, source-consent, text, refill, pickup, collision and use safeguards remain unchanged. Stable idle worlds with no pending jobs do not partition anything.
-
-The actual native AddForceSendZdos method prepends entries, which can invert enqueue order. The server-only prefix/postfix captures the number inserted by the original method and stably partitions only recognised TML entries in that prefix. Unrecognised forced entries keep their exact slots; the normal suffix, multiplicity and packet contents are untouched. A skipped original, another world or an inactive controller receives no priority work. There is no ownership write, serializer replacement, send-rate adjustment or new RPC in this hook. The inspected ValheimTune dirty-set path calls the same native method. Runtime priority is scoped to the TML entries; transport congestion and other mods can still affect delivery.
-
-The source comparison records six changed/added runtime files, including Plugin.cs metadata. All 55 config values and the client protocol remain unchanged. The priority tests exercise 2,048 due jobs per pass, red guards and future deadlines, callback-created/removed jobs, returning objects, both exit policies, shared fields, snapshot cleanup and teardown in both simulation modes (8,252 assertions each). Forced-prefix tests cover mixed managed/native slots, an untouched suffix, stable ordering, duplicates, exception cleanup and reentry (2,019 assertions). Full-controller fixtures also exercise the actual hook entry point, skipped originals, exact native slots, wrong-world/teardown isolation and zero extra writes/RPCs.
-
-The native audit now requires exactly the newly added forced-prefix hook alongside all previous targets (55 rather than 54). It still validates every target and prefix/postfix parameter against the actual game; it does not permit an arbitrary additional patch. A separate actual-Cecil audit checks the prepend-only native mutation, both native callsites and the hook's original-skip contract. Final DLL and verification results are recorded in verification.json and bin/priority-audit/native-contract.json.
-
-Scratch collections release object references after each pass, including exceptions, and reuse peak capacity rather than retaining a history of cells or object IDs. No new persistent world-position or owner cache is added. Partitioning is linear and uses existing loaded-node/grid indexes, without comparison sorting, component scans or distance checks. The first native-audit attempt stopped on the old exact target count; the audit was extended only for the verified new hook and rerun successfully. This is not a live latency benchmark, and the source audit does not establish the cause of the reported intermittent delay.
-
-See docs/HANDOFF-PRIORITY-AND-LIMITS.md for the distinction between object safety retries, FiresGhettoNetworking's separate creature-balancing quota and native/networking-mod send budgets. Server update only; no client or config replacement. No publication or Git push is part of this test build.
-
-Historical comparison and release notes below apply to their own versions.
-
----
-# TooManyLags 1.0.52 comparison candidate: 1.0.50 without its grid optimisations
-
-Isolated from the released 1.0.50 source (5810f651afd80cd42e4056a332fe6428fb218b62). AuthorityGrid, PlayerSimulation/AuthorityGrid and AuthorityController use the exact pre-optimisation 1.0.49 source (fb71a241cd08ea8ede6a270110b68385dd83c49b), restoring the original job traversal and return-on-exit allocation behaviour. Version metadata and the comparison notice are updated. The .48 production-counter/logging changes remain. This is a deliberate A/B build, not a claim that the removed optimisations caused the reported delay.
-
-The 1.0.50 simulation startup dispatcher/flag fix and 1.0.49 CommunityPatch coordination remain unchanged. No inventory, source-consent, pickup, refill, text, collision, camera, grid footprint, timer, default setting, protocol, ownership or network-send rule is relaxed or replaced. The separately prepared 1.0.51 early-mob-assignment candidate and the unfinished client packet-catch-up prototype are not included.
-
-Server-only replacement; no client or config update is needed. This candidate may allocate and traverse pending jobs more often, especially with KeepOwnershipOnCellExit=false, as requested for comparison. Existing field decisions and deadlines are intended to remain identical. Live multiplayer latency comparison remains outstanding; publication/push are not part of this build request.
-
-The dedicated legacy scheduling suite verifies the restored behaviour rather than asserting that removed optimisations still exist. The native load-reply regression measures actual Apply attempts instead of the removed PendingVisits instrumentation. It still requires prompt authenticated readiness wake-up, with the original direct NotBefore update.
-
-All 29 verification groups pass on comparison DLL SHA256 6B8A568A0A294DEEB3149C9670A175121F22D709930E06596F2E33B3CBAF70E7. The legacy scheduling checks pass 21 assertions in each simulation mode, including direct readiness wake-up, due guarded work, original return-on-exit allocation and unload cleanup. All 55 saved/default config values match the 1.0.50 baseline.
-
-An independent 40,000-event trace with up to twelve players, both exit policies, directional/full grids, replies, clock rollback, callback-created work and changed delays is byte-identical between 1.0.47, 1.0.50 and this comparison source: SHA256 750FF13780F2FEBA2D977B64E168687ADA4CEDC69A16B5CE5E479BCD7728D7F5. This establishes managed scheduling equivalence for those inputs, not the absence of a live multiplayer issue. A complete comparison of the 79 runtime C# files finds changes only in the three deliberately restored files and the plugin version metadata. Native audits, inventory, loading, combat, camera, text, pickup, optional PUP and CommunityPatch regressions remain passing. Detailed results are in verification.json.
-Historical release notes below describe their own versions and are not claims about this comparison candidate.
-
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.50 hotfix
-
-All 29 final release verification groups pass against DLL SHA256 `C1ABC33FAA10D48C304574441590F8EBC69253F3289F95239A18F666AFB1FFCA`. The native audit passes with FiresGhettoNetworking 1.5.36, 1.5.41 and 1.5.65. It explicitly permits the new reflection writes only in the startup reconciliation function and rejects calls to that function outside session startup. The initial release-audit run stopped on its earlier, narrower reflection-write allowlist; that test rule was updated without changing runtime code, and the complete verification was rerun successfully. Exact inputs and results are recorded in `verification.json`.
-
-## Native simulation dispatcher startup
-
-The 2026-10-20 user log shows an active simulation flag but no actual server world: loadedNodes=0, zoneLoaded=False, serverInstance=False, zero successful FGN CreateObject calls and 499 consecutive failed area gates. Ordinary interactive grid transfers use the existing pre-instantiation ZDO path, so their success does not demonstrate server scene readiness. Idle tamed animals deliberately require actual loaded actor instances and retain their existing loading/use guards.
-
-FiresGhettoNetworking 1.5.65's Awake tail snapshots attached feature groups into FgnHooks and installs its shared dispatchers. If native startup previously withheld simulation because of CommunityPatch, starting the simulation groups later does not update those snapshots or install previously skipped wrappers. In particular ZoneSystemUpdate remains absent or s_serverAuthority remains false, so the original FGN player-area loader is never called. This is independent of the field-pool and pending-deadline optimizations.
-
-Automatic dedicated-server session setup now reconciles only the four native simulation feature snapshots and the two disabled broad/selective ownership branches before starting a world. It attaches only missing native simulation-dependent shared dispatcher classes using FGN's own Harmony owner and metadata. Existing wrappers are not reinstalled; profiling/networking flags and other mods' patches are unchanged. Partial dispatcher installations are rejected, with new wrappers and snapshot changes rolled back on failure. No-simulation mode clears the simulation branches without removing shared networking/profiling wrappers. Older FGN versions without the dispatcher retain their direct-hook path. No extra runtime poll, per-object test, network message, forced owner write or relaxed mob/collision/use guard is added. Manual configuration and clients do not run the reconciliation.
-
-Reproduction compiled the previous HEAD session-startup source against the expanded combined CommunityPatch fixture: simulation starts, but the test fails specifically because the native player-zone loader is missing. The corrected sources pass 108 combined startup/Harmony/session assertions on both .NET Framework and Valheim's embedded Mono. They cover missing and already-installed/profiling zone hooks, all seven simulation-dependent dispatcher families, repeated setup without duplication, disable/re-enable before world creation, retained network/profile callbacks, partial-installation rollback and refusal after networking starts. Native metadata/IL checks pass 95 assertions against CommunityPatch 0.37.0, FiresGhettoNetworking 1.5.65 and the rebuilt production DLL; the audit verifies that the seven families cover every native consumer of the four simulation flags. Existing legacy and modern session suites pass 111 and 118 assertions. Compilation uses warnings as errors. On 2026-10-20 the user confirmed that the server test works again. This is a user-reported in-game smoke test, not an independently observed multiplayer test or exhaustive compatibility guarantee.
+Arbitrary mod-specific mutable object graphs are not claimed serializable. Source-detectable unsupported references fail visibly before ownership changes; destination templates/schemas must match. Missing destinations and existing five-second transport expiry remain limits. Native effect state tests do not execute live Unity effects, game physics or multiplayer timing. In-game repeated transfers under poison/fire/shields and ordinary target changes remain required. Local package only: no publication, Git push or profile install.
 
 ---
 
-## Capped field reuse and future-only job scheduling
+# Historical baseline: Mob continuity candidate 1.0.84
 
-Both FiresGhettoNetworking Addon grid implementations now recycle fully retired policies through the existing 1,024-entry pool, independently of KeepOwnershipOnCellExit. The retirement conditions and all owner/timer decisions are unchanged. The pool holds no object references or historical cell identities. Loaded-object certificates, shared/deferred state, native region release and object unload behavior retain their existing lifetimes.
+Baseline is the final debug-default `TooManyLags-1.0.81-diagnostic-cost` candidate, whose source/DLL receipt is hash-checked before verification. Separate optimistic object-handoff branches are not integrated. Local default build/package remains debug; a publication build requires explicit -Release. No publication, Git push or profile install.
 
-Each existing AuthorityWorld also stores one conservative earliest-job timestamp. Coverage, field timers, sparse renewals, interest-sync callbacks and field-change scheduling run before that gate. A pending-set copy/traversal is skipped only while all jobs are known to be in the future and no field acceleration needs processing. Queueing and accelerated fields lower the timestamp; clock rollback rebases it. The actual NativeNode.LoadReady path now uses AuthorityWorld.Advance so a matching authenticated destination reply lowers the node barrier and wakes its scheduler as well as the controller cadence. Ordinary Received calls still preserve an existing residence barrier. Work queued during an Apply callback retains its timestamp; a removed job can at most leave a stale earlier timestamp and cause one harmless extra pass, without another per-retry set lookup.
+Production delta is limited to MobCombatState, MobFlightHandoff's final cutoff callback, MobVisualCurve/MobHandoffVisual, FgnCombatOwnership's live-target selection and source/server guards, TamedMobHandoff/PlayerSimulation.LocalAgent guards, Plugin lifecycle/config/version and ConfigTemplate wording. The verifier rejects other production changes. Existing gameplay source outside those files remains baseline-identical.
 
-Due jobs that remain blocked are not throttled or deferred to player movement. Their existing guards, retry cadence and handoff protocols remain intact. When any due job remains blocked, the normal pending-set traversal still runs and can also visit future jobs. This is a small conservative gate, not a new heap or full replacement scheduler. No per-node allocation, additional polling hook, timer service, RPC, saved setting or world cache is added. PendingVisits is test-only instrumentation; compiled production calls and counter writes are checked absent.
+## Presentation checks
 
-## Verification and measured work counts
+The production curve is exercised under CLR and embedded Valheim Mono. Tests retain old root/physics/authority invariants, camera nesting/restoration, native-flight height, correction handling and per-mob timing. Added cases cover braking rather than constant burst velocity, a changed movement direction, ordinary recovery motion, a strict 500ms calculation cap and recovery bounds.
 
-- New permanent scheduling fixtures pass 8,033 server-mode and 8,034 player-mode assertions, on both .NET Framework and Valheim's embedded Mono. They cover future-only sleep, exact deadline completion, ordinary receipts, early readiness replies, outer-to-red acceleration, new work, callback-created/retired jobs, interest-sync wakes, unchanged blocked retries, live timing, clock rollback, reuse and unload.
-- An additional trace harness compiled the pre-change source snapshots and the new production sources separately. Each mode ran 20,000 deterministic event steps with both exit policies and full/directional coverage. Per-step owner, candidate, node timer, pending count, bucket count, remembered/deferred state, actual Apply calls and owner writes were byte-identical. Each before/after trace has SHA256 B246CFED06299C6AF4FFCAC1B47F3E7DF91F20723851DC72846FFA60338878E9. The input baseline grid-source hashes are A22EB8A851261E80762672821C726292AA6F26572BC458579046B7417C784D4B (server) and 9F29D40942FA2AC11A606B6289C6C4B8DF13B50FDC4B55F3B4EBC93323F81A0C (player).
-- The repeated 12-player / 10,000-travel-step resource audit reports 888 policy allocations with return-on-exit, versus 2,361,704 in the prior audit. Retention mode remains at 804. Managed fixture heap samples are stable between steps 5,000 and 10,000; all indexed entries retire at the end. All 2,000 weakly referenced removed nodes per mode are collected. This retains a small bounded pool instead of repeatedly allocating retired policies.
-- The 1,000-future-job / 59-poll workload now has zero pending-entry visits before its deadline, versus 59,000 previously. All 1,000 due jobs still execute. A deliberately blocked workload retains exactly 100,000 Apply calls over 100 polls; protection responsiveness is unchanged.
-- Existing field-cache, directional/prediction/overlap, controller/router, initial-load/harvest and embedded player-simulation suites pass. The actual grid-protocol fixture now includes a sleeping native node whose authenticated load reply bypasses its future barrier; it passes 16,025 protocol and 29,820 complete controller/router assertions. Existing normal transfers add no readiness queries. Compilation succeeds with warnings as errors, and the production diagnostics audit verifies instrumentation is absent from all six grid/region types.
+Modeled native ClientSync trajectories include steady motion, early non-pose data changes, ownership regain, an attack during recovery and missing render frames. A separate 8m/s-to-2m/s handoff model tests 50/100/200/500/1200ms RTT. Its recovery stays approximately 75–99% of native movement speed without a catch-up sprint; the 500ms and 1200ms display tracks both expire at the same approximately 1.242s sampled frame. This is a numerical regression scenario, not a measured game performance or universal motion guarantee. The production formula bounds normal prediction+recovery at 0.5+0.74 seconds; frame scheduling can end it on the following sampled frame.
 
-The new scheduling suite is included in verify.ps1. These are managed simulation, lifecycle, embedded-Mono and compiled-IL checks; no live multiplayer latency, Unity native-memory or whole-server CPU benchmark is claimed. Separate Standalone and Server Side projects are unchanged.
+Native visual audit installs/removes actual Harmony hooks and checks emitted gameplay calls remain absent from presentation. It does not run a camera, Animator or physics world.
 
----
+## Combat checks
 
-# TooManyLags - FiresGhettoNetworking Addon 1.0.49 release preparation
+Managed tests execute the actual MobCombatState code with declared native/transport seams, on CLR and Valheim Mono. They cover source cutoff, exactly-once next-revision restoration, transient fields/no health replay, first-step movement/turn accumulators separate from pushback, active-effect refusal, early and stale damage/effect requests, local-attacker forwarding, native-prefix suppression, parry/heal routing, revision changes, cycles, duplicates, expiration and world replacement. New fields are not inferred from fabricated IL: native field/signature/Harmony audits inspect the installed Valheim/FGN binaries. Local Character.cs lines 1751-1775 and 1838 demonstrate the independent walking/turn accumulators; UpdatePushback decays the separately restored impulse in the normal first physics step.
 
-Dedicated startup coordinates ValheimCommunityPatch through its official session API. Four competing scene performance policies stand down; the list-based object-unload crash guard retains its setting. A single startup detector transpiler distinguishes those known inert prefixes and the reviewed native-list recovery prefix on their exact targets. Unknown/misplaced prefixes and failed/denied API contracts remain blocking. Clients, manual setup and the no-simulation mode do not activate the bridge. No saved config values or ownership/interaction/collision rules are changed by the bridge.
+A real nested Harmony damage prefix also verifies suppression survives an inner late hit. A disposable negative control with the previous single-scope cleanup fails that assertion; restoring the outer scope passes. The scope is a stack value, with no new per-hit heap allocation. Separate assertions keep sent/delivered deduplication entries out of the server's world-packet work queue while returned, undelivered and expiring events remain tracked.
 
-The normal FGN simulation initializer remains responsible for its patches. When simulation state changes, the existing session setup also refreshes the optional native ZSyncHookGate after changing SimulationActive, matching FGN's startup completion order. Repeated setup, already-active simulation and manual mode do not gain repeated work; the no-simulation path retains transform hooks required by independent FGN features. Older backends without this optional gate retain their original path.
+Some native Character/Player static initializers require Unity internal calls unavailable in an embedded headless Mono host. The combat-state native hook test uses a disposable native-assembly copy omitting only those static initializer bodies; actual hooked instance method bodies, fields and signatures are preserved. Its limits are printed with the results. It is a method-installation/contract test, not execution of live native gameplay.
 
-Focused verification passes 85 production bridge/Harmony/session assertions on both .NET Framework and Valheim's embedded Mono, plus 62 actual CommunityPatch 0.37.0 / FiresGhettoNetworking 1.5.65 / production metadata and IL contracts. Legacy and modern session fixtures pass 111 and 118 assertions respectively. The combined fixture runs the real bridge and session setup together, then exercises an FGN simulation prefix with native creation and retained VCP recovery. It also verifies original safety blocking, permanent API stand-down, unknown late/misplaced hooks, API refusal and saved-config preservation. These are managed fixtures and native metadata checks, not a Unity world or live multiplayer test.
+The source guard prevents transferring arbitrary active StatusEffect objects: copying their numeric timers alone would lose or duplicate spawned effect objects and Setup/ResetTime actions. Current owner AI continues; this is a handoff restriction, not a pause. Checkpoints are negotiated and bounded. Five-second event expiry is a practical limit, not a promise to preserve messages after indefinitely unavailable/disconnected destinations.
 
-All 28 full-build verification groups pass against DLL SHA256 `872F0BF2D3295D44378B8951D79CB986F3D2A604A794751556C8EBFA7F49D04D`, including the existing grid/loading, ownership, inventory, combat, camera, text, loose-item and optional PUP regressions. Full results are stored in `verification.json`. See `docs/COMMUNITYPATCH-COMPATIBILITY.md` for startup sequencing, bounded state, failure handling and live-test limits. Live multiplayer testing remains outstanding.
+Existing combat, PUP readiness, flight, solo network-delay, player-only, config, camera, full grid protocol and state-transfer suites are rerun for the selected debug build. The receipt records exact fresh tests and source/artifact/DLL hashes. The separate normal/debug omission audit is only executed by an explicit release verification, with the continuity file types allowlisted as changed and unrelated native/variant bodies still compared.
 
-On 2026-10-19 the user reported that the candidate appears to work. This is a limited user-reported smoke check, not an independently observed multiplayer test or a claim of exhaustive compatibility. Release preparation finalises the changelog and updates README/Wiki text only; the verified DLL is unchanged and the existing 28-group results remain tied to the same hash.
+## Live test limit
+
+No live Unity multiplayer test was performed. A matching updated server/client is required to test the complete checkpoint protocol. Unknown/mixed endpoints retain native fallback. Arbitrary mod-specific RPCs, private AI state and reproducibility of a second AI simulation are outside this change. Test `tml_ai_test start 100`, `200`, `500` and `800`, plus an unforced multi-player target change, hits/parries/heals and ongoing poison/burning; compare the visual switch on/off.
 
 ---
 
-# TooManyLags - FiresGhettoNetworking Addon 1.0.48 hotfix
+# Historical baseline notes
+# Development builds default to debug
 
-The no-simulation startup failure with FiresGhettoNetworking 1.5.65 was reproduced against the original 1.0.47 DLL and the new installer fixture before changing the implementation. FgnSimulationStartup now recognizes the exact optional FiresGhettoNetworkMod.SssQuietPass group and includes its simulation-only sector bookkeeping in the existing targeted patch removal. The seven original groups remain mandatory; unknown additions, foreign namespaces and switching after world creation remain rejected. Normal simulation mode retains these hooks. Saved backend configuration and all ownership/interaction safeguards are unchanged. The fix adds only startup recognition, with no new runtime loop or ownership work.
+Build/verification/package scripts now default to the debug development variant. Only an explicit -Release workflow builds, checks and packages a non-debug publication variant. Existing game C# sources, version and gameplay behavior are unchanged. Both output paths remain separate. Build policy checks inspect the emitted debug DLL, receipt, parameter defaults and invalid flag rejection.
 
-Release builds define TML_RELEASE. Six grid/region types omit test-counter calls and counter writes, including argument evaluation; source fixtures retain their instrumentation. ReleaseDiagnosticsAudit checks the actual compiled DLL. Optional error strings are formatted only after logging is enabled. AI status callbacks and their closures are also behind the logging gate. Live activation registers existing peers; disabling logs gates existing handlers. Owner/AI status queries require the appropriate log opt-in. Normal configuration commands and necessary startup/feature-failure warnings remain available. EnableLogs is still false by default and local to each installation.
+Default verification runs applicable regression suites against the debug DLL; it neither rebuilds nor certifies the non-debug DLL. Release verification additionally executes normal-build omission/error-output checks and marks releaseVerified=true. A development receipt marks debugSystem=true/releaseVerified=false and is rejected by package.ps1 -Release and publish.ps1. The publisher still verifies the packed DLL hash and manifest; ValidateOnly stops before any network or token use. Default package/loose DLL aliases use debug; explicit debug-system ZIP is retained.
 
-AutoConfigureFiresGhettoNetworking is the first setting and defaults to true. With false, startup only validates manually configured backend settings: there are no runtime config replacements, saved changes, simulation initialization/removal or creature-balancing overrides. TML's functional ownership/interaction patches remain enabled. The server communicates this choice through one bit in its existing authenticated startup snapshot; no new endpoint or polling loop is added. Legacy auto-mode flags retain their original meaning; manual mode requires updated clients. The console treats this as server-only and restart-only. Manual-mode fixtures check preserved config references, saved files, native state and Harmony patches, and reject conflicting setup without repairing it. Existing config migration preserves a saved false value.
-
-The release verification script includes both seven-group and eight-group startup fixtures, actual native checks against FiresGhettoNetworking 1.5.36/1.5.41/1.5.65, Pickable/provider composition, native combat contracts including 1.5.65, real grid handoff/loading fixtures, managed and Valheim Mono combat, optional PUP safeguards, text editing, loose items, configuration and camera checks. Unsupported installer tests retain existing patches and configuration; removal tests preserve networking and other-mod patches. NativePup/Statics import provenance was reviewed: removing only the diagnostic-message guards restores identical tracked source; support/collision decisions, native calls, failure returns and cache updates are unchanged.
-
-All 27 release verification groups pass on the final DLL, including 111 startup/session checks for each installer variant, 20 server-session flag/authentication checks, 30 configuration migration checks and 55 generated settings. Native audits pass 28,142 assertions each with FiresGhettoNetworking 1.5.36/1.5.41 and 28,147 with 1.5.65; its Pickable composition passes 865 assertions and combat/PUP contracts pass 170. The grid/router fixture passes 29,816 assertions, and combat passes 1,833 on both managed runtime and Valheim Mono.
-
-Final test results and exact inputs are recorded in verification.json. These are managed fixtures and native IL/metadata checks; no live multiplayer test or measured gameplay CPU benchmark is claimed. Publication and GitHub state are verified separately.
-
-Release DLL SHA256: 107A1EDBB8725DB3DCD231CD13A249F4ADA2840859717F13A0008BD87CF1BAB7
-
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.47 loose item ownership
-
-LooseItems defaults to true and uses the existing field owner, overlap, timer, retention and moving-object index in both simulation modes. Disabling the category retains native item ownership. Source and destination capability checks exclude old clients without an exact-version lock. Item drops keep the existing physics/readiness path; they cannot use the stationary early-loading bypass. Native ItemDrop placement components may have disabled WearNTear, so only loose items bypass that building-specific check.
-
-Native manual pickup, automatic collection, eating, stack merging and explicit ownership requests remain native. Only actual automatic handoffs consult local pickup state and the native enabled collection range. A pickup veto discards automatic work until new covering player activity, using the existing sparse field-request gates. There is no new scanning loop, physics callback, Harmony target or item-distance ownership selector. Cleanup uses the existing loaded-node lifecycle.
-
-All 25 verification groups pass against DLL SHA256 CAD677CD4C1289FB518455288ACBBE7D62396457BC05F9429A98AD734EFDC79C. The full controller/grid fixture passes 29,816 assertions, including loose-item movement, retention, overlap, disabled categories, legacy peers, disabled placement components and native pickup priority. Player-only handoff fixtures pass 4,198 assertions; the new native audit checks 57 pickup/merging and compiled source-guard contracts. Real BepInEx config generation verifies 54 settings. These are managed fixtures and native metadata checks; live multiplayer validation remains outstanding. Release verification completed before publication.
+This changes local tooling/documentation only; no new changelog gameplay entry, release version, profile install, publication or push. Earlier sections describe the already verified gameplay changes and the former normal-build default as historical context.
 
 ---
 
-# TooManyLags - FiresGhettoNetworking Addon 1.0.46 text editing candidate
+# Diagnostic-cost candidate 1.0.81
 
-Object-specific sign/portal editing protection uses the existing source-consenting ownership protocols in both simulation modes. Ownership and the latest state must arrive before native text input opens. Actual local movement releases the hold; confirmation, closing the UI and camera turns do not. Automatic takeovers rejected during editing are discarded rather than replayed. Active server holds require no polling; ordinary object decisions use cached node flags. No new global ownership hook, physics loop or direct ownership write is introduced.
+Local successor to the hash-verified 1.0.80 normal/debug build. No publication, profile install or Git push. Historical sections below refer to earlier candidates.
 
-All 24 verification groups pass against DLL SHA256 AB973273EE680E12EE6190E20853EE56D47251431AB2B78D125B425FD856971E. The production text module passes 192 lifecycle/Harmony assertions and 46 actual native metadata contracts. The full controller/grid fixture passes 29,724 assertions, including both real grid controllers, independent neighbouring objects, loss of shared-region contention, stale receipts and fresh-request-only release. Existing inventory, combat, camera, loading, configuration and optional PUP checks also pass. These are managed fixtures and native metadata checks; live multiplayer validation remains outstanding. Release verification completed before publication.
+Normal production omits the three FgnTargetBoundary statistic fields and their updates, FgnBossPolicy.Evaluations and both target-event modules' patch-coverage counters. The optional debug variant and standalone managed regression fixtures retain these metrics. No normal-build runtime flag/stub/metric callback is added. Actual intents, holds, expiry/token/owner revisions, boss decisions, queuedCount, attack retries and native-contract validation are preserved.
 
----
+NativeNode.Requests is now a read-only view of RequestRouter's actual matching queue. The duplicate per-node Int32 field and its enqueue/dequeue/expiry/cancellation updates are removed in both builds. Only explicit status queries/tests call the getter. Routing still uses the same queues, expiry/replies, order, destination readiness and native dispatch. Queue lookup checks object identity, so a reused ZDO ID cannot expose another node's work. No claim of an exact object-size saving: alignment can absorb the removed field.
 
-# TooManyLags - FiresGhettoNetworking Addon 1.0.45 integrated optional PUP compatibility
+Warning/error sinks and previously log-gated catch reports are unconditional while the plugin exists. Runtime grid failures and failed native interaction reports no longer depend on EnableLogs. Optional info/status scans, formatting and diagnostic RPC registration remain gated and on demand. No additional error RPC, remote telemetry, polling or network stream is introduced. Unsupported-transport/fallback paths which deliberately catch without reporting remain native behavior; a normal refusal is not converted into an error.
 
-The complete collision/stability portion of BotanicPupPatch 2.1.1 is embedded under TooManyLags.PupCompatibility. Its nine implementation files are byte-equivalent after changing only the namespace; tests/pup-import-equivalence.json records both source and imported SHA256 values. The standalone combat implementation is not duplicated: TML already contains and extends that functionality through its existing target/attack/boss policy. That policy and the grid/interaction algorithms retain their current implementation.
-
-EnablePupCompatibility defaults to true in the new local, restart-only 02 - PUP FPS Compatibility section. Required mods and a separate PupPatch are checked once during Awake. Without PUP FPS/FiresGhettoNetworking, with the switch off, or with a loaded standalone BotanicPupPatch, the embedded module returns before native bindings, caches or Harmony installation. It adds no Unity component, Update/FixedUpdate/LateUpdate, timer, polling, ownership writer or physics-state writer. TML's existing ownership features retain their own costs. PUP/standalone soft dependencies enforce startup order without requiring their installation; FiresGhettoNetworking remains the only hard mod dependency.
-
-When active, the module installs the original structural loading gates, native body-readiness/retention supplements, FiresGhettoNetworking ownership-snap and owned-position-echo protection, and streaming compatibility. Native PUP still owns body freezing, collider preparation and its deferred queue. Newer native dedicated proxy and retention capabilities remain recognized. Disposal unpatches only this module's Harmony owners and clears its state; client ownership-session reconnects do not tear down local collision protection. Unsupported core interfaces roll back the embedded installation with a startup warning; an unsupported optional FiresGhettoNetworking supplement leaves core PUP protection active, as in the source patch.
-
-All 23 verification groups pass on the final DLL. New production-module fixtures pass 24 dependency/config/external-guard/cleanup/streaming assertions on both CLR and embedded Valheim Mono, followed by the original 63 statics/native-body/ownership-change assertions on both runtimes. The steady-owner stress loop makes 100,000 calls without readiness requests or a generation-zero collection. The new native audit passes 168 contracts against actual PUP FPS 1.0.34/1.0.36 and FiresGhettoNetworking 1.5.36/1.5.41/1.5.53 metadata, verifies source hashes and confirms no extra loop, direct rigidbody/transform writes or combat-policy copy. Existing combat, camera, static-grid, inventory, loading, native ownership composition, fallback and unload/lifecycle checks also pass. The console suite passes 109 assertions including local restart-only PUP configuration; real BepInEx generation/reload verifies all 53 settings in 11 sections. Prior defaults remain unchanged.
-
-The Wiki's former Ownership and compatibility page is replaced with Compatibility, explaining the three mods, the automatic optional guard module and the standalone-PupPatch exclusion. Existing concurrent documentation edits are preserved. Wiki files are prepared locally; no website or package publication is implied.
-
-Verified DLL SHA256: EF3C74903784F73FE4C49A1ACAA25B10744B8774E745EA19B6C8F5643B451D9E. These are managed/metadata checks, not a live Unity/PhysX/multiplayer test. Documentation hashes were refreshed after the final timer explanations and default-grid diagram embed; the DLL and runtime test results are unchanged. Publication and GitHub status are tracked separately from these checks.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.44 renewing refill protection
-
-Refill ownership protection is reduced from 10 seconds to 1 second in all three existing paths: the server grid node, the cooperative source-client protocol, and the local agent used without Server-Side Simulation. Each matching observed refill RPC replaces the deadline with current unscaled time plus one second, so repeated inserts keep renewing protection. No new loop, timer, RPC, allocation path or object lookup is added. Inventory/opening, active-use, burning, recipient readiness and stale-owner forwarding rules are unchanged. Update both server and clients; older clients still enforce their compiled 10-second source hold.
-
-The full-controller/grid/router fixture passes 29,438 assertions. Regressions cover repeated server-observed inserts across a settled overlap, exact one-second expiry in red/forward fields, native solo-owner release, and an authenticated client source commit. A non-refill repair request does not extend the client refill hold. The player-simulation runtime fixture also exercises renewal across the original expiry and release exactly one second after the latest refill.
-
-All 22 verification groups pass, including the player-simulation runtime, real BepInEx generation/reload, native ownership/interaction contracts and 54 exact Harmony targets. Imported AI source hashes remain unchanged. Verified DLL SHA256: `8B56F02D5182AF7B182B11E1EFF731C2135FFE7CD5793D2E41BED67A0B7107C5`. Complete results are in verification.json.
-
-A subsequent documentation-only update shortens both READMEs, changes the package description and moves detailed configuration, ownership/compatibility and bug reporting into three Markdown Wiki pages. The Wiki index provides manual publishing instructions; no Thunderstore Wiki page is changed automatically. Packaging now exports a separate Wiki folder/ZIP and keeps these pages in the source ZIP, without adding authoring files to the runtime package. No runtime source or DLL changes; the above hash and runtime test results remain valid. Documentation hashes are refreshed separately and the new package contents are checked against the files. No new gameplay tests are claimed for this text-only update.
-
-This is a local candidate; no live multiplayer test, publication or push is claimed.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.43 optional static grid
-
-UseGridForStaticBuildings defaults to false. When enabled with Server-Side Simulation, eligible non-interactive building pieces share the existing cell index, transition timers, guarded ownership path, overlap policy and unload cleanup. Static server-default ownership is independent of interactive defaults. The conservative existing static filter is reused: a persistent, non-distant network root with Piece and fixed-position WearNTear, no Rigidbody and no additional behaviour components. The previous server-only static manager remains in use when the optional grid is off. No second object index, periodic scan or timer is introduced.
-
-PUP FPS and BotanicPupPatch remain optional. Baked originals stay excluded; an ordinary restored piece can register through the existing lifecycle. Initial static grid nodes reuse the authenticated recipient proof and native first-owner selection. A trailing boolean in the existing server Welcome selects static RPC relaying; absent or false preserves ordinary static RPC handling, including when a new client connects to an older server. The optional static grid needs updated clients for these handoff safeguards. Existing collision, inventory, refill and active-use protections are retained.
-
-The generated config has 52 entries in ten ordered English sections, with interactive/static Simulation Settings first, General next and the 26 object categories last. ServerOwnedStaticBuildings is renamed ServerOwnedStaticBuildingsByDefault; interactive defaults and KeepOwnershipOnCellExit move sections. Users should use the new config and reapply custom values. KeepOwnershipOnCellExit=false requires Server-Side Simulation and at least one interactive/static server default: invalid manual startup combinations normalize to true with a warning, and invalid console changes are rejected. These checks occur only at startup or when changing relevant config keys.
-
-Focused regressions cover solo and separated players, shared native regions, overlap, both exit policies, independent defaults, initial uninstantiated pieces, late server registration, legacy/off-state RPCs, PUP exclusion and restoration. The full-controller/grid/router fixture passes 29,433 assertions; 1,000 further stationary passes after static settlement add zero object jobs, hierarchy scans or lookups. These are work-count and simulated transport checks, not live CPU measurements or a multiplayer guarantee.
-
-All 22 verification groups pass, including real BepInEx config generation/reload, live-console combination checks, existing inventory/refill/use races, player-simulation mode, and 54 exact native Harmony targets. Actual native ownership rewrite and FiresGhettoNetworking/PUP contracts remain compatible with the audited versions. Imported AI source hashes remain unchanged. Verified DLL SHA256: `1283A0F27F6D3BD9AF83F7E6EEA93E73D750B25261183646B5C5CADD78D1B74E`. Complete results are in verification.json.
-
-This is a local candidate; no live multiplayer test, publication or push is claimed.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.42 mandatory handoff protection
-
-The optional EnableExperimentalInteractionProtection binding is removed. In enabled dedicated-server sessions with Server-Side Simulation, startup now always attempts the existing handoff protocol before installing the interactive ownership controller. Installation failure retains the same cleanup and refuses to install that controller; it does not fall back to the earlier unguarded protocol path. No handoff implementation, wire format, loading/use rule, runtime timer or scan is changed. The mode without Server-Side Simulation returns through its existing startup path, and disabled sessions remain disabled.
-
-Fresh configs contain 51 entries in nine feature sections; all remaining values and section names are retained. Existing files may retain the old key as an orphan, but it is not bound, read or exposed to tml_config. The real BepInEx config probe covers a saved false value, and console tests reject changes to the obsolete key without a runtime callback. Actual compiled startup IL is checked for the absence of that config read and the continued required handoff-protocol installation. Existing 1.0.41 clients already install the same server-selected protocol, so this change requires a server update/restart and no protocol migration.
-
-All 22 verification groups pass, including the updated real-config and compiled-startup checks, 28,384 full-controller assertions, inventory/refill/use races, the player-simulation mode and 54 native Harmony targets. Verified DLL SHA256: `319C210F11AF9265CBAC05A0D45720C18DBCB3F79CC188EF9EDC11D829795346`. This is a local 1.0.42 candidate; no live multiplayer test or publication is claimed.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.41 login, zone-border and startup work
-
-The user reports different server-owned pickables, logs and berry bushes waiting after each login, then becoming usable after the usual server-loading delay. That observation is consistent with a missing early node, but does not independently prove every affected live object has this cause. A specific registration gap is reproduced against unchanged 1.0.40: TrackInitialObject runs on ownership-field writes, but Persistent deliberately retains eligible server defaults and prevents the native write branch. An object that already has the server owner can consequently remain absent from the grid until AddInstance finally registers its real server view. This also applies when a previous early event preceded a ready reference area, or a no-view record was pruned while the server ownership data remained resident.
-
-The registration change adds missing-record recovery inside that existing successful server-default retention branch. It reuses TrackInitialObject, its cached prefab eligibility, native loaded-area checks, existing object index and authenticated 1.0.40 recipient proof. Registration itself does not assign ownership, advance a field timer, query an inventory, instantiate an object or send a handoff. Existing tracked nodes take the same fast path. The null-node check also avoids adding a duplicate record over an unexpected stale same-ID identity. Recovery occurs when the existing native ownership pass visits the record; this does not introduce a faster independent native scan. This part is server-side and remains compatible with 1.0.40 clients; the separate client readiness correction below needs a client update.
-
-The new regression is placed at a native zone corner with objects in the login sector and three neighbouring sectors. Unchanged 1.0.40 successfully transfers all four sectors when the original owner event is registered, disproving a fixed single-64x64-sector limit in this path. It fails when the same objects already have the server owner but lack an early record; the pre-fix source, test and failing output are retained outside the repository in work/TMLRetainedHarvestAudit-2026-10-15. With the fix, ordinary ownership, pre-existing server ownership, ownership before peer readiness and return after pruning all enter the grid through the existing native loop, obtain actual client proof and transfer before server instantiation. Repeated later native passes cause no additional scheduled object jobs, hierarchy scans or protocol packets, and initial recovery performs no owner write or network request.
-
-The user's zone-border observation also exposes a second, independent reproduced issue. Native ZNetScene.IsAreaReady(point) checks the point's zone and all known network objects in the surrounding 3x3 sectors. Querying at a bush in the neighbouring zone can therefore wait for outer sectors beyond the player's loaded scene. The previous tests used uniform area readiness, so their successful cross-zone ownership mapping did not exercise this asymmetric loading geometry. A position-dependent client regression fails with the unchanged 1.0.40 protocol even after registration recovery: the actual bush is loaded, the player-centred footprint is ready, but the object-centred outer footprint is not.
-
-For actual eligible stationary roots, client readiness now requires the same valid active exact view/state plus a loaded object terrain zone, native active-area membership at the current client reference, and native IsAreaReady at that reference. It uses the existing weak per-view structural cache and per-frame zone-result cache. Both pre-owner proof and post-owner queued-request delivery use this corrected geometry. Animals, vehicles, dynamic bodies and unsupported/private structures keep their previous object-centred check; no server or PUP physics gate is replaced. Unknown/stale owner, revision, minimum state, transport, token, position and unload checks remain intact.
-
-The position-dependent regression covers all three neighbouring sectors at the login-zone corner, including post-owner delivery. Unready player footprints, missing object terrain and objects outside the client's current native area still fail; vehicle/animal/rigidbody fixtures retain their original object-area results. A same-frame batch across three object sectors performs one expensive native player-area query while still proving each object individually. There is no new polling, background scan, protocol message, configuration default or Harmony target. Update server and clients for both fixes; old clients still connect but retain their old readiness geometry.
-
-The final performance pass reuses the inventory reference already found by structural eligibility instead of enumerating the same hierarchy again to populate the weak per-view cache. Classification, root identity, stationary-body checks, public privacy and the single-inventory restriction are unchanged. For each of 100 fresh views with a child inventory, the work-count regression requires one container hierarchy enumeration instead of two. Subsequent open-use, local-loading and current-privacy checks still reject unsafe commits, become usable after use ends, and perform no hierarchy rescan. The test fails against the previous implementation. This removes one container-array allocation and duplicate traversal per eligible cold inspection; it is not a measured FPS claim. No additional cache, timer, message or idle work is introduced.
-
-These changes fix reproduced gaps rather than claiming an in-game diagnosis of every delayed object. Category, privacy/use, world-marker and PUP/AI restrictions remain. The unrelated compatibility-review suggestions are not included. Focused and complete verification results are recorded below and in verification.json. Managed fixtures simulate Unity registries and transport; no live multiplayer timing or blanket compatibility guarantee is claimed.
-
-All 22 final verification groups pass. The complete controller/grid/router fixture passes 28,384 assertions, including retention recovery, asymmetric zone-border readiness and the cold/warm inventory work-count regression. Native contract/composition audits retain all 54 Harmony targets, and the production DLL compiles against the installed GetReferencePosition/IsAreaReady/IsZoneLoaded APIs. Inventory/refill, fallback mode, bounded caches, camera, source fencing, imported AI and optional PUP readiness checks all pass. Imported AI source hashes and all 52 config values remain unchanged. Verified DLL SHA256: `71342FF416B0DDE27AE44A907BE6B4489D06438E84F00B7ABB0C16C253FA35BA`.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.40 local initial-loading build
-
-The supplied logs establish server ownership and settled player grid coverage while serverInstance=false/Created=false for torches and harvestables. Waiting for a registered NativeNode therefore delayed a transfer whose recipient was already loaded. This build uses the existing ownership-change hook, object index, field scheduler, request router and authenticated destination proof for eligible initial ZDOs; it does not add a separate harvesting controller, change FiresGhettoNetworking loading order, create scene objects or relax native collision/type gates.
-
-With ServerOwnedInteractivesByDefault=true and experimental protection active, native first assignments track eligible persistent stationary interactions before their server instance exists. Initial server ownership still uses the native assignment selector, including settled player-grid priority and active-owner retention. The receiving client must advertise the new capability, hold the exact owner/revision/position and minimum object state, and confirm a valid actual eligible instance and loaded local area. Existing field delays and category toggles apply. Old clients retain the server-instance path. Dynamic vehicles, tamed creatures, private/multiple inventories and default-only world markers are not added to this stationary path; their existing ownership/physics/interaction rules are preserved.
-
-No server instance means no local server interaction could have executed. Queued requests therefore do not create an artificial opening/refill delay before the first server-to-client acquisition. A later player-to-player transfer still commits at the actual current source through the identified FiresGhettoNetworking handoff. Updated source clients directly check actual inventory loading/open use, incinerator burning, active users, item-stand actions and observed refilling as applicable. Native Container.OnContainerChanged saves inventory synchronously; the protocol retains the exact ownership receipt and recipient state floor rather than opening an inventory as a probe or rewriting its data. The private m_loading accessor is bound once, with an explicit capability fallback if unavailable.
-
-Once an authenticated recipient proof has started a source commit, the same tuple and pending transaction reuse that proof. Repeated pending passes do not resend it. A subsequently registered server view hydrates the same indexed node, preserving queued requests, source transactions and recipient state. It does not synchronously dispatch from AddInstance before component Awake handlers exist, reassign ownership or restart acquisition. Queued startup picks and inventory requests use the existing five-second cancellable deadline; consumed-material inserts and other noncancellable gameplay requests keep their original delivery policy.
-
-An overlapping field requesting an unready server retains an available player owner and discards that automatic request. Server readiness alone cannot replay it. The sparse existing per-cell fresh-request listener is reused; only a genuine covering movement/heading update retries. A later exclusive player policy clears the rejected-server wait so it cannot strand the object. Normal loading retry behavior outside this discarded overlap case remains unchanged.
-
-Uninstantiated records reuse the ordinary index and are removed on actual registration, ZDO destruction, native player-reference-area departure, disconnect or world reset. Only while such records exist are at most twelve peers' reference-zone centres compared at the existing movement tick. The sparse object set is scanned for retirement only when those centres change, not while standing. Once the server has instantiated the records, this extra path is a count check. No physics callback, periodic whole-world scan, idle diagnostic or additional networking endpoint is introduced.
-
-Focused regressions cover initial interaction groups, actual client loading/structure, legacy fallback, same-node hydration, queued opening/refill without artificial first-claim delays, source inventory use/loading vetoes, source receipt ordering, and server registration during a pending source commit. The 100-object/1,000-standing-pass case produces zero further object jobs, hierarchy scans/lookups or protocol packets after completion. The unchanged 10,000 loaded-object-transfer fixture adds zero destination queries or readiness entries and retains its existing send/scan counts. These are work-count tests on simulated Unity registries and transport, not live CPU timings or a multiplayer guarantee.
-
-All 22 final verification groups pass. The complete controller/grid/router fixture passes 27,409 assertions, including 1,549 general initial-object assertions and the source/recipient proof retention cases. Actual native contract/composition audits verify all 54 Harmony targets. Generated defaults are unchanged apart from the version header; the imported AI source hashes remain identical. Verified DLL SHA256: `81E886BB83EE0DECA6F22B77DF6C4216596A2194EC885B98EA53B08B4563C3DA`. Full results are recorded in verification.json. No live Unity/multiplayer test is claimed. Prepared locally; no publication or push.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.39 local fixed-door build
-
-The installed wood_door, wood_gate and darkwood_gate prefabs have fixed WearNTear roots and an animated child Rigidbody with isKinematic=true and useGravity=false. None has a ZSyncTransform. The earlier blanket Rigidbody exclusion therefore rejected these native fixed doors from initial server defaults and from the stationary destination-proof path. The asset-only inspection is retained in tests/kinematic-door-asset-audit.json; no Unity scene was run or game asset modified.
-
-A shared cached classification now admits only doors with a fixed WearNTear root, no root Rigidbody or ZSyncTransform anywhere in the hierarchy, and exclusively kinematic child bodies without gravity. Other categories keep the old body exclusion. Dynamic/gravity bodies, carts, ships, creatures and moving building roots are not admitted by this exception. Prefab eligibility is still cached once per hash; live stationarity is computed once per registered node. There is no added per-frame/per-physics scan. Existing active-owner retention, field ownership/delays, keep-on-exit, privacy/use checks, recipient proof and loading safeguards remain in place. Static-building ownership is unchanged.
-
-The supplied torch/branch snapshots show server ownership, a settled local grid candidate with timer=0, and serverInstance=false/no server node. These rows demonstrate missing server instances rather than another grid transition delay. Rows with grid=0/candidate=0 are outside active coverage and are not evidence of a failed local takeover. The first server assignment already succeeded. The loaded-node count grows from hundreds while the missing samples remain; the supplied FiresGhettoNetworking diagnostic reports 21,175 creations over its 60-second window. That does not by itself identify the individual creation blocker.
-
-Native and FiresGhettoNetworking creation obey object-type/zone readiness, then type ordering/distance and optional server creation budgets. Inspected doors are type Solid=2; torches, Pickable_Branch, Hen and Lox are type Default=0. This establishes relevant ordering differences, not the exact runtime cause for each missing object. No loading budget, scheduling order, PUP collision state or global IsAreaReady check is overridden speculatively. On-demand owner_status rows now add the actual ZDO type/Created flag and native IsZoneLoaded/IsZoneReadyForType results. The header also exposes the separate mob-default override. These calls are limited to the existing bounded, explicit admin snapshot; no background work or new network endpoint is introduced.
-
-Tamed creatures remain intentionally excluded from prefab-only initial ownership. Their loaded NativeNode checks the actual tamed flag, friendly-summon exclusion, current riding/control/follow state and server-area readiness before physics ownership changes. ServerOwnedMobsByDefault does not bypass those safeguards. An affected animal's snapshot is still needed to distinguish missing instantiation/loading from an active-use veto; the torch-only log cannot establish that animal-specific cause. The subsequent animal log shows late first-time BaseAI.Awake events for Hen, Lox and other creatures, then serverAreaReady=true/loadedNodes=3799 after earlier false/160 and false/490 snapshots. This confirms delayed creature instantiation during that login. Its filtered snapshots all have samples=0 in sector (-73,-17), so they do not identify a particular Lox or its control/follow state; the Lox may be outside the single inspected sector. This build does not claim to fix the missing-server-instance torch/branch delay or bypass creature collision protection.
-
-Regressions cover initial fixed-door assignment without a loading scan/RPC, inactive templates, cached repeat checks, dynamic/gravity/synchronized/root bodies, moving roots and other categories. The existing full destination-readiness protocol regression now also uses an animated kinematic child, retaining failed/local-area proof, inventory/physics, stale-packet and unload checks. Manual diagnostics are tested for truthful native gate fields and unchanged ownership/creation state. All 22 final verification groups pass. Verified DLL SHA256: `4B3B215A51FD499D7C1D66202D3C420EAEE38F9CBB719965D0DB739DFA451993`. Native contract/composition checks still verify 53 Harmony targets; recipient, inventory, collision, cache and AI suites retain their checks. Includes all 1.0.38 incinerator/world-marker changes. No live Unity or multiplayer test is claimed; prepared locally without publication or push.
-
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.38 local world-interaction build
-
-Incinerators are managed only with the normal experimental grid protocol and a verified native `Incinerator.isInUse` boolean. The getter is emitted once as a direct read-only field access. The flag spans both the burning coroutine and its delayed effect completion, including the native abort path; no assumed 5/7/10-second timer is added. Native Container.IsInUse is not modified, because the incinerator itself uses it to cancel conversion.
-
-The server's own busy state blocks outgoing grid transfers. For a client-owned incinerator, the decisive check runs at the real source: prefixes on native RequestOpen, RequestStack and RequestTakeAll refuse ownership-changing requests while burning. The native negative response is preserved. The current owner's own inventory operations, ordinary containers, privacy checks, active inventories and existing native source consent remain unchanged. A backwards-compatible greeting capability bit prevents automatic incinerator transfers to/from older unguarded clients; their other supported features still work. Incinerators are not refill stations and are not pinned by ServerOwnedRefillStations.
-
-A busy/open incinerator or a matching source refusal discards that automatic request instead of polling or replaying it after completion. Only a fresh covering player's cell/heading update can retry. A sparse dictionary contains only loaded, refused incinerators; its optional listener is null otherwise and runs inside existing coverage-update loops. It does not scan players/objects on idle frames or add physics callbacks. Field ownership/timers, overlap cooldowns, other objects in the same cell, and ordinary chest retry behavior stay unchanged. Unloading, movement to another object cell and controller reset clear sparse waits.
-
-WorldMarkers is a new default-only category: existing persistent ZDO roots containing their own Vegvisir or dungeon Teleport can start server-owned when ServerOwnedInteractivesByDefault=true, independent of the grid. Supported distant markers are included; moving rigidbody roots, nonpersistent roots and foreign child ZNetViews remain excluded. No network objects, world instances or ZDOs are created. The inspected vanilla Vegvisir prefab assets have no root ZNetView, so those local stones have no assignable owner and keep their native local interaction path. Native first-assignment, active-owner retention and region-unload release rules remain intact. A server restart is needed for category changes; new incinerator protection requires updated clients too. Without Server-Side Simulation, these additions retain native handling.
-
-Focused controller/protocol regressions cover real source refusal, completion without replay, fresh movement, open inventories, old-client fallback, steady-state zero jobs/scans, and unloading. World-marker fixtures cover pending scene loading, active owners, inactive templates, distant roots, local objects, foreign network roots, category/default toggles and native release. Actual Valheim IL audits confirm the private flag, coroutine start/abort/StopAOE lifecycle and all 53 Harmony targets. All 22 final verification groups pass. Final verified DLL SHA256: `747D7D17E6F04C67568A65277478E025F527E65433A2BFABF24470D56ED921FA`. The full-controller/protocol fixture passes 25,522 assertions; native API/patch-composition audits verify 53 Harmony targets. No live Unity or multiplayer test is claimed. Prepared locally; publication/push requires a separate request.
-
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.37 local targeted diagnostic build
-
-The subsequent server excerpt confirms early prefab eligibility increased from 4 to 279. During incomplete serverAreaReady, server-owned counts are 275 then 265, and eligible objects without a registered Authority node fall from 87 to 75 to 0. This supports the initial-assignment correction; it does not prove whether any particular reported torch/pickable lacks a native server instance or is blocked by the recipient proof. The old eight-row sampling preferentially printed native-ineligible gates and retained player objects, obscuring the reported server-to-player stalls.
-
-Manual owner_status samples now prioritize actual owner/grid-recipient mismatches and nearer objects. An optional case-insensitive prefab substring (for example owner_status torch, owner_status Pickable or owner_status Cart) selects detail rows without changing the sector's managed-object counts. Filtered queries also show matching unmanaged/baked objects, allowing the diagnosis to distinguish a classification exclusion from a stalled transfer. Missing-node rows explicitly report whether a valid active native server instance exists. Loaded-node rows include cached stationary/station flags and pending destination-proof state/retry/target. The header reports the active permanent-refill and destination-protocol flags. No diagnostic predicate submits a handoff or readiness query, changes fields/ownership, prepares PUP or instantiates an object.
-
-The same authenticated admin socket, legacy config RPC, two-second throttle and 6,000-character client reply limit remain. Filters are limited to 100 characters; detail selection is bounded to eight transient records and runs only in the explicit one-sector query. No new ordinary-runtime object/field scan, timer or logging is added. Existing clients and configs remain compatible. Gameplay and the first-owner/active-owner rules are unchanged in this build.
-
-The reported gates include managed=True/retainedExit=True rows, which intentionally preserve their player owner under KeepOwnershipOnCellExit=true. Other darkwood gates have initialEligible=false because their prefab has a rigidbody; vehicles are also explicitly excluded from early defaults. They can therefore encounter later protected, loading-gated ownership changes. The native early selector itself does not require serverAreaReady for eligible first assignments: ownership data can precede creation of its server instance. Server and client scene loading run independently; a first server-side load is not proof that no active client already owns/uses the object. The moving-prefab exclusions and later physics safeguards are not relaxed speculatively in this diagnostic build.
-
-All 22 final verification groups pass. The console suite verifies filtered requests remain admin-only, use the same authenticated requester/throttle and do not capture similarly named config keys. The controller/protocol fixtures check sample relevance, case-insensitive filters, missing/unmanaged native instances, bounded replies and unchanged owner writes/RPCs/field updates. Native API and Harmony-composition audits, loading/interaction/inventory/physics and PUP/AI safeguards retain their existing checks. Verified DLL SHA256: `DE69D6E520CC8B77B655A118074715A1BB837203065FE59CEA5FF1DC4F28056A`. No live Unity/network test is claimed. Prepared locally; not published or pushed.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.36 local initial-ownership fix
-
-The supplied 1.0.35 server log contains four manual snapshots. While serverAreaReady is false, only four native-default candidates are recognized and server-owned; 212, 213, then 287 other managed live interactions remain player-owned. Examples include hearths, ceiling braziers, chests, forge/workbench and native pickables. Their native initialEligible flag is false although their loaded nodes are valid and controllable. When readiness becomes true, server-owned candidates jump to 215 and 76 remain player-owned in player fields. This demonstrates a classification failure in the early data-assignment path and a later loading-gated takeover, not merely delayed client rendering of ownership.
-
-Classify enumerated child components with includeInactive=true but looked up each component's network root with GetComponentInParent<ZNetView>() (default includeInactive=false). Unity 6's documented semantics exclude inactive objects, including the searched object itself: https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Component.GetComponentInParent.html. The default lookup could therefore reject inactive prefab roots before the scene existed. The native-default privacy check had the same mismatch. The matching live-node inventory-root lookup now also includes inactive controls, preserving its privacy/multiple-inventory exclusions.
-
-The runtime correction consists of three includeInactive arguments. No ownership loop, timer, loading bypass, new scan, RPC, config default, active-owner policy or PUP hook changes. Prefab classification remains cached once per hash; nested independent network roots and explicit inventory-root overrides retain their existing meaning. Existing active owners still use the protected handoff path. Moving/rigidbody prefabs and other deliberately excluded categories remain excluded from early defaults. Server-only update; existing clients and configs remain supported.
-
-A Unity-semantics fixture regression was first run against unchanged 1.0.35 and reproduced the failed early server assignment. The saved baseline source/log and commit identity are in work/LoginPrefabClassificationAudit-2026-10-14 outside the repository. The new regression exercises inactive templates before instances exist, native active-owner retention, no readiness scan/RPC, cached repeat lookups, no second ownership change when readiness becomes true, private/multiple inventories, nested foreign network views, explicit overrides, disabled categories, persistent requirements and inactive live inventory safety. Managed tests do not execute actual Unity prefab assets or live multiplayer; the exact post-fix live ownership timing still needs an in-game test.
-
-All 22 final verification groups pass, including the new inactive-prefab regression, the existing controller/loading protocol tests, real Valheim API compilation and native patch-composition audits, inventory/use safety, camera/cache cleanup and optional PUP/AI readiness. Generated config settings are unchanged apart from the version header. Verified DLL SHA256: `4633DF0578A8BF1430A3AA4E777FF1D8DC8764C55EF5954601FF88A608A11927`. Prepared locally; not published or pushed.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.35 local PUP compatibility build
-
-Built from the completed 1.0.34 source (Git baseline `276876f`). Runtime changes are limited to the optional NativePup/CellReadiness adapter; Plugin.cs changes only version metadata. The grid, camera, initial-owner defaults, manual diagnostics, interaction protection, target handoffs, attack-end retry and boss policy retain their 1.0.34 implementation. All 50 generated config settings are unchanged apart from the version header.
-
-The binary PUP hash lock is removed. Startup validates the native readiness signature, its supported legacy dedicated branch or newer dedicated proxy query, and the existing typed fields/delegates. An unsupported present PUP keeps AI server fallback blocked; absent PUP retains native area/instance readiness. No PUP or PupPatch assembly dependency is introduced.
-
-After native Exact preparation, newer PUP local dedicated cells must also pass HasPreparedDedicatedCollision for the actual query cell, point and radius. Exact=true alone cannot release an unprepared proxy. Recipe identifiers, world-save/vanilla restore gaps, remote replacement validation, transition and session checks remain. This query runs only in existing server-takeover readiness attempts. Startup inspection runs once; no new Update/FixedUpdate, body/support/retention hooks, RPCs or physics writes are added. PUP continues to own its body guard and deferred collision queue.
-
-All 22 verification groups pass. The production optional adapter passes 37 assertions on both CLR and embedded Valheim Mono, including startup rejection of an unknown dedicated contract, legacy/new readiness, unprepared proxies, recovery, irrelevant-area short-circuiting and unchanged restore/remote protections. Actual native metadata/IL audits pass for PUP FPS 1.0.34 with FiresGhettoNetworking 1.5.36, 1.5.41 and 1.5.53, and for PUP FPS 1.0.36 with FiresGhettoNetworking 1.5.53. Both actual PupPatch 2.1.0 and 2.1.1 combat lifecycle contracts are checked: suspending that module does not call the core collision guard lifecycle. The unchanged precedence fixtures pass 40 assertions on CLR and Mono; combat fixtures pass 1,831 on each runtime. Inventory, field/cache/unload, loading, native patch composition and fallback checks also pass.
-
-Verified DLL SHA256: `6790E02110A77CF97F08FFC648EC2CF6013301BA31D7F528D66AA72A7470FB63`. Native audits and managed fixtures do not constitute a live Unity/PhysX/network test. Prepared locally; not published or pushed.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.34 local diagnostic build
-
-The existing manual `tml_config owner_status` snapshot is now written once to the server's BepInEx info log before the same text is returned to the requesting client. This explicit diagnostic does not depend on EnableLogs. Unavailable/error replies use the same searchable SERVER owner status prefix. Admin authorization, current-peer checks and the existing two-second snapshot throttle still run before this method; denied or throttled requests do not write a snapshot.
-
-Only the diagnostic wrapper and build/documentation metadata changed. Ownership, loading, interaction protection, snapshot collection and the client RPC protocol are unchanged. There is no automatic log output, added polling or ordinary-runtime work. Existing clients remain compatible; install the diagnostic DLL only on the server. No live multiplayer test is claimed. Prepared locally, not published or pushed.
-
-All 21 verification groups pass on the final 1.0.34 DLL, including the unchanged 95 console/authentication assertions, snapshot/controller checks, native patch audits and inventory/loading/AI safeguards. The new wrapper was reviewed for an unconditional LogInfo call outside the EnableLogs guard and for its sole authenticated, rate-limited command caller; the fixtures do not execute a live BepInEx server log listener. Verified DLL SHA256: `DC4039A676A14597BF9634B15FDC094DF08F725DEBE4184E2CD0E4BAAF6DFA3C`.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.33 local diagnostic build
-
-The supplied server log now confirms 1.0.32, and the user confirms ServerOwnedInteractivesByDefault=true / NoServerSideSimulation=false while the delay persists. It contains no object-level TooManyLags decisions, so it cannot distinguish late authoritative takeover from late client replication or identify initial eligibility failures. The actual ValheimTune 0.7.9 DLL was inspected: ReleaseZDOS patches only measure elapsed time, while its dirty-set/sorting paths modify synchronization and mark owner-revision changes. It does not replace ReleaseNearbyZDOS ownership. The logged ServerZoneStreamBlock failure belongs to PUP FPS 1.0.36; its catch unpatches that packet-growth helper. These findings do not establish a new causal ownership bug. The PUP readiness mismatch still blocks the optional AI fallback and is not an object-grid deactivation message.
-
-`tml_config owner_status` uses the existing authenticated admin RPC and therefore works from 1.0.31/1.0.32 clients. It inspects the requesting player's one native sector, including eligible ZDOs without a server node; it reports actual server owner counts, initial eligibility, active peers, field candidates/owners/deadlines, retained-exit state, use/opening/refill leases and the server's native area readiness. Eight bounded sample rows prefer player-owned uncovered objects and live-only eligibility cases. No ownership write, handoff, config change, field tick or PUP preparation is invoked.
-
-The query runs only when explicitly requested, at most once per two seconds per authenticated admin connection, with a reply below the unchanged 6,000-character client limit. It adds no Update/FixedUpdate/timer, per-object counter, persistent snapshot cache or work in the ordinary ownership path. One native sector scan and one area-readiness query are intentional on-demand diagnostic costs. No Unity multiplayer test is claimed.
-
-All 21 verification groups pass on the final diagnostic build. The console suite passes 95 assertions including non-admin/stale-socket rejection, authenticated requester selection, legacy RPC use, separate request throttling and no config execution for snapshots. The controller/protocol suite passes 25,133 assertions, including actual server owner/eligibility/unloaded-data reporting, private-container and instance state, one explicit readiness query, no owner/data sends or field updates, bounded replies and teardown. Existing loading, inventory, combat, camera, fallback and native/PUP contracts also pass. Verified DLL SHA256: `4FBAEEDF74E2BB4EF1A5534B39D7CEA37D6B12839D675A5A09B5C85BCD49680E`. Prepared locally; not published or pushed.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.32 local test build
-
-## Initial server ownership
-
-With ServerOwnedInteractivesByDefault=true, the native assignment selector now uses the server default while a covered field has not settled or its settled recipient is unavailable. This prevents vanilla from assigning a temporary player owner that subsequently needs a loading-gated player-to-server handoff. The field's deadline, candidate and settled owner are not changed. Settled available player fields still win, and the ordinary native assignment cadence remains unchanged.
-
-The current 1.0.31 controller/transpiler was exercised separately: unowned doors, public chests and workstations outside pending coverage selected the server immediately despite an unready scene; valid active player owners remained unchanged for 65 simulated seconds; an unowned pending overlap instead selected a vanilla player and remained there while loading blocked the subsequent transfer. These are managed fixtures, not proof of the live session's complete cause. The baseline executable is preserved in work/NativeLoginAudit-2026-10-14 outside this repository.
-
-Permanent refill stations also select the server during native assignment, including before a live server instance exists. Eligibility and the refill rule are stored as two bits in the existing prefab cache. A non-refillable trap still uses its settled player field. Incinerators, whose running actions are deliberately unmanaged, are excluded consistently even before registration.
-
-No existing active owner is forcibly stolen. Native active-owner checks, source consent, open inventory/opening protection, refill/use leases and the existing loading checks remain effective. In particular, an object already owned by an active client can still wait for server-area loading; this build does not bypass that safeguard or claim to remove every possible login delay. No client protocol or PUP/physics hook changes are introduced. Server-only update; existing 1.0.31 clients remain supported.
-
-## Cost and focused checks
-
-The change adds no object polling, world/zone scan, timer, RPC, completed-object cache or per-assignment allocation. Flags use the existing prefab cache; identifying a turret adds a child-component lookup once per previously unclassified defense prefab. The native selector still performs no loading scan or source handoff RPC. The active default is still captured at startup and disabled in player-simulation mode.
-
-The targeted controller suite passes 11,853 assertions, including first-owner selection for doors/chests/workstations in solo and overlapping pending fields, unchanged deadlines, 65 seconds of incomplete loading without temporary player ownership, normal takeover after loading, permanent refill rules before instance creation, active-owner retention, exclusions, region release and the existing inventory, camera, field-exit and interaction safeguards. No live multiplayer test is claimed.
-
-All 21 final verification groups pass. The actual-protocol controller fixture passes 25,125 assertions, including the unchanged 13,272 loading/protocol checks; the native audit retains 50 exact Harmony targets and passes 23,119 assertions per audited provider. Native inventory, combat, camera, player-simulation fallback, startup and optional PUP checks also pass. Defaults are unchanged apart from the generated version header. Verified DLL SHA256: `9A68ABFD8FA205F589B55B1A6B5C1847D6F407ED3E313D9812C11D256FD5D6D4`. Prepared locally; not published or pushed.
-
-## FiresGhettoNetworking ownership comparison
-
-The actual cached FiresGhettoNetworking 1.5.53 DLL was decompiled for this comparison. Broad ServerOwnershipPatches replaces the native nearby-sector assignment pass: persistent eligible ZDOs without an active owner select the server whenever a connected peer covers the sector. It has no IsAreaReady or IsZoneLoaded gate in that ownership path, and it also retains active player owners. It is a periodic data-assignment rule, not an instance-loading event. TooManyLags' early selector keeps vanilla's loop and adopts the same initial server target for its narrower eligible category set.
-
-Selective ServerOwnershipPatchesV3 caches Character prefabs and optionally Ship prefabs. Its extra active-player takeover requires an actual server instance and excludes tamed creatures; ordinary interactables are instead returned from server to player ownership. Neither assignment method checks Container.IsInUse/RPC_RequestOpen or the TooManyLags refill/use leases. Other FiresGhettoNetworking subsystems still have their own safeguards. The creature-only forced takeover is therefore not copied into the interactive grid, and both competing ownership options remain disabled by the existing session policy.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.31
-
-Scope: only the new inventory/loading corrections and their startup/performance behavior. Field shapes, configured delays, mob policies and PUP guards are unchanged. Native IsAreaReady checks native zone/object loading; it does not prove PUP collider readiness.
-
-## Findings and narrow corrections
-
-An actual 100-object fixture reproduced 1,000 unnecessary ForceSendZDO requests across ten loading retry cycles after the recipient already had the exact replica. An optional reply bit now distinguishes known replica data from complete local loading. Only authenticated, current-token receipt stops those resend requests; it does not authorize ownership. If the known replica disappears, a native resynchronization request is queued immediately. Legacy replies preserve their original retry behavior. Post-ownership recipient checks retain their original wire payload and behavior.
-
-The review also found that a positive preflight could remain cached if overlap, inventory use or another native path superseded the transfer. Loaded nodes now remember whether they have an outstanding preflight and discard only that object's proof when the policy/use path changes. Subsequent eligible takeover requires a fresh token. This adds no unconditional cleanup dictionary lookup on normal transfer marking and no new field/global scan.
-
-Unchanged waiting objects skip repeated handoff work until the existing retry deadline. Field target, native owner/revision or position changes bypass the wait. The server's shared native-area check remains active, so completed server loading resumes work at the next existing poll; a positive client reply wakes the object and controller immediately. No new movement is required. Other guards are checked before ownership writes. This wait is limited to the new destination-proof path.
-
-An initial control query may arrive before its queued native object data or scene instance. Only this incomplete data/instance case is rechecked once at client LateUpdate. If it becomes valid during that frame, the reply can succeed without the 0.5-second retry wait. Already-valid objects reply immediately; objects waiting solely for their wider environment retain bounded retries. Two reused lists, capped at 4,096 entries per frame, are drained at frame end and cleared on shutdown/disconnect. No persistent client readiness watcher, physics timer or new native Harmony target is added.
-
-## Targeted work-count results
-
-- 100 objects, ten negative loading-response cycles: 100 initial native data-send requests; additional requests reduced from 1,000 to zero after exact replica acknowledgement. The 1,100 small proof queries remain, retaining progress while standing. These are managed request counts, not measured network bytes or Unity CPU timings.
-- 10,000 ordinary loaded-object transfers: zero extra proof queries, zero readiness cache entries, the same 10,000 catalog scans and 20,000 native send requests as the existing path.
-- 100 waiting objects across 24 unchanged polls: zero extra peer checks or proof queries before retry is due. Server-area completion resumes at the next poll; positive startup replies also bypass a configured five-second polling interval.
-- Pending overlap, local open use, opening leases, native opening and server-area recovery retire obsolete proofs. Wrong/stale replies, unavailable instances, data floors, owner/revision/position changes, unloading and disconnect remain covered. The native inventory bridge is unchanged from the reviewed 1.0.30 correction.
-
-All 21 verification groups pass on the final build, including 109 native inventory checks, 24,950 controller/grid/router checks with 13,272 actual-protocol additions, 23,101 native-release assertions with the same 50 Harmony targets per audited provider, and existing startup, camera, combat, fallback and optional PUP checks. Verified DLL SHA256: `25A12F936862127AA41C90D98905ADB8F95150611759D6D984FD34BA162C589A`. No live multiplayer test or measured in-game FPS improvement is claimed.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.30 local test build
-
-Two reported problems were investigated independently: one cell of unused server-owned chests that recovered after unloading, and a 10–15-second pause of visible ownership changes after another player teleported away, despite continued movement. The departing player owned no remaining local objects. The managed teleport tests remove the old footprint without that pause; there is no demonstrated extra teleport timer in the grid.
-
-## Inventory receipt recovery
-
-The unchanged 1.0.29 controller reproduced a permanent chest wait after the native source-to-server owner/revision receipt arrived but its positive OpenResponse did not. The old record survived the five-second reply deadline and each later automatic transfer returned Pending; unloading removed that record and made the current server-owned chest transferable again. The fix retains the response window, then retires only an exact completed server receipt for an idle local Container. It does not change an owner on timeout or resend to the former owner. Source-owned, incomplete, foreign and changed revision tuples keep their original rules. Local IsInUse, replicated inUse, pending inventory openings, privacy and active-use checks remain enforced. Late old responses cannot restore a retired record or overwrite subsequent ownership.
-
-## Narrow destination loading proof
-
-The broad native server IsAreaReady check can hold all local object writes while fine-grid policies continue updating. One missing instance in surrounding native sectors is enough. This is a verified blocking path, not proof that it caused the reported live teleport pause.
-
-When this check fails, only an already server-owned stationary interactive with no child Rigidbody may use an authenticated destination-client loading proof instead. The client must have the exact active instance, server owner/revision, captured minimum data state, matching position and its own complete native local area. Final identity, owner/revision, position, active-use and desired-grid policy checks still run before the write. Source-client commits, animals, vehicles and a server destination retain the full server-area check. Post-ownership recipient readiness remains separate and requires a new token/revision.
-
-The existing experimental handoff channel carries the proof; no new dependency, forced timeout transfer or version lock is added. An optional Hello capability and an appended message ID keep older clients on the original loading guard. The normal ready-server path sends no preflight RPCs. Blocked objects reuse one bounded per-object readiness entry and one stable retry token; retries are at most every 0.5 seconds while needed. Replies wake the existing pending work rather than writing owners from the RPC. Unload, disconnect and world reset remove proof state; an approved preflight is consumed inside the exceptional path, without a new cleanup delegate or tracking-table lookup on ordinary writes. No additional idle, physics or whole-world scan is introduced. Stationary eligibility is checked once when the loaded node is registered.
-
-## Validation status
-
-All 21 final verification groups pass: 109 native inventory assertions, 11,678 ordinary controller/grid/router assertions, 1,067 additional actual protocol/controller checks (12,745 total in that fixture), 22,753 native release assertions and 50 unchanged Harmony targets against each audited native provider, plus existing camera, cache, startup, fallback, combat and optional PUP groups. The first native audit caught an unnecessary cleanup delegate on ordinary transfer marking; moving consumption into the exceptional proof path restored that zero-tracking-table contract. The complete suite was rerun on the final build. Verified DLL SHA256: `F718261E4615BA3F1E95AAB3EC8414323B2D8531A44FAEF38E8D495C441F14B0`.
-
-No live Unity multiplayer test has been performed; the reported pause needs an in-game retest with the updated server and clients. Inventory recovery is server-side; the alternative loading proof requires updated participating clients and EnableExperimentalInteractionProtection=true. Prepared locally; not published or pushed.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.29 local test build
-
-## Interaction-readiness retry identity
-
-The prior experimental receiver gate allocated a new readiness token on every 0.5-second retry. With regular response delays above that interval and continuing interaction flushes, each response referred to an older token and could be discarded indefinitely, despite an actually loaded current owner. This was a source-level waiting-loop defect, not proof that every previously reported ownership problem had the same cause.
-
-ReadinessProbe now keeps one outstanding identity through unanswered retries. A completed unavailable response retires it; a higher required state floor, changed owner/revision/transport, unloading and scene/peer cleanup still invalidate readiness. Available replies retain the unload-notification token. Stale responses after invalidation cannot restore readiness. The inline value type adds no per-probe allocation, physics polling, new timeout, forced ownership or changed wire protocol. Actual owner consent, state and loading proofs remain required. The only other gameplay change here is EnableExperimentalInteractionProtection=true for newly generated configs; saved values are preserved, and ServerOwnedMobsByDefault stays false. Other pending mob/boss work in the shared checkout was preserved.
-
-Native CraftingStation.Interact opens the local crafting UI after native distance/roof/fire checks without checking ownership or making an owner-directed opening RPC. Door.UseDoor and owner-directed damage/repair actions use the routed path. Added controller fixtures exercise accepted and rejected source handoffs, delayed readiness across repeated retries, single door/repair delivery and subsequent interaction from another sender. These fixtures simulate transport; they do not execute a Unity crafting menu or door animation.
-
-All 20 verification groups pass on the final DLL. This includes 28 production probe checks with 0.05-, 0.6-, 1.2-, 3- and 10-second reply delays, state-floor changes, missing replies/retries and unloading/stale responses; 11,678 controller/grid/router assertions; 22,538 native release assertions and 50 unchanged Harmony targets against each audited native provider; and the existing mob, boss, inventory/refill, startup and optional-client groups. Actual compiled protocol metadata confirms use of the tested inline probe for query, response and invalidation. No live multiplayer result or measured performance improvement is claimed. Verified DLL SHA256: `659956640B7924E7825773923B659404BA6891B05377A6EB7D333EBDD6A28FF8`. Not published or pushed.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.28 local test build
-
-## Target-driven boss ownership
-
-`BossAlwaysServerOwned=true` and `BossPlayerRadius=30` are server-only, restart-only settings. Native AI player-target acquisition, change and loss drive the policy. A living current player target and two living eligible FiresGhettoNetworking players inside the boss radius select a guarded server handoff when Server-Side Simulation is active. Otherwise bosses use the ordinary Hostile Mob target/high-ping policy. Disabling the boss option or Server-Side Simulation performs no boss radius checks. This option does not change idle server-default exclusions. The separate NoServerSideSimulation=true player-simulation module retains its pre-existing boss exclusion; this change applies to the FiresGhettoNetworking/Server-Side Simulation combat module.
-
-The existing FiresGhettoNetworking prefab scan now includes bosses. Only an authenticated, revision-matched TooManyLags source commit can bypass its final boss-only veto. Original attack, stagger, dead, tame, riding, holding, possession and loaded/collision-readiness checks remain. Foreign/legacy requests still receive the native boss veto. Protocol 5 requires this version on server and participating clients; older peers retain native behavior.
-
-Player movement, rotation, entering/leaving the radius and unchanged owner-renewal reports do not recompute a boss radius. The next actual player-target change does. New watches bootstrap the authoritative target once. Pending requests, readiness/attack retries and existing native passes reuse the decision; none add a boss timer or movement/physics hook. Weak ZDO keys do not keep world objects or scene instances alive, and session reset discards decisions.
-
-Native source review found no timed AI suspension in FiresGhettoNetworking's handoff: final veto, ForceSendZDO, SetOwner, hit forwarding and reply run sequentially. The old owner's AI stops updating once it no longer owns the local replica; the new owner runs once ownership replication arrives and its update is due. A handover gap can therefore depend on network delay, replication scheduling and simulation load; there is no guaranteed duration. The native five-second pending window and six-second rejection cooldown schedule requests, not AI pauses. The latter is removed only for authenticated managed replies by the existing handoff fix. TargetSync adopts a valid enemy target within 60 metres; otherwise native MonsterAI target acquisition uses its usual two-/six-second search cadence. Attack blocking lets the existing owner finish its attack.
-
-All 20 verification groups pass. The combat suite passes 1,831 assertions on CLR and embedded Valheim Mono, including the new two-player boss choice, exact 30-metre boundary, dead-player exclusion, same-target owner renewal, zero repeated radius work over 10,000 retries, disabled rule, attack/stagger vetoes, collider wait, in-flight retargeting, legacy veto and reset. Actual prefab-scan/veto contracts pass against FiresGhettoNetworking 1.5.36, 1.5.41 and 1.5.53; the separate movement/physics code remains untouched. Existing grid, inventory/refill and handoff checks also pass. The generated config contains 50 settings, preserving previous defaults.
-
-Verified DLL SHA256: `6BCFC9106733699A18C81FE2C842367E4CAD41D4655D0117D69E65104EF319F3`.
-
-Local source changes only. No live multiplayer boss test, publication or remote push performed. Final verification results are recorded in verification.json.
-
----
-
-# TooManyLags - FiresGhettoNetworking Addon 1.0.27 local test build
-
-## Latest-target mob handoffs
-
-Only managed Hostile Mob handoffs change. The source still executes FiresGhettoNetworking's original commit, including its final attack/stagger/control vetoes, ForceSendZDO ordering and late-hit forwarding. Immediately before that commit, TooManyLags refreshes the real local AI target. An outdated target rejects the old request; its authenticated reply releases the pending slot and immediately retries the latest server report. This keeps high-ping fallback decisions on the server, instead of silently redirecting to a different player without rechecking that policy. No attack is cancelled or delayed by this change.
-
-An actual attack veto still arms the existing weak attack-end ticket. Attack end rereads the target and sends readiness even when the target changed, so an older delayed veto reply can consume that readiness immediately. Animation/attack chaining, stagger, holding, possession, riding, friendly summons, taming, boss and collision/loading restrictions remain effective. Existing FiresGhettoNetworking passes remain a fallback when the native animation still reports an attack after Stop.
-
-Requests carry a token and source owner revision. Only one identified commit can be in flight per mob; a native five-second timeout does not permit an overlapping commit. Accepted replies wait for actual owner replication rather than forcing the server replica. Replication then clears the native pending stamp and watches the new owner immediately. Duplicate source commits, late/foreign replies, changed revisions, destroyed objects and disconnected sources cannot complete a newer request. Matching server/client protocol support is required; older peers retain native FiresGhettoNetworking behavior.
-
-The native six-second rejection cooldown is removed only for an authenticated identified managed reply; a pre-existing or different cooldown is preserved. Native counters/cleanup and all actual vetoes remain. This is not a general bypass of other mods' ownership restrictions.
-
-## Runtime cost
-
-No new Update, FixedUpdate, physics polling or repeating timer is added. Empty replication callbacks perform a count check. Only outstanding requests are reconciled by received ZDO packets and the existing FiresGhettoNetworking balance pass. Records contain pending ZDO/peer references, not a world-wide completed-object cache; world reset, invalid/unloaded objects, owner revisions, active-area exit and disconnects prune them. Source token fences use weak connection keys. Stable AI targets still produce no repeated target writes or RPCs. No live performance measurement is claimed.
+The obsolete PlayerSimulation.Settings.Logs field/read/live assignment is removed: errors use the central always-on sink and optional diagnostics use the existing root flag. EnableLogs remains configurable locally and live. Config descriptions/wiki now state that errors and warnings are always reported.
 
 ## Verification
 
-All 20 verification groups pass. The combat suite passes 1,795 assertions on CLR and embedded Valheim Mono, including pending target changes, attack-end target changes with an overdue veto reply, source replay, acceptance before replication, high-ping re-evaluation, unrelated cooldown preservation, legacy fallback and cleanup. Actual native/compiled IL contracts pass for FiresGhettoNetworking 1.5.36, 1.5.41 and 1.5.53. Inventory/refill/grid safeguards, optional PUP readiness and generated configuration checks also pass. These are managed/runtime and metadata checks, not a live multiplayer session.
+verification.json records each fresh suite. The compiled normal/debug audit asserts metric fields absent only in normal output, solo/latency code still absent, unchanged method bodies exactly match .80, and unrelated normal/debug bodies match. Explicit changed-method allowlist is limited to queue diagnostics, optional-statistic compile boundaries, error logging and config text. Flight checkpoint, visual curve, target/attack handoff decisions and movement implementations remain byte-identical in source to .80 except pure statistics/error reporting.
 
-Not published or pushed. Update server and participating clients together for the new mob handoff behavior.
-Verified DLL SHA256: `97A1374CC1C796CAF440AC67C09A5077079429C01DA3745B28A9E4BE27729D2B`.
+DiagnosticLoggingAudit copies actual emitted Plugin.Warn/RuntimeFault/RequestFault bodies into a managed harness, replacing only Unity object liveness and BepInEx logger sinks. It runs them with diagnostic logs off/on, checks message content, null/destroyed lifetime safety and verifies .80 as a negative control (old errors are suppressed with logs off). This tests real compiled branches, not a restatement of logging logic. It runs on CLR and embedded Valheim Mono. Metadata/source checks reject lingering active metric fields, the per-node request-count backing field and optional-log gates around error calls.
 
----
+Both ordinary integration and GridProtocol initial-load suites run, covering actual deferred request queues, native delivery/refusal/expiry/cleanup, inventory, harvest loading and initial readiness. Normal/debug combat/attack/boss/PUP, player-simulation, flight/visual, config, camera and network state-transfer suites also run. The existing PUP Stopwatch budget remains: it limits native preparation work rather than collecting debug statistics.
 
-# TooManyLags - FiresGhettoNetworking Addon 1.0.26 local test build
-
-## Optional mob defaults
-
-`ServerOwnedMobsByDefault=false` is a server-only, restart-only setting. When enabled with Server-Side Simulation, idle tamed animals get a server default outside player fields even with the interactive default disabled. Their existing category toggle, grid timers, active-use/follow/riding exclusions, loading check and KeepOwnershipOnCellExit rule remain effective. Existing tame behavior with ServerOwnedInteractivesByDefault remains unchanged. Isolated stationary interactions still use native ownership when their default is disabled; the fine grid remains active for enabled tamed animals.
-
-Hostile Mobs additionally require the existing AI module and participating owner client. A valid current-owner report without a player target requests the same guarded FiresGhettoNetworking server handoff as the existing high-ping exception. Player targets retain the existing target ownership/high-ping policy. Friendly creatures, bosses, possession, taming and active controls retain their exclusions. Already server-owned mobs outside this policy's leases are left alone. Readiness at canonical and differing live poses, optional PUP proof, source consent/vetoes, pending requests and existing transfer caps remain unchanged. Dynamic mobs are not assigned to the server early through the new stationary-object native selector.
-
-The optional candidate index records loaded non-player actors using AddInstance and view/scene unload hooks, only when the setting is enabled. It retries delayed owner capability, reports, readiness and handoffs on FiresGhettoNetworking's existing two-second pass, including solo sessions; it performs no world scan or per-physics polling. Unload/reset removes records, and the pass also prunes invalid/missing instances. Stable idle server ownership performs no repeated collider-readiness proof or owner write; pending/cooldown/source-budget checks precede expensive readiness work. There is additional bounded bookkeeping when enabled, and actual server creature simulation can increase CPU use. No new performance benchmark is claimed.
-
-The setting is captured at startup: saving a new value through the console cannot partly activate/deactivate the running AI mode. Inventory, refill, interaction protection, standalone/player-simulation mode and the 1.0.25 stationary native assignment selector were not changed.
-
-All 19 verification groups pass on the final DLL, including 11,626 full-controller/router assertions, 1,752 AI runtime/target/lease assertions on CLR and embedded Valheim Mono, actual optional lifecycle-hook installation, generated BepInEx defaults and reload, native release/transpiler composition, and the latest-provider Pickable audit. Added fixtures cover solo tame ownership independent of the interactive default, native loading waits, usage exclusions, idle hostile handoff/retention/target return, pending-proof avoidance, absence of Server-Side Simulation, no-player release, loaded-cache cleanup and restart-only activation. These are managed/runtime and metadata checks, not a live multiplayer session. Existing wire protocols are unchanged; the new policy executes on the server. Not published or pushed. Verified DLL SHA256: `55F43DBAD242BE0AD1A0EF5E41E79B97D6C6C261CD8FE77C76BA0A8B3DF70FE7`.
+No live multiplayer or CPU benchmark. Expected saving is small event-driven statistic bookkeeping and one obsolete per-node field; no claim of higher FPS, lower ping or changed handoff timing. Always-on error logging intentionally still costs formatting/output when an error actually occurs.
 
 ---
 
-# TooManyLags - FiresGhettoNetworking Addon 1.0.25 local test build
+# Flight handoff candidate 1.0.80
 
-## Vanilla assignment target selection
+Based on hash-verified normal/debug 1.0.79; published=false, installed profiles unchanged. Historical sections below describe earlier candidates and are retained as history.
 
-Only the assignment target inside ZDOMan.ReleaseNearbyZDOS changes. Its active-owner and active-area branches, release-to-zero write and approximately two-second native cadence remain unchanged. With ServerOwnedInteractivesByDefault=true, enabled stationary interactives outside active grid requests select the dedicated server; settled requests select their existing grid owner, and unsettled requests retain vanilla's proposed owner until the field timer completes. An active existing owner is not stolen by this path. Native reassignment from an inactive owner remains possible. Vehicles, characters, rigid bodies, private/multiple inventories and categories disabled in config retain their previous initial-assignment behavior.
+## Flight checkpoint and native contracts
 
-Server defaults remain owned while a ready player's native active area covers their zone. This compensates for vanilla checking the server UID against its own reference position and prevents server-to-zero-to-server churn before instance registration. Active-area results are shared per native zone within the existing pass cadence and cleared on tick/reset; prefab classification is cached separately from the live-instance catalog. No per-object ownership receipts, additional RPCs, timers, simulation hooks or client changes were added. Original inventory, refill, combat, collision and guarded grid-handoff code remains unchanged.
+MobFlightHandoff wraps only the final guarded FGN OnHandOff owner write, plus the existing direct server, tamed-grid and player-simulation source commits. Native vetoes, destination readiness, attack boundaries and late damage forwarding remain. A transient negotiated RPC precedes the final owner record; a server relays client-to-client checkpoints before the later ownership record. No final acknowledgement or added handoff wait is introduced. Legacy peers get native handoffs.
 
-This deliberately minimal experiment uses vanilla loading behavior for the initial assignment. It does not add a new simulation gate or certify server building/collider readiness. Server simulation can start earlier for eligible objects; live multiplayer loading, production drops and stability must still be tested with the actual server mod set. Existing actively owned objects can still wait for the original guarded handoff/readiness path.
+The checkpoint carries runtime flying/ground mode, native random-flight phase, body velocity, movement accumulator/direction/run and turn accumulators. Native circle/wander destinations carry remaining durations, rebased to the recipient clock; actual fresh target choices discard old movement goals. Mismatched goals wait for matching native target adoption instead of overriding targets. Restoring does not call TakeOff/Land, animate attacks, change gravity, unfreeze bodies or bypass PUP. Kinematic bodies retain their native velocity policy.
 
-Fixture tests exercise the real Harmony rewrite on a simulated native ownership loop: early server assignment before IsAreaReady, no repeated owner writes across a 65-second unready window, unchanged active owners, native inactive-owner reassignment, settled/pending/overlapping fields, category exclusions and release after unload/disconnect. Actual game IL tests verify exactly two added stack instructions, preserved branch labels/exception blocks, unchanged release write, and composition with the imported AI policy in either order. No live Unity multiplayer or measured performance result is claimed.
+Apply once after the complete native RPC_ZDOData owner/deserialize pass, or after BaseAI.Awake for a late native instance. Match identity, prefab, source/destination ownership epoch, authenticated connection and negotiated capability. Drop stale/expired/superseded packets. Pending state is capped at 256 IDs, expires after five seconds on packet/instance processing, and clears on world/network replacement or shutdown; weak deferred goals do not retain AI instances. No new per-frame poll, idle AI scan or persistent ZDO key.
 
-All 19 verification groups pass for the final build, including 11,608 full-controller/router fixture assertions, 22,496 native release assertions and 50 unchanged Harmony targets against each of FiresGhettoNetworking 1.5.41 and 1.5.36, and the previously introduced latest-provider Pickable check. Established managed objects return through the original persistence fast path before the new zone/prefab checks. Existing 1.0.24 client endpoints remain compatible; this change installs only on the server. No publication or remote Git push was performed. The verified DLL SHA256 is `90F872FD60DD7810A1E9D2AD34885FC081F2EB20DDF59EAE43B9B935D67D6D24`.
+Managed wire encoding measures 86 bytes without movement goals, up to 118 with both. Add 12 bytes for the separate object ID plus RPC/package/transport framing per leg. Client-to-client relay uses two legs. These are payload sizes, not measured physical-link traffic.
 
----
+Native sources: installed assembly_valheim.dll; FiresGhettoNetworking 1.5.72; verified native JotunWitch prefab audit in ../JotunWitchHandoffAudit-2026-10-25. Character.UpdateFlying consumes m_moveDir/m_currentVel; BaseAI.UpdateTakeoffLanding uses runtime m_flying/m_randomFlyTimer. FGN's owner-gain pre-snap retains native position/rotation ownership and is not replaced.
 
-# TooManyLags - FiresGhettoNetworking Addon 1.0.24 hotfix validation
+## Presentation
 
-## Pickable patch composition
+For flying/random-flight actors the native 3D trajectory supplies height. Existing horizontal lead and bounded turn preview remain; fly turn speed uses m_flyTurnSpeed. A separate residual reconciles only excess native Y correction, allowing observed velocity and one physics step of slack, bounded at 25cm and by the existing handoff lifetime. Correction deltas never become velocity; no artificial second vertical arc is generated on a stationary native root. Native root, collision, animation time and gameplay state are unchanged by rendering. Continuous native climb/descent/reversal remains the baseline, rather than damping every valid vertical motion.
 
-The reported failure disables the entire object grid during startup. Published 1.0.23 expects one original Player.m_localPlayer/GetZDOID instruction pair; newer FiresGhettoNetworking's ServerSafePick replaces it with a null-safe LocalPlayerZdoid call and a nop before TooManyLags runs. The original rejection was reproduced with the published DLL, actual native method IL and the actual 1.5.53 helper metadata.
+## Validation scope
 
-The fix accepts exactly one known safe FiresGhettoNetworking call/nop pair and leaves it untouched. The original vanilla rewrite remains available for older providers. Unknown signatures, missing/duplicate actors and unexpected stack shapes still fail closed. This adds only startup transpiler inspection, with no polling, object scans or per-interaction checks.
+Fresh suites are recorded in verification.json: normal/debug build omission and exact unrelated method comparison to .79; combat/Mono/PUP; debug latency; flight managed/embedded-Mono wire and lifecycle tests; native field delegates/Harmony install/uninstall; visual trajectories/native hooks; player-simulation/grid/inventory/refill/text/loose-item integration; config/camera/state transfer. Test-only logic remains absent from the normal DLL. Changed gameplay methods have explicit audit allowlists plus functional tests; unrelated compiled methods must match .79.
 
-Source comparison against the fully verified 1.0.23 source package confirms only PickableServerPatch.cs and Plugin.cs differ in production; Plugin changes are version metadata only. Grid, handoff, inventory, refill, collider and AI code are identical. Four focused verification groups pass for the new binary: native contracts, real-BepInEx session settings, full-controller/router integration and imported combat. These include 50 exact Harmony targets against FiresGhettoNetworking 1.5.41 and 1.5.36, 865 latest-provider Pickable assertions, 74 settings assertions, 11,516 controller/router assertions and 708 combat assertions. The 1.0.23 baseline passed all 19 full verification groups; unrelated suites were not rerun for this narrow hotfix.
+Flight fixtures exercise guarded source commit, server/client relay, timing/revision, native adoption, phase/mode, kinematic holds, duplicate/stale/malformed data, late instances, transport failure and cleanup. Visual fixtures include 50/100/200ms continuous rise/fall/stationary trajectories, correction bounds and finite cleanup, alongside the unchanged horizontal trajectories. Fixtures model transport/native transforms and use yaw math; they are not real Unity animation, collision, full 3D camera or live Steam tests.
 
-The latest-provider Pickable tests inspect the actual FiresGhettoNetworking producer IL and model its two substitutions with the real helper MethodInfo, checking both patch orders on actual native IL and unchanged labels/exception blocks. They do not execute a live Harmony installation: the legacy HarmonyX AccessTools initializer is incompatible with the modern metadata host. No live Unity multiplayer or performance measurement is claimed.
-
-A separate exploratory audit found that FiresGhettoNetworking 1.5.53 wraps startup in AwakeCore and adds the SssQuietPass simulation group. This hotfix certifies its reported Pickable composition, not all latest-provider modes; the existing NoServerSideSimulation installer preflight still rejects unknown simulation groups, and that safety guard is not changed here.
-
-The verified DLL SHA256 is `E9B9B16EF4EA8A02CBF75AD11D761251CA996521E78DA83B8C2EBBD9CBB5A311`. verification.json records the focused results, prior baseline and unchanged production scope for this binary.
+Not claimed: visually perfect or lossless transitions for every creature/mod; migration of all private damage/status-effect runtime fields; cross-transport ordering guarantees under arbitrary third-party packet reordering. This change specifically carries flight continuity and removes the reproduced extra vertical excursion. A real JotunWitch 100/200ms solo test remains necessary.
 
 ---
-# TooManyLags - FiresGhettoNetworking Addon 1.0.23 release validation
 
-## Server-controlled enable switches
+# Compile-time debug system 1.0.79
 
-Enabled and EnableAIOwnership are now server-only startup choices. Client Awake binds descriptions/defaults but does not use either local value to enable or suppress runtime modules. It installs the settings/startup endpoint and waits for an authenticated dedicated-server response before applying temporary FiresGhettoNetworking overrides, starting camera/handoff support and initializing ownership modules. The server reports its active startup state, rather than saved restart-pending values; its actual available AI module determines AI support. Both switches still require a server restart. A disabled server retains the passive settings endpoint and admin console so clients can receive OFF and a future enable can be saved.
+Local candidate based on the hash-verified .78 build. `build.ps1` defaults to **DebugSystem off**. Only `-DebugSystem` defines `TML_DEBUG_SYSTEM`; its DLL is written to `bin/debug-system`, independently of the normal `bin/TooManyLags.dll`. Both variants retain `TML_RELEASE`, optimization and warnings-as-errors.
 
-The per-connection startup response validates native peer/socket identity, server role, readiness, protocol and allowed flag combinations. Duplicate responses cannot toggle the session, old-peer replies cannot enable a new connection, missing responses have at most fifteen two-second attempts, and a confirmed response stops polling before network/object lookups. Configuration and camera settings retain their separate authenticated endpoints. Session start explicitly registers existing grid/AI/player-simulation peers because their native OnNewConnection event has already occurred. Camera configuration is reacquired before publication. AI selection, attacks, leases, collision safeguards and ownership algorithms are unchanged.
+The normal DLL entirely omits FgnSoloCombatTest, SoloNetworkLatency and their nested state/closure types, Plugin.TestLog, SoloEligible/SoloPrepare/HoldForSolo, the synthetic boundary flag, six test RPCs, capability probes, per-frame test polls and selected-mob PUP tracing/postfix. There is no runtime disabled stub, bool check or empty test callback. EnableLogs and normal owner/status diagnostics are independent and retained. The actual target/attack boundary, handoff protocol, visual bridge, tamed-animal guards and PUP collision preparation/readiness remain.
 
-Client settings are copied only into disposable runtime references; original config files are not overwritten. Disconnect/world shutdown removes this session's hooks and clears its capabilities/queues, restores original FiresGhettoNetworking references only if they still point to this mod's replacements, and restores a suspended prior mob policy. The player-simulation mode keeps its existing negotiated activation and safeguards. Standalone is not changed.
+The optional debug build retains .78's existing test behavior, including start 100/200. Mixed normal/debug endpoints cannot negotiate test capability; normal gameplay uses the unchanged protocol. A build option cannot be toggled by editing a live config: replace the DLL and restart. The two variants share plugin identity/version and must never be installed together.
 
-All 19 verification groups/native-version runs pass, including seventeen authenticated startup/OFF/AI/reconnect/retry cases, ninety console cases, thirty-five camera recovery cases and seventy-four real-BepInEx startup/settings cases. These cover idempotent restoration and preserving a later override from another mod. Native audits confirm 50 exact Harmony targets against FiresGhettoNetworking 1.5.41 and 1.5.36; the imported AI algorithms retain their reviewed source hashes. Existing grid, inventory, refill, active-use, collision-readiness and player-simulation checks pass. These use managed transport/runtime doubles and actual assembly metadata; no live Unity multiplayer or performance measurement is claimed.
+## Verification and packaging
 
-The final DLL SHA256 is `6DF37B0C572776CAB715DC3CC29B4EF656EA48DE78F905BF761908C1C3047605`; verification.json records the results for this binary. Release preparation changes only the changelog and this report, retaining the fully verified DLL, configuration and README.
+`test-debug-build.ps1` inspects the emitted assemblies with Mono.Cecil, including all nested types, metadata references, method signatures, fields and instruction operands. It rejects test modules/commands/RPCs/polling/tracing in normal output, checks that only explicitly named test helpers/state disappear, compares every debug method body to verified .78, and compares unchanged normal/debug method bodies. Compiler-generated constant-data identifiers are normalized by array bytes; branch targets are compared by instruction index. The .78 version string alone is normalized to .79.
 
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.22 local validation
+Combat fixtures/native API audits run in both modes, also on embedded Valheim Mono. PUP fixtures exercise normal collision priority, near/distant actors, native refusals, budget and lifecycle in both modes; only debug fixtures retain selected-mob trace assertions. Debug-only socket/latency hooks and queue tests, normal visual fixtures/native hooks, config migration, camera recovery, grid integration and state-transfer checks run again. Other byte-identical production behavior uses the verified .78 source-hash baseline; the receipt identifies every fresh suite and does not claim a fresh run of all historical tests.
 
-## Optional experimental interaction protection
+`verification.json` binds both DLL hashes, build modes, production source hashes and current script/test/document hashes. Packaging checks normal and debug mode receipts and each DLL hash; the normal install archive and separate debug-system archive each receive the matching verified DLL. The ordinary publication helper accepts only the normal receipt hash. Source ZIP includes scripts/tests needed to reproduce both modes. Existing profile DLLs and Git remotes are untouched.
 
-EnableExperimentalInteractionProtection is a server-only restart setting, default false, in section 07. It controls the additional identified source handoff, recipient-readiness and client relay protocol introduced in 1.0.15. The enabled path retains the 1.0.17 protection and the connection-confirmation/source-synchronization corrections from 1.0.21. The previous versions are not identical: 1.0.17 narrowed receiver checks and moved their state floor into existing loaded nodes; 1.0.21 corrected two demonstrated handoff stalls without replacing the protocol.
+No live Unity/Steam session or in-game visual comparison was run for this change. This build switch removes test-system work; it does not remove gameplay guards, improve a network link or resolve the separately documented low-ping player-to-player combat policy question.
 
-With the setting false, the dedicated server does not start or offer that protocol. Capability admission, identified sends/status probes and recipient-readiness callbacks are absent; the normal grid still starts and uses the earlier native FiresGhettoNetworking source handoff or existing vanilla assignment fallback. Clients register support but activate it only after an authenticated server offer, so their local config value cannot override the server. This deliberately disables the extra protections and their 1.0.21 fixes for comparison; it is not a claim that the older path prevents every interaction race.
+## Historical .78 validation (debug build only where test-specific)
 
-Native public-container consent, open-inventory flags, refill leases, active-use exclusions, ordinary request routing, overlap cooldown and mob ownership remain unchanged. NoServerSideSimulation mode keeps its separate player-simulation safeguards and ignores this setting. Console changes save the setting for the next server restart and distinguish its pending and active values.
+# Solo connection latency test 1.0.78
 
-All 19 verification groups/native-version runs pass for this build, including 50 exact Harmony targets against FiresGhettoNetworking 1.5.41 and 1.5.36 and the unchanged imported combat-source hashes. Actual BepInEx generation/reload checks confirm 47 settings in ten ordered English sections and the false default. The console fixture passes 87 checks, including server-only scope, saved restart changes, pending/active mode reporting and persistence. The full-controller/router fixture passes 11,516 assertions; its added disabled-mode case transfers a door between players 100 metres apart through the original two-argument FiresGhettoNetworking message without a TooManyLags capability greeting or recipient-readiness state, while preserving open-inventory and refill guards and native container consent. Existing identified-protocol tests retain coverage of the enabled path.
+This local candidate starts from the verified 1.0.77 combined build. Production changes are restricted to the new SoloNetworkLatency.cs, the optional FgnSoloCombatTest control/setup path, and plugin version/poll integration. The .77 visual curve, combat/source transaction, actual ownership guards, grid, inventory, loading and PUP implementations are byte-identical. No new persistent config or default change is introduced. Not published or installed into a live profile.
 
-A byte-for-byte source comparison against the 1.0.21 source package finds only src/Plugin.cs changed among all 59 production source files. Camera, grid, both simulation modes, native guards and imported mob logic retain their previous implementation. The final DLL SHA256 is `20816631535567112313ADA8F0B1460A0AED9AF75740DB84C1B8C656535CBE05`; verification.json records the results for this binary. This is a local test package, not a published release. No live Unity multiplayer test or performance measurement is claimed.
+## Scope and timing
 
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.21 local validation
+`tml_ai_test start 100` means target 100ms round trip, not 100ms in each direction. At setup the client reads the concrete transport RTT; the nonnegative difference to the target is split equally between outbound and inbound ZRpc game-message delay. An existing RTT above the target cannot be reduced. Timing follows the client's monotonic clock and frame pump; frame waits and later physical RTT variation are additional. No cross-machine timestamp comparison is made.
 
-## Interactive source handoff recovery
+The client retains the original concrete ISocket objects. A reviewed one-call substitution in ZRpc.SendPackage snapshots raw outbound packets before the normal socket/compression chain; the two native receive call sites in ZRpc.Update collect already decoded incoming messages. Delayed packets retain bytes, reader position and FIFO order. Each concrete native send/receive path executes once. The concrete quality postfix applies only to the captured client socket and exposes physical RTT plus injected delay to the existing visual bridge. Other connections stay native. This is application-layer delay, not actual Steam RTT manipulation, bandwidth/loss emulation or a guarantee of exactly 100ms observed latency.
 
-Two failure paths in the identified handoff introduced with the 1.0.15 baseline were reproduced before their fixes: a verified TooManyLags endpoint was still rejected until the separate FiresGhettoNetworking version greeting matched, and a source with older native ownership could keep its request reconciling before incurring an unrelated six-second veto delay. Both previously failing state tests now pass. The exact cause on the user's live server is not established; these fixes address demonstrated code paths rather than claiming that the reported multiplayer session has been reproduced.
+Latency hooks exist only during the explicitly started test and drain. The server requires its native admin check, exactly one player, matching updated endpoint capability, active Server-Side Simulation, a nearby eligible mob and a matching setup acknowledgement before arming any transfer. Repeated/wrong acknowledgements do not arm another request. Basic `start` remains native-timed and compatible with the earlier readiness protocol. Active FGN NetSim on either endpoint refuses setup rather than stacking another hidden delay. Do not enable fgn_netsim during this test.
 
-Identified requests use their authenticated TooManyLags endpoint and locally validated FiresGhettoNetworking callback. Legacy FiresGhettoNetworking wire requests retain their original version-greeting check. Native Veto, open inventory, refill, active-use and collision guards stay enabled. The normal grid's source-owner consent path remains distinct from the tamed-animal path. Neither the overlap cooldown nor target-based Hostile Mob ownership is changed.
+Normal stop/expiry stops holding messages and drains accepted outgoing/incoming data before later native data; there is no forced owner reset. Disconnect, changed world, changed peer/socket and invalid session clear only stale-session queues. Existing five-minute, second-player and distance/death termination still apply. A 32MiB/8192-message bound aborts artificial holding and drains accepted traffic in order. There are no sleeps, global network setting changes, permanent per-mob queues or extra ownership writes. When unused, latency polling is one null check and no latency Harmony hooks exist.
 
-Capability offers can now be answered before world-object initialization. New offers distinguish an advertisement from an acknowledgement, preventing a lost/early client Hello from being mistaken for completed negotiation. A client answers only an authenticated offer for the active dedicated-server mode, retries at two-second intervals for at most thirty seconds and stops after confirmation. Camera-settings acquisition also repeats a missed server offer. The player-simulation mode sends no unsolicited grid greetings. A new connection gets independent state, and shutdown clears it. There are no world/object scans after greeting confirmation. The old header-only Welcome format remains supported.
+## Verification
 
-A fenced response showing an older source revision causes native owner data to be sent to that actual source. While it catches up, status probes use a 0.5-second interval without repeating the original commit. Once the source reports the original current native tuple, a fresh identified attempt may follow the current grid policy without a false six-second use-veto backoff. Genuine rejections retain their previous backoff. Future tuples, partial receipts, changed owners, disconnected peers and uncertain commits retain their guards; a timeout never authorizes stealing ownership. Late older source snapshots cannot replace a newer recipient-readiness requirement.
+The production network module runs with real Harmony against controlled clocks/sockets on CLR and Valheim Mono. Assertions cover 20ms base + 40ms each direction, 0ms base + 50ms each direction, a higher native RTT, real packet waiting, RPC scratch-buffer mutation, reader position, ordering, one encode/decode per packet, other-socket isolation, ordinary stop/drain, disconnect/world/peer cleanup, timeout, over-limit abort and native restoration. Actual game ZRpc send/receive and Steam quality hooks are installed/JIT-compiled/uninstalled under Valheim Mono; native call-site counts and authority/blocking/global-setting exclusions are audited.
 
-Focused checks pass 68 legacy handoff and 59 identified handoff/fencing/greeting assertions, 35 camera-settings recovery/authentication checks, and 11,500 full-controller/router assertions. The controller case places two players 100 metres apart within overlapping native loaded areas but separate 4-metre Rounded7x7 footprints: all four interactive categories remain native-owned until both endpoints confirm, then request the nearby player without movement and without the independent FiresGhettoNetworking greeting. The idle tamed animal transfers through its separate protected path before endpoint confirmation, reproducing the reported distinction. A hundred later ticks produce no repeated commit. Tests also retain active-use backoff, stale-command fencing, readiness state floors, native receipt ordering and existing zero-work stable-grid scenarios. Transport and Unity execution are simulated; no live multiplayer reproduction or CPU measurement is claimed.
+The existing production solo/combat fixture additionally checks capability/admin/single-player admission, delayed setup before first arm, duplicate/stale acknowledgements, setup failure/timeout, stop cleanup, out-of-range targets and both native FGN NetSim conflicts. verify.ps1 rebuilds the real addon, generates/reloads BepInEx config and reruns the relevant latency, combat/Mono/readiness, visual, startup, grid/protocol integration and state-transfer suites. Exact outputs/hashes are in verification.json. Remaining unchanged production/tests retain the hash-verified .77 baseline; no fresh run of every unchanged suite is claimed.
 
-The final source build passes all 19 verification groups/native-version runs, including 50 exact Harmony targets against FiresGhettoNetworking 1.5.41 and 1.5.36, native inventory contracts, both simulation modes and the unchanged imported combat-source hash checks. The final DLL SHA256 is `333A7296720E84862569F7CA2EF0805A486CD5AB5FC3471BDEFA8899331E14C9`; verification.json records the results for this binary. This is a local test package, not a published or live-tested release.
+No live Unity world, Steam/PlayFab session, gameplay at a measured 100ms, complete third-party Harmony graph or visual quality comparison was executed. Client/server installation and in-game comparison remain required. This diagnostic does not improve the ownership algorithm or claim to reproduce jitter, loss, congestion or server overload.
 
-## Preserved grid and camera changes from 1.0.20
+## Earlier .77 validation (retained functionality)
 
-GridCellSizeMeters now accepts 4, 6.4, 8 and 16 metres; the default remains 4 and size changes require a server restart. The binding uses Single, while existing integer config values remain readable. Both simulation modes use the same fractional geometry. Ten subdivisions per 64-metre native zone use the exactly representable 10/64 coordinate scale, preserving the native +32 origin, signed zone mapping and existing exclusive world bounds without dividing positions by a rounded Single 6.4.
+# Native-relative visual bridge test 1.0.77
 
-Registered server objects cache their native-zone key and exact cell bounds at registration and actual cell changes. Repeated region/persistence checks perform the existing HashSet lookup without division by ten; within-cell movement uses the cached bounds. These values live on existing loaded nodes and disappear with normal object removal/world reset. No extra polling callback, object scan, ownership RPC or persistent world cache is added. Existing power-of-two sizes retain their shift-based native-zone mapping, and inventory/refill/collision safeguards are unchanged.
+This local candidate starts from the verified 1.0.76 combined build. Only MobHandoffVisual.cs, MobVisualCurve.cs, configuration descriptions and plugin version metadata change in production. All grid, combat-boundary, state-transfer, inventory, tamed/PUP readiness and session-negotiation implementations are byte-identical to 1.0.76. EnableMobHandoffVisualBridge remains true by default; this is not a published release.
 
-The joint final verification passes all 19 recorded suites/native-version runs. New tests include 459,470 server-simulation and 452,909 player-simulation geometry assertions across all native-domain zones, negative boundaries, legacy equivalence and cache cleanup; 12 real BepInEx config/settings round-trip checks; fractional console input and restart handling; and expanded full-controller ownership/overlap, moving-animal residence, precise cached bounds and unload checks (11,364 total controller assertions). Existing camera/prediction suites pass with the shared source. The final DLL SHA256 is C0C8BC1A9A47544AF5840B446E2FF7D7A87D16EED442682D3AA4C4E31637D5E0. These are automated/native-source checks, not a live Unity multiplayer or whole-server performance measurement.
+## Corrected presentation
 
-CameraRotationPredictionSeconds defaults to 0.1 and accepts 0–0.5; zero disables it. The client estimates signed angular speed from its existing camera samples, caps the predicted advance to 45 degrees and adds at most one adjacent direction. Actual camera coverage is always retained. A predictive fringe hold lasts no more than 0.1 seconds, uses the existing camera cadence and never delays an actual-coverage change. Missing/vertical cameras, stale/backward samples, session/owner changes and large position jumps reset prediction.
+- Native root extrapolation is the sole movement baseline, including transform updates between LateUpdate and camera rendering. A short slowing preview adds only motion/turn progress not already supplied natively. Real progress consumes this extra lead; it cannot hold the model behind an already moving root. Additional lead is bounded to 0.25m and 10 degrees.
+- Recovery fades only the remaining render offset. No root-position derivative is interpreted as velocity, no spring momentum is injected by correction packets and no independent absolute preview path is pursued. This does not remove an actual native network correction or native owner-gain snap.
+- Each handoff captures its own measured socket RTT. Its changed replica revision or RTT deadline starts recovery, using only this handoff's elapsed time. The preview window is 0.04-0.6s; finite recovery is 0.04-0.2s. There is no shared delay history, permanent per-mob timing cache or wait for a missing packet. A new owner/revision invalidates the old track.
+- Capture no longer calls SyncNow: the native owner-gain branch of that method can move the root, making a previously captured pose stale. State publication remains in the unchanged native/source handoff path. The presentation module sends no RPCs or ZDO writes.
+- Existing collider-free hierarchy checks, attack/use/epoch/world fences, exact render-pose restoration, nested cameras, 32-track bound and disabled-mode teardown remain. Unsupported hierarchies retain native rendering. No additional server simulation or per-frame traffic is introduced.
 
-All 56 coverage variants are precomputed: legacy single/pair/triple masks plus 32 masks preserving the base coverage and marking only forecast-added cells as inner/red. Base cells retain their original configured tier, and cells count once per player, so three directions alone never create server ownership. Changed coverage reuses the one native player-ZDO integer and send priority; no velocity reports, per-frame network traffic, physics callbacks, new object scans or world caches are added. Existing inner/forward/outer delays, overlap-only ownership cooldown, inventory/refill protection and recipient/collision gates remain unchanged. The player-simulation grid uses the same masks and red forecast rule.
+## Reproduction comparison
 
-Prediction settings use an authenticated, capability-negotiated camera-settings endpoint (revision 4). Earlier prediction endpoints disable the new forecast masks. Older camera clients receive their supported settings; new clients fall back to the previous settings request when an older server cannot negotiate prediction. Old settings disable prediction, and delayed older replies cannot downgrade a completed new negotiation. Admin live tuning broadcasts the setting without resetting object handoffs. Tests cover predictive membership, wrapping, reversals, idle expiry, disabled mode, triples/priorities, real-player overlaps, cache cleanup and settings authentication. Verification results refer to the final DLL in verification.json; no live Unity multiplayer test or CPU/latency measurement is claimed.
+The six original trajectory scenarios run against the production module and a port of the actual game's non-kinematic free-root ClientSync math (50Hz physics, 60Hz rendering, simulated packet delivery). This is a deterministic managed model, not a live Unity/network benchmark.
 
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.17 release validation
+| Scenario | 1.0.76 maximum visual frame step | 1.0.77 maximum visual frame step | Same native frame step |
+|---|---:|---:|---:|
+| Extrapolation without fresh state | 2.030m | 0.040m | 0.040m |
+| Steady movement, 50ms packets | 0.042m | 0.042m | 0.042m |
+| Attack during recovery | 0.294m | 0.084m | 0.084m |
+| Ownership return during recovery | 0.544m | 0.272m | 0.272m |
+| Early non-pose revision | 0.042m | 0.042m | 0.042m |
+| One missing render frame | 0.119m | 0.084m | 0.084m |
 
-## Transfer bookkeeping without a separate readiness-scope cache
+Maximum preview/native separation across these scenarios drops from 1.99m to under 0.048m. The explicit 0.4m stationary-root correction no longer overshoots to 0.426m or produces backward recovery frames; it remains exactly the native 0.4m correction. A preceding mob's 800ms update wait no longer gives the next 50ms-RTT handoff a 600ms window: its window/recovery stay 50ms and it has ended before the next 500ms test request. Native turns and root corrections arriving after LateUpdate also retain priority.
 
-RecipientRequirement is now a 16-byte value stored directly in each existing loaded NativeNode. A direct client-directed ownership write updates this value in place: no ConditionalWeakTable access, separately allocated record, readiness-dictionary lookup or delegate invocation. The source result handler stores its reported revision/state floor through the existing node index, without touching the readiness reply cache. Reply-cache invalidation is deferred until Ready is actually called for an interaction; it compares the latest monotonic node floor before trusting a cached acknowledgement. The records and readiness state remain tied to the loaded identity and current connection. Removing/resetting nodes removes access to their metadata; late source state cannot recreate unloaded records.
+The trajectory assertions enforce native-frame tolerance, finite completion, bounded offset and expected owner-write counts. Separate production fixtures cover bounds, guards, rendering lifecycle, callback integration and independent timing on CLR and Valheim Mono. The real game/FGN methods are inspected and the actual Harmony source hooks installed/uninstalled under embedded Valheim Mono. verify.ps1 reruns the combined suites and records exact outputs, DLL/source/artifact hashes and the unchanged 1.0.76 baseline in verification.json.
 
-This trades 16 bytes in every loaded managed node for removal of the previous weak table and its touched-object records. It does not add a new world cache, periodic scan, timer or physics callback. Actual native ownership assignment, initial area/use validation, source commits/results, uncertainty reconciliation and existing data-send priority remain unchanged. Only the bookkeeping and lazy reply invalidation are changed. Both same-revision source floor monotonicity and resetting the floor on a new owner tuple are preserved. The player-simulation mode is unchanged.
+## Limits
 
-The recipient gate is not restricted to currently overlapping players: a second player's departure/teleport/disconnect may itself cause a protected transfer. Historical overlap could be indexed separately, but adding proximity/history checks to skip three inline scalar updates is not justified here. With default server ownership disabled, the existing native-region contention gate already leaves truly isolated players under vanilla ownership. Its broad native-area test cannot simply be replaced by a fine-grid radius: separated players can still share a vanilla ownership region and need local object handoffs. Once a transfer is active it must finish safely even if the peer moves away.
+No live Unity renderer, Animator, collision world, Steam session or full third-party patch graph was executed. This fixes the three demonstrated presentation defects; it does not promise every mob handoff is visually seamless. Native corrections remain visible, and attack/owner/world invalidation deliberately discards the small visual offset. It does not repair a stopped server AI or missing PUP collision geometry, migrate ongoing attack/root motion, or resolve the separate ordinary low-ping player-to-player FiresGhettoNetworking combat-exclusion path. In-game comparison remains required.
 
-Targeted tests pass nine state-floor assertions, 124,064 grid/index assertions and 10,623 controller/router assertions. They exercise 1,000 genuine zero-delay transfers with no interactions and zero recipient-readiness checks; unchanged-owner fast paths; both native owner/revision receipt orders; state floors captured from direct writes; higher source floors followed by lower local observations; inventory final assignment; receiver relay recovery; and ignoring state reports for unloaded identities. Native metadata checks require an inline value field and inspect the compiled transfer-mark method for no allocation, tracking-table access or delegate invocation. All 18 final verification groups pass, including 50 exact Harmony targets audited with FiresGhettoNetworking 1.5.41 and 1.5.36. Final DLL SHA256: `B72C53A0DB25A7A135C265205886CF46F87B4F17E3BD45921356FDDF925A014B`. Full verification results are recorded in verification.json. No live Unity multiplayer session or CPU/latency benchmark has been performed.
+## Historical 1.0.76 implementation and validation (superseded presentation)
 
-The object-specific portal/sign text-edit protection discussed afterwards is documented in TYPING_PROTECTION_DESIGN.md. It has not been implemented in this build. This avoids silently claiming a server-side guard for a client-local UI event or blocking Sign.SetText's required native ownership claim.
+# Visual handoff bridge test 1.0.76
 
+This local candidate merges the verified 1.0.73 mob branch with verified 1.0.75 (including 1.0.74 loose-item indexing) on their common 1.0.72 lineage. The existing source directories are preserved. Merge provenance is in visual-76-provenance.json. Changes to AuthorityController and NativeInventoryHandoff belong to those retained fixes; the presentation module adds no grid algorithm, ownership timer or PUP collision override.
 
-Release preparation on 2026-10-12 reran the full source build and all 18 verification groups against the final DLL. Version metadata, publication descriptions and the finalized changelog match 1.0.17. No runtime changes were made while preparing publication; the Windows framework compiler produces a fresh binary identity when rebuilding. No live multiplayer test is claimed.
+## Presentation and traffic
 
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.16 experimental validation
+- Server-controlled startup switch EnableMobHandoffVisualBridge, default true in this experimental package. The existing authenticated session endpoint gains negotiated version 2; legacy clients still receive unchanged version-1 flags. A new client on an old server retains gameplay and leaves the bridge off. Retries are bounded to 15 join attempts, never per mob or per frame traffic.
+- Only accepted guarded source commits arm a track. Current/unfinished attacks, active use and native ownership/source checks stay in charge. Both FiresGhettoNetworking source commits and player-only LocalAgent commits use the same module. Final SyncNow is sent through the existing native state publication; no new per-handoff packet or ongoing predicted-state stream is introduced.
+- The old player's separate Visual subtree must contain no collider, rigidbody or nested network view. Only its rendered pose changes, between camera callbacks; its saved local pose is restored. Simulation/root transforms, hit/event paths and Animator speed are not changed. The actual movement/look intent and native turn-speed fields supply a bounded prediction, not another AI decision.
+- Initial timing uses the transport's measured round-trip ping in milliseconds, not ZRpc.GetTimeSinceLastPing (which is not RTT). A failed/unsupported accessor does not affect gameplay. Time from source commit to a changed replica data revision supplies observed end-to-end delay for recovery and later bridges. No client clocks are subtracted and the recipient's RTT is not fabricated.
+- Prediction starts at half speed, exponentially slows, and is capped at 1.25m/60 degrees. Velocity-aware critically damped correction joins native movement. A first snapshot seeds correction without treating its positional jump as instantaneous velocity. Attacks/stagger/death, attachment/riding, owner/revision changes, teleports and world changes end the bridge.
+- At most 32 local tracks, each at most two seconds; there is no permanent per-mob cache. Empty playback is a count check. No server rendering hooks are installed. With the switch off there are no capture hooks, player-only callbacks or camera subscriptions. Hierarchy/transport sampling occurs at a source handoff; camera subscriptions exist only while tracks remain.
 
-## Recipient checks on actual transfer events
+## Verification and limits
 
-This local experiment narrows the extra recipient-readiness gate in normal Server-Side Simulation mode. Actual TML owner writes, completed cooperative/native inventory receipts and verified receiver relays arm the existing weak owner/revision/state-floor record. For an unchanged owner tuple without that record, routing uses the native sent-owner-revision check without another recipient handshake. A completed readiness reply is cached for the current loaded object and connection. Source result handling, token fencing, scoped reply processing, receiver-side pre-execution forwarding, inventory consent, refill protection and pending item/armour-stand protections remain intact. The player-simulation mode is unchanged.
+The visual production fixtures pass 2,453 assertions on each managed runtime. The actual game/addon/FiresGhettoNetworking audit passes 556 contract/install assertions. Camera tests include nested reflection rendering, exact pose restoration and stopping while a camera is active. Existing source commits in player-only mode verify capture-before-owner-change, completion-after-change, protected refusals and duplicate suppression.
 
-This is deliberately a narrower preflight: unrelated native owner changes without a matching TML receipt do not acquire the extra handshake until an actual receiver failure is observed. It is not a universal interaction guarantee. Merely being within interaction range does not prove that an in-flight ownership transition has arrived. Server-to-player transitions after another player's departure or camera turn are a relevant race; direct player-to-player handoffs also remain possible in the controller. No new one-second interaction lease is added, and existing protections are not replaced by an arbitrary timeout.
+verify.ps1 builds against the installed game APIs, generates and reloads the actual BepInEx config, and runs production visual fixtures on CLR and Valheim Mono, authenticated configuration/startup tests, both ownership modes, combined grid/initial-loading/inventory/tamed guards, combat/PUP readiness and native state/codec audits. verification.json records exact test outputs and artifact/source hashes. The new native audit installs/removes the actual addon's prefix/postfix on FiresGhettoNetworking's real OnHandOff body under Valheim Mono and inspects authority/event/physics call exclusions.
 
-Each genuine client-directed transfer adds a weak-record lookup/write even if no interaction follows. Additional readiness messages are sent only for routed requests waiting on an unconfirmed recipient, at the existing bounded rate. Stable ownership without a record needs one weak lookup and no extra peer/capability/readiness probe. The records reuse the previous state-floor table, preserve the highest known state revision for the same owner tuple and are removed on object unload/reset. No extra Update/FixedUpdate callback, recurring scan, timer, collection or permanent world cache is introduced. Existing fallback processing still services genuinely pending work.
+These are headless fixtures and native method/IL checks. No live Unity renderer, Animator, physics world, Steam session or complete third-party Harmony graph was executed. The native Mono host can emit the expected unresolved Unity Time diagnostic; the audit must still explicitly print its completed PASS line. Visual quality and supported visual hierarchies require in-game comparison. The feature deliberately does not migrate attack/root motion, replay gameplay, repair missing collision geometry, fix a stopped server AI or claim a lossless/seamless two-player combat handoff. The previously identified ordinary low-ping player-to-player FGN combat exclusion remains separate and open.
 
-The identified source transaction still adds its explicit result message for cooperative player-source handoffs, independent of interactions; narrowing recipient checks does not remove this existing part of the 1.0.15 repair. Server-to-player direct writes do not request a commit from a former player source. A native interaction packet carries no owner/data revision, and native PeerZDOInfo records an outgoing send rather than receiver activation. An interacting future owner therefore cannot supply an implicit current-state acknowledgement through the unchanged packet. Combining action and readiness into one revision-bearing delivery message could remove a round trip, but needs receiver-side pending-action and replay/lifecycle handling. That larger protocol change is not part of this minimal experiment.
+## Earlier validation history
+# Local 1.0.73 mob readiness and tamed handoffs
 
-Targeted tests pass nine state-floor/lifecycle assertions, 124,064 grid/index assertions and 10,620 full-controller/router assertions. A 100-interaction stable-owner fixture and 1,000 genuine zero-delay server-to-player transfers without interactions perform zero additional recipient-readiness checks. The latter intentionally uses the zero-delay inner directional cells rather than repeatedly resetting a nonzero stability timer. Real writes, both source owner/revision import orders, native public-inventory final assignment and a relayed receiver failure retain readiness gates. No-op ownership decisions do not re-arm a record. Native metadata validation checks the compiled gate ordering and integration with the real controller/router. All 18 final verification groups pass; the integration group was rerun after adding the frequent-transfer scenario, without changing the production DLL. Final DLL SHA256: `062DA10742F838D619AC20531ABB52ADA16ED98FD909FD26F3A7F2A319FE0E8E`. These are work-count and simulated transport checks, not a multiplayer CPU or latency benchmark. Final verification results are recorded in `verification.json`; no live Unity multiplayer session has been tested.
+The two new supplied logs reproduce awake server mobs whose native AI invocation is attempted 41 to 164 times while every result remains false and no target evaluation runs. The same state occurs with no target, a player target and a possible nearby non-player target. The Wolf zero-health recovery warning is consistent with a skipped native update, not evidence of a particular collision cell. No log contains the actual PUP preparation result, so this build records it for the selected solo mob rather than claiming PUP is proven to cause every live pause.
 
-## Preserved comparison build
+Actual PUP 1.0.37 source/IL shows spatial transition/readiness queries, a whole-cell incomplete-support veto and a five-second rebuild retry. The dedicated preparation queue serves at most sixteen bodies with a two-millisecond budget; it is shared across worldwide server bodies. Unknown loaded-session metadata is a separate global prerequisite. New priority preparation calls only the existing native preparation on held owned server mobs within 40 metres of a ready player and does not alter holds, metadata, roots, collider flags or completeness. With compatibility disabled it installs no preparation hooks; the handoff eligibility proof remains conservative.
 
-The complete 1.0.15 source baseline is commit `37606419b550c6b775bc42ee1eddaa19ed555481` on local branch `backup/handoff-1.0.15`. The experimental branch is `experiment/recipient-scope-1.0.16`; no remote push or publication is performed. The saved baseline artifact receipt is `outputs/Others/HandoffBaseline-1.0.15/baseline.json`, with the original verification record alongside it. Older packages move to `outputs/Versions/TooManyLags-FGNAddon/1.0.15/` during packaging; their hashes must remain unchanged. Install the experimental build consistently on the server and clients before comparing repeated two-player door/harvesting interactions during shared-field departures and heading reversals.
+Mob transfers to the server and initial defaults now use the optional adapter's local canonical-position proof. Server-to-player requests deliberately bypass this additional proof so an unavailable server collider cannot prevent returning simulation to a player. Unchanged server ownership does no new proof work. No general grid area-readiness check or pre-transfer object probe is restored.
 
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.15 validation
+Tamed transfers use a capability-negotiated appended grid message and the existing ordered token fence, authoritative owner/revision receipt, native source commit and damage forwarding. Only a scoped `tamed` veto is relaxed after checking the actual source actor; other native reasons remain. Server sources apply the same actor checks and final native motion flush. Older endpoints do not get speculative animal grid writes. Tests cover attacks including an unfinished Attack after InAttack becomes false, riding/following/user state, friendly summons, stale ownership, duplicate wire delivery and exception cleanup.
 
-## Scoped processing of waiting interactions
+New-owner no-target bootstrap now requires a successful AI pass unless this owner already published a real report. Thus a freshly adopted actor cannot repeatedly bounce through the server merely because its local target starts null. Existing target adoption and real target loss still use their event path. Weak AI-keyed state resets with the world; no growing event history or per-mob timer is added. The first-pass finalizer does not itself approve an ownership write.
 
-Grid-handoff results, recipient-readiness replies and relayed requests now wake only their object's queue through a dictionary lookup. They do not copy or traverse the collection of unrelated waiting objects. Both scoped and full processing share the same source-consent, recipient-readiness, FIFO and expiry checks. The existing native-replication and controller fallback passes remain unchanged, so deadlines, disconnects and state changes without a protocol reply still progress. Empty queues add no recipient work. No new timer, player-count gate, physics polling, world scan or persistent cache is introduced.
+The verification receipt records fresh managed, embedded Valheim Mono and native IL checks. Fixtures exercise production methods and simulated transport, not a live Unity world, PUP proxy queue or Steam connection. Live confirmation of all reported pauses and teleports remains necessary. The ordinary player-to-player native FGN combat gate remains outside this change.
 
-The 100-object fixture measures 10,000 recipient-readiness checks for 100 full passes and 100 checks for 100 scoped replies while all objects are waiting. This is a 99% reduction in those particular repeated checks, not a measured reduction of total CPU or network latency. Routing and protocol messages themselves are unchanged. Additional tests cover unrelated/duplicate replies, relays, ordered multi-action delivery, full-fallback inventory denial, unresolved source consent, changed owners, native object removal, reloaded identities and scene reset inside a native handler. Queue snapshots survive teardown callbacks and skip retired entries, preserving newly queued work for a reloaded instance. Teardown allocates a temporary snapshot only when queues actually need cancellation; normal reply processing has no new collection allocation.
+# Earlier local 1.0.72 solo-boundary correction
 
-The targeted grid/controller/router run passes 124,064 grid/index checks and 10,370 full-controller checks. All 17 final verification groups pass, with 50 exact Harmony targets audited against each of the installed FiresGhettoNetworking builds. Final DLL SHA256: `8D0952871C64EDEC4495E04B6F941FC0BFA523B83FEE2A9E89C3C978A12092E3`. Full build/native regression results are recorded in `verification.json`. No live multiplayer CPU benchmark or Unity session has been performed.
+The supplied live log shows authoritative server ownership with `boundaryReady=False`, no active or unfinished attack, and waits up to 16.2 seconds before preparation. It does not identify the local target or sleeping state, so it cannot prove one specific cause for every pause. Source review found two unnecessary test conditions, reproduced before the fix: a missing player target prevents preparation; native sleeping AI returns successfully before UpdateTarget, leaving the target-evaluation test hook unused.
 
-A separate comparison compiled the archived 1.0.14 router with the same managed native-handler reset scenario. Its shared snapshot raised a controller fault during scene teardown; the current full and scoped paths both pass without that fault. This justifies isolating the rare teardown snapshot rather than reusing the running dispatch snapshot. The comparison is in `bin/router-optimization-audit`; it did not modify the production assembly or prior archive.
+The correction accepts a completed idle AI operation, preserves the actual target and native sleeping state, checks successful AI completion and keeps Busy/attack/use checks. The readiness payload distinguishes an absent player target from failed source setup. Scope is limited to FgnSoloCombatTest.cs, its HoldForSolo helper and plugin version metadata. All other production files must exactly match the verified 1.0.71 baseline. The ordinary player-to-player FGN combat gate is not changed here.
 
-## Identified grid handoff repair
+Regression coverage includes missing and non-player targets, full player/server round trips, sleeping server AI, skipped AI, unfinished attacks and failed source setup. The final verification receipt records fresh managed/embedded-Mono/native audits and the hash-checked unchanged baseline. No fixed live multiplayer run is claimed; install this test build on server and client.
 
-Normal Server-Side Simulation mode now uses a dedicated identified grid-handoff endpoint. The source calls the existing FiresGhettoNetworking commit after checking the expected owner/revision, live instance, active user, local refill lease and pending native item/armour-stand actions. Untagged FGN results cannot resolve these transactions. A per-connection scalar token fence prevents a duplicate or cancelled commit from executing later. A status query fences an uncertain unsent commit and reports the actual source snapshot; it never replays the commit. Owner writes still require native source execution or the existing orphan/native path, not a timeout.
+# TooManyLags 1.0.71 combined local test validation
 
-Recipient probes verify the live instance, matching owner revision and required data revision. Readiness is cached only for loaded managed objects and the current connection, invalidated on unload, ownership mismatch and controller reset. Native area readiness is reused per zone/frame only while handling real probes. The receiver intercepts verified owner-addressed building requests before their handler if the instance is missing or no longer owned, then relays the original packet to the coordinator. No gameplay action is retransmitted after execution. Public-container acquisition still uses native RequestOpen; its existing grant/UI limitations and timeout behavior were not redesigned by this focused repair. Direct non-owner sign claims and arbitrary mod protocols are not given a new universal arbitration guarantee.
+## Merge scope
 
-Performance: no new Update/FixedUpdate polling or world scan for grid handoffs. The routed-message hook skips unrelated methods before object/instance/component lookups. Commit status is queried at most once per two seconds for an unresolved transaction; readiness probes at most once per half-second per waiting object. A capability change wakes affected loaded nodes once. Active-transaction token history is one scalar per connection; loaded-object readiness and weak local leases are cleared on unload/reset, and disconnected connection records are removed. Network messages during actual transitions remain a cost, and live CPU/latency has not been benchmarked.
+Three-way integration uses 1.0.64 as common base, the complete 1.0.70 rejected-cell build as current, and the complete 1.0.66 target-boundary/solo branch as the side. Only six production files differ from 1.0.70: FgnCombatOwnership.cs, FgnMobHandoff.cs, FgnTargetEvents.cs, the two new FgnTargetBoundary.cs/FgnSoloCombatTest.cs modules, and Plugin.cs. The loading-gate removal in ServerReady is deliberately retained from 1.0.70. Version conflicts resolve to 1.0.71; there are no remaining merge markers. Provenance and expected source scope are recorded in merge-71-provenance.json and checked by verify.ps1.
 
-New managed tests cover rejected and missing source results, stale tokens/connections, half-imported ownership tuples, status fencing, native-result isolation, recipient readiness and exactly one router dispatch of a held/relayed request. Native metadata audits include all seven new protocol Harmony targets and require a separate TML endpoint rather than replacement of native RPC callbacks. No live multiplayer test has been run. This is a local test build, not a published release.
+All 1.0.70 grid, inventory, static ownership, player-only policy, pending-work and state-transfer sources remain byte-identical. The combat branch retains its bounded same-invocation new-attack barrier, completed-operation reporting, token/revision handling, unfinished-attack veto and admin-controlled one-mob solo test. It does not add animation snapshots, movement extrapolation or additional late-event migration. Solo mode is off until explicitly started, with a 0.5-second delay after observed completion and existing guarded transfer paths.
 
-## Server overlap cooldown
+Verification runs the combined production combat/synthetic-boundary/solo fixtures on managed Harmony and embedded Valheim Mono, actual provider/native IL contracts, companion-policy precedence, collision-readiness regression, inventory, full grid/protocol integration, player-only runtime, field caches, station handoff, native contracts and compact-state transfer checks. Input/output hashes and exact results are in verification.json. Test fixtures are merged rather than replaced, so 1.0.70 loading/refusal expectations and the combat-branch cases both run.
 
-`ServerOverlapCooldownSeconds` defaults to 1s (0 disables), is server-owned and supports the existing authenticated live console. It applies only when the directional grid assigns an overlapping field to the server. That acquisition temporarily blocks new grid ownership decisions; it does not start a delayed release when the overlap disappears. Full-grid mode, new nonoverlapping fields, permanent server ownership and mob-target policy retain their existing rules. Missing camera data still uses character direction.
+No live Unity world, solo combat, real network or two-player visual continuity test is claimed. No installed profiles, publication or Git remote were changed.
 
-Coverage bookkeeping stays current during the lock, including arrivals, departures and disconnects. Ignored ownership requests are not queued or replayed on expiry. Only a subsequent real player update touching the field can evaluate its current coverage, including unchanged inner cells in that player's footprint. Noop server re-evaluation never extends the acquisition deadline. Existing outer-field departure retention and all usage/readiness safeguards are preserved. Empty cells retire normally; native owner release remains untouched. Live changes affect new cooldowns; already-created deadlines remain intact.
+## Retained 1.0.70 validation notes
 
-The cooldown adds one scalar timestamp to existing field policies. It uses the existing event/deferred-field path, with no expiry timer, new hook, object scan, distance query or separate cache. A backwards-clock reset rebases timestamps once; normal stationary ticks never scan cooldowns. Regression fixtures exercise all three shapes, eight directions, both keep-on-exit values, adjacent camera-mask boundaries, multiple players, movement, disconnect, zero/live settings, clock resets, retirement and reuse. Ignored requests leave no object jobs or release timers. Stationary traces after expiry repeat no object work or timer visits. Controller fixtures confirm real camera advisory changes reach the lock and live tuning reaches its grid. These are managed work-count checks, not a measured multiplayer CPU benchmark.
+The 1.0.70 baseline used the complete inspected 1.0.64 test build. Its production scope was AuthorityController.cs, GridHandoffProtocol.cs, StaticBuildings.cs, FgnCombatOwnership.cs, FgnOwnerHandoff.cs, NativeInventoryHandoff.cs, PlayerSimulation/LocalAgent.cs, PlayerSimulation/AuthorityController.cs, PlayerSimulation/Handoffs.cs and plugin version/startup metadata. The independent PUP simulation module is unchanged. Its previously separate mob-test branch is now included as described above.
 
-No live Unity multiplayer session was tested. See `verification.json` for the final build hash and all native-contract/managed regression results. The remainder records safeguards retained from 1.0.12.
+## Refused grid handoffs
 
-The regression report covers identified handoffs, cooldowns, full-controller routing, real BepInEx generation/reload of 44 settings, both FiresGhettoNetworking builds and the unchanged optional PUP guard contracts. The integrated camera-settings recovery has 17 separate managed checks: missed initial settings, authenticated replies, bounded retries, reconnects and zero requests after successful synchronization.
+Compared with 1.0.69, only AuthorityController.cs, NativeInventoryHandoff.cs, PlayerSimulation/AuthorityController.cs, PlayerSimulation/Handoffs.cs and version metadata change. Native inventory refusals park the specific object in the existing field-renewal index. In player-only mode, processed grid no-commit/use refusals also wait for new coverage instead of holding a timer or a permanent owner/revision rejection stamp. Hostile Mob attack waiting remains separate.
 
-## Directional overlap and config defaults
+Tests cover synchronous/asynchronous refusals, both exit-retention modes, mixed successful/refused objects in the same cell, previously certified cells becoming incomplete, stable-idle operation, fresh requests with unchanged owner/revision, ordinary data/router events, unload/reset, and late native receipts/half imports. The cache implementation itself is unchanged: its existing per-member confirmations must all be satisfied before certifying a cell. Permanent server-station overrides retain their intended ownership rule.
 
-Each of the eight fixed directions covers +/-37.5 degrees, widening the previous +/-22.5-degree sector by 15 degrees on each side. North/northeast overlap from 7.5 through 37.5 degrees; reverse turns and wraparound use the same symmetric membership rule. The current angle selects one direction or an adjacent pair directly, without turn history, intermediate masks or a retained trail. Character-heading fallback uses the same pure quantizer. Invalid data retains the existing grid's finite-heading fallback.
+This incremental build runs native inventory, full grid/protocol integration, player-only simulation/runtime, field-cache, native contract and compact-state checks. It does not claim to rerun every unchanged suite from earlier builds. Source snapshots which still differ from the native server tuple retain reconciliation; missing replies and half imports are not treated as refusals. No forceful ownership change is added.
 
-Eight adjacent-mask unions are precomputed once alongside the original masks. Shared cells contribute once per player, keeping inner/forward priority and valid timer history. Only changed coverage touches cell policies. The 7x7 union is bounded at 29 cells; 5x5 at 18 and 3x3 at seven. Settled stationary fixtures produce no additional neighbor evaluations, timer visits or player updates. Pool capacity and loaded-object cache cleanup remain bounded; no new world-cell cache, physics hook, camera RPC or peer dictionary is added.
+## Retained loading-gate regressions
 
-The changed coverage is one integer in a new session-only player ZDO key, separate from the old eight-sector advisory. Only the owned player's valid data is accepted; missing/invalid data and unmodded player-mode clients use character heading. All clients must update for camera coverage. Changed publication and camera-loss invalidation use native ForceSendZDO once. The audited FiresGhettoNetworking 1.5.41 SendScheduler recognizes the force queue immediately while still enforcing LinkController.HasRoom and the configured frame budget; unchanged camera coverage adds no writes or force entries. This avoids the idle backoff (up to a 0.2-second scheduled interval in that source), without flushing sockets or bypassing congestion safeguards.
+- Loaded doors, pickables, containers, fires and workstations in red coverage transfer without broad readiness queries or destination-loading RPCs. Matching prefab-only roots can be claimed before a server scene instance exists. Settled ownership produces no proof retry work.
+- Recipient receipts validate owner/revision/state and the exact RPC instance for actual action delivery, without broad-area readiness. Stale revisions remain rejected; active compatible player sources retain their commit protocol.
+- Fixed-source dormancy, field timer parking, red acceleration, running deadlines, static grids, exit retention and zero-peer idle behaviour retain dedicated tests.
+- Player-simulation preparation accepts a matching data replica without a live instance; source-use checks and live AI target adoption stay separate.
+- Combat and attack-end retries do not run duplicate PUP/native loading queries. Invalid actors/poses, actual attacks, target exclusions and source commits retain their checks.
+- Inventory opening, text editing, refill, pickup, routed exactly-once delivery, recipient ordering, compact state, native serialization and optional PUP integration retain dedicated checks.
 
-A bounded CameraWake value map contains only the characters participating in the latest directional grid sample. The existing ZDO.Deserialize/Changed event does one ID lookup for unrelated objects, with no additional key/owner reads or new records. Changed current-world, valid, correctly owned camera data requests the next existing controller poll without waiting for its interval. Duplicate receipts are coalesced. The callback performs no grid work or ownership write; it waits until native packet processing has returned. Poll sampling replaces the map, and reset/stop clears it, retaining no ZDO references or departed-world entries. In native solo bypass and full-grid mode it is empty. Zero-delay inner fields are queued and attempted in the requested poll, with all inventory, refill, active-use, source-consent and collision protections retained. Outgoing ownership already uses native send priority. No network latency or live frame-time guarantee is made.
+verify.ps1 performs the warning-as-error build, managed regressions, native game/provider IL audits and headless Valheim Mono checks. Exact results and final artifact/source hashes go into verification.json. Source comparison verifies the ten cumulative production files and the five incremental files above.
 
-Both camera and movement check defaults/minima are now 0.05 seconds; the other 41 defaults are unchanged. Object categories move to section 10 at the bottom, with shared scope/protection instructions once. Existing config values are not rewritten: use the generated config or reapply old custom category values under section 10, and explicitly set stored intervals if the new defaults are desired.
+Inputs include local FiresGhettoNetworking 1.5.72 and PUP FPS 1.0.37; native audits also exercise older interfaces specified by their scripts. Fixtures do not simulate live packet delay, Unity physics or multiplayer. Operation counts are not live CPU/bandwidth measurements. No publication, installed-profile change or remote Git change is part of this test.
 
-Both simulation modes run the same angle/union fixtures, including independent +/-37.5-degree membership, boundaries, wraparound, reversals, fast turns, timing priorities, genuine second-player overlap, idle work and departure cleanup. Receipt/cadence fixtures check unrelated-traffic cost, unchanged data, invalid/foreign/stale sources, coalescing and bounded lifecycle with both production cadence classes. Full-controller fixtures cover immediate receipt wake and zero-delay handoff execution without duplicate field work. Full regression results and exact artifact hashes are recorded in verification.json. No live Unity multiplayer session has been tested.
+### Visual continuity gaps (2026-10-29)
 
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.11 release validation
+- Startup: private native motor endpoints become available from current inputs at interval start. AI decisions remain bounded by the live capture horizon; no future AI pass, new recording time, or extra motor step is introduced. Regression sweep covers 20/50/100/500/1000 ms windows and 4/8/16/33 ms render intervals.
+- Takeover: blend the current displayed trajectory into the current replicated root using smoothstep. Position and entry velocity remain continuous, including zero initial position error. Direction protection follows replicated/paired authoritative body velocity; root corrections no longer redefine it. Takeover retirement runs after advancing this frame's presentation, with numerical alignment tolerance rather than a 1 cm disappearance allowance.
+- Overlap: retain the preceding display offset during new fake playback. Only observed-horizon final takeover corrects it; there is no independent opposing offset decay during playback.
+- Model root: run native UpdateGroundTilt inside the existing isolated transaction, sample recorded visual-root locals, and blend them to current native locals at takeover. Model draw and query preparation share scaled model-position math. Managed rotation fixtures cover yaw; pitch/roll and private Unity physics remain live-test requirements.
+- Unresolved contract choices: a finite immutable recording cannot guarantee continuous motion through indefinitely late destination updates. Likewise, a displayed mob ahead of a stopped real mob cannot both align and forbid all backward movement without waiting. Existing endpoint-hold and movement-direction rules remain pending explicit user preference; no hidden extrapolated-frontier takeover or extended capture was added.
+- No profiles modified; no installation or live multiplayer validation performed.
 
-## Live console configuration and camera timing
+Full debug verification completed: 19 suites passed. Receipt `verification.json`, DLL SHA256 `4785D38AB6DFC60375737E73D5202C0B3592B83C6A4E87E0664245B54F3B0C58`. Bridge suite: 8,358 trajectory/recording checks, 1,206 emitted wiring/isolation checks, 152 attached-FX checks and 115 native presentation hook checks. No live Unity world or multiplayer playback validation.
+User clarified the stationary/ahead case: slow down first; wait when slowing cannot achieve alignment. Backward correction remains forbidden. The remaining finite-buffer question has been re-asked in German; adaptive endpoint playback remains pending that answer.
 
-`tml_config` reads server-owned settings and changes only nine explicitly supported tuning entries: movement/camera intervals, four grid delays, two mob fallback thresholds and local diagnostics. Remote requests use the connected socket's native `ZNet.IsAdmin` identity check, not a claimed player name or object owner. Endpoints run only on console requests, connection setup and peer readiness; there is no new frame/physics polling, config watcher or global ownership scan. Each connection accepts at most four requests per second; command/reply lengths and reply tickets are bounded. Only the current server connection may supply camera timing. Server and client settings are marked in every generated config description; all 43 original defaults remain unchanged.
+### Adaptive finite-buffer playback (2026-10-29)
 
-Camera publication waits for the server's interval. A postfix on native `ZNet.RPC_PeerInfo` sends it once when a peer becomes ready; live camera changes broadcast once to ready clients. Camera sector publication continues through the existing session-only player ZDO key, without periodic camera RPCs. The interval supports 0.05–5 seconds. Existing clients must update to this version; no automatic mutation of their config files occurs.
+User approved dynamically slowing the remaining immutable buffer, then waiting if needed; backward correction remains forbidden when the real mob stops behind the displayed mob.
 
-Live timing setters retain object indexes, coverage, completed-field receipts, cooperative ownership transfers, inventory consent, refill/active-use protection and collision guards. They never call Reset/Stop or reinstall gameplay hooks. Stationary requests retain their scheduled deadline; subsequent player activity uses updated delays. Native release/world lifecycle and mob arbitration are unchanged. Mode, geometry, categories and feature switches are saved without calling runtime setters: the existing controllers, flags and category masks retain their startup snapshots. Pending values are compared with a bounded map of startup settings, used only on console requests. No periodic work or gameplay cache is added. AI's stored ConfigEntry is read again only for status output; hooks retain their startup policy until restart.
+- Before advancing presentation, compare remaining recorded time with estimated wait for a matching destination horizon. Prediction is bounded to one destination-local sample interval and also reserves the next clock delivery; stale observations cannot promise unlimited progress. Initial spacing follows the existing 50 ms clock-send interval and cached AI cadence; accepted packets replace it with measured destination-local spacing. This is transport timing, not a new AI tick grid.
+- When necessary, critically damp remaining time: x(t) = (x0 + b*t) exp(-omega*t), b = omega*x0 - v0 >= 0, omega = max(2/wait, v0/x0). This preserves incoming displayed velocity, keeps remaining time nonnegative and slows toward the actual fixed endpoint. Normal owner-rate interpolation can still decelerate more strongly. Returning packets restore the normal schedule through the existing continuous rate filter.
+- No minimum adaptive playback speed. Extended outages approach a hold; numerical exhaustion holds exactly at the immutable endpoint. Neither recording extension nor future-frontier takeover is allowed. Returning data cannot cause hidden-clock backlog replay.
+- New diagnostic fields: bufferSlowFrames and minPlaybackRate. Normal 0.5 playback remains unchanged for healthy matching packet delivery; low-ping cases account for packet cadence exceeding the recording window.
+- Fixture sweep covers 20/50/100/500/1000 ms windows, 4/8/16/33 ms frames, normal/late delivery, prolonged outage and resume, healthy nominal rate, entry velocity continuity, immutable endpoint rejection and subdivision of the analytical brake. Focused fixture count: 26,729. No live Unity playback or multiplayer claim.
 
-New fixtures pass 53 config/endpoint assertions using real BepInEx.ConfigFile, plus nine timing/cache assertions in each simulation mode. Coverage includes persistence/rollback, invalid and out-of-range values, scope, unchanged-value shortcuts, native identity authorization, rate limits, stale connections/tickets, camera synchronization and pending-deadline preservation. Restart settings survive later live saves, invoke no runtime callbacks, show the original active value and can be cancelled by restoring that value. A failed save restores both value and pending state. Saved 4-metre/Square3x3 combinations are rejected; valid shape changes use the saved cell size. Startup still normalizes a manually edited invalid 4-metre square grid to Rounded5x5, as the earlier acceptable-value list did. Server/client feature switches include a matching-client restart reminder. The actual Valheim assembly exposes the public admin-list check and expected connection-ready signature. Full regression results and DLL hashes are in verification.json. No live Unity multiplayer session has been tested.
+Adaptive playback full verification: 19 suites PASS, DLL SHA256 C04249806C9C2496D62D1C6286306B4E1ADBA0E78F89FE7931A309C21F9C7541; receipt hash matches. Bridge suite: 26,729 timing/recording assertions and 1,208 emitted wiring/isolation assertions; existing attached-FX and native presentation checks pass. No profiles modified or installed. Live rendering/network validation remains open.
 
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.9 release validation
+### Short test commands and scoped vanilla comparison (2026-10-29)
 
-## Mob policy precedence
+- `ai_test [start|stop|status] [RTT_ms] [interval_seconds]`; integer first argument implies start, no nonempty arguments requests an authoritative server toggle. `ai_test_v` / `ai_test_vanilla` use the same parser in vanilla mode. `tml_ai_test` remains an alias. Default native RTT and 0.5 seconds remain; malformed/nonfinite/out-of-range arguments are rejected before control transmission.
+- Server decides toggle using actual active state, retaining admin authorization, one-player checks, native attack boundary and five-minute/distance cleanup. Mode flags are announced before the first transfer, including server-first starts and latency setup. The existing arm RPC carries the session flag; revised capability modes 20/21/22 refuse old arm payload endpoints. No additional recurring RPC is added.
+- Vanilla comparison is fenced by selected ZDO identity plus current world/network. It skips immediate source-commit shortcut and extra flight/combat/simulation checkpoint callbacks at the existing final owner-write site, preserving exactly one native owner write. Fake and legacy presentation are cancelled for this mob; incoming bridge packets are ignored before decode. Prior matching RNG/target/clock/FX epochs are removed. Unrelated mobs remain unchanged. No changes to latency queues, completion-relative cadence or native damage simulation.
+- Optional gate delegates default null and are installed only during an active solo test; stop/reset removes them. Normal builds omit commands and test driver, retain inert null extension points and existing gameplay safeguards.
+- Regressions cover aliases, omitted action, empty arguments, toggle, malformed input, current/old capabilities, server-first mode announcement, duplicate mode packets, both transfer directions, custom cadence, artificial-delay handshake, per-mob isolation and complete cleanup. Separate production transfer tests prove native mode sends no checkpoint/forced SyncNow; source tests prove no shortcut/publication; legacy visual tests verify scoped capture skip and render-pose/subscription cleanup.
+- This is a native transfer comparison inside the existing FGN test scheduler. Other plugins and original safety guards remain active. No installed profiles changed; live multiplayer/Unity comparison remains open.
 
-TooManyLags takes precedence only when EnableAIOwnership is enabled and its selected mob module initializes successfully. Startup runs after plugin Awake, so installation order cannot leave two optional combat transpilers installed. The bridge binds BotanicPupPatch's existing optional combat Stop/Install/Enabled contract without adding a dependency or changing its config. Stop removes only that module; collision, support, cart/animal and streaming guards remain installed. An unsupported contract prevents takeover. Disabled TooManyLags leaves the previous policy untouched; failed normal or player-simulation setup restores it using the original config and network assembly/version. No new polling or gameplay hooks are added for arbitration.
+Clean snapshot verification exposed a stale-fixture harness defect: test-combat.ps1 compiled a unique CombatRegression-<guid>.dll, while test-combat-mono.ps1 opened CombatRegression.dll. The managed runner now publishes the successfully tested current fixture to that fixed name before Mono execution. Fresh snapshot checks pass 2,194 assertions under both managed CLR and Valheim Mono; no old bin contents are reused. The parallel user-authorized OwnerDebug read-only category/phase API is preserved in this snapshot.
 
-The transaction fixtures pass 40 assertions on both Windows .NET and Valheim's embedded Mono using real Harmony and BepInEx.ConfigFile, including successful, disabled, absent, inactive, failed and partially stopped modules; saved settings; exact single-policy installation; rollback; and preservation of separate collision/streaming Harmony owners. The native audit checks the actual startup IL for suspension before installation, successful-module gating and finally-based rollback. The existing BotanicPupPatch 2.1.0 DLL contract is inspected directly. No BotanicPupPatch rebuild is required.
+Short command/native comparison final validation: all 19 full debug suites PASS. DLL SHA256 92F1E58490116136D1CD58C92A7442B2E2CE76686863D3739429B6F859CDF0BA. CLR and actual embedded Mono both execute the fresh 2,194-assertion command/handoff fixture. Bridge checks: 26,729 timing/recording, 1,212 emitted wiring/isolation, 115 actual presentation hooks; flight127/source44/legacy-visual production regressions pass too. A source-stable snapshot was used after a parallel authorized OwnerDebug API edit invalidated the initial source fence. No profiles modified or installed; live Unity/multiplayer comparison remains open.
 
-This is startup arbitration, not a live cross-plugin protocol switch. Server and clients should use this TooManyLags version with consistent AI settings. No live multiplayer test has been performed.
 
----
-# TooManyLags - FiresGhettoNetworking Addon 1.0.8 release validation
 
-`NoServerSideSimulation=false` retains the normal dedicated-server simulation path. With true, startup validates the seven actual FiresGhettoNetworking simulation patch groups before removing only their hooks under FiresGhettoNetworking's Harmony owner. It refuses changes after a network/world object exists. Simulation config and runtime flags are disabled without changing the saved file; unrelated networking and other mods' hooks remain. Station routing remains enabled. The server-owned building/default/refill overrides are not instantiated in this mode.
-
-The player-simulation module is embedded from TooManyLags Standalone 1.0.1, with an isolated namespace/protocol, shared addon settings/camera heading and existing FiresGhettoNetworking connection metrics. The server announces the mode; clients need no matching mode config. Normal-mode clients stop polling the internal endpoint after confirmation; normal-mode servers only answer its connection handshake. No extra latency probe is sent. LinkController's unknown zero-ping status is not treated as a low-latency candidate.
-
-Player-mode overlaps use smoothed latency with a 30 ms advantage margin. Hostile Mobs retain target ownership unless an eligible nearby player has a sufficiently lower latency. A configured zero ping threshold uses the existing 250 ms relative rule. Friendly summons, bosses, active controls, open/pending inventories, ongoing attacks and the 10-second refill protection retain their exclusions/guards. Receiver preparation, owner revision, source consent, activation acknowledgement, stale-request forwarding and bounded handoff queues are retained. An already active external mob policy silently prevents duplicate target management.
-
-Automated validation covers the normal path and the embedded player path: startup on/off and saved-file preservation with real BepInEx config; exact native hooks and contracts against the installed Valheim release and FiresGhettoNetworking 1.5.36/1.5.41; grid/cache/unload behavior; 4,188 production handoff assertions; and 12 mode-negotiation/connection assertions. Actual native interface contracts use the modern metadata host where the Windows desktop CLR cannot load default interface implementations. Fixtures do not simulate live Unity physics or Steam packet ordering.
-
-**No live dedicated-server or multiplayer test has been performed.** Standalone changes alongside this release are documentation only; its simulation code is unchanged.
-
----
-# TooManyLags - FGN Addon 1.0.6: verification
-
-Version 1.0.6 adds startup-only overrides for required FiresGhettoNetworking settings. The grid, AI handoff protocol and ownership protections remain unchanged.
-
-## Required FiresGhettoNetworking session settings
-
-After FGN's Awake and before TML installs its grid or AI policy, FgnSessionSettings replaces only the required static ConfigEntry references with entries in an isolated, non-saving ConfigFile. FGN's own ConfigFile keeps the original entries: later saves and reloads do not persist the overrides. Dedicated servers use SSS and station routing, with broad/selective ownership disabled. Clients only disable those conflicting ownership options. Creature balancing is enabled on both sides when TML AI ownership is configured on; disabling it leaves the existing FGN balancing setting untouched. No config getter patch, event subscription or recurring override scan is installed.
-
-If FGN already installed server simulation, its initializer is not repeated. If it was off, TML checks FGN's dedicated-server detection and scene-scheduler compatibility, checks the ValheimPerformanceOptimizations plugin identity, then invokes FGN's native ApplyServerSideSimulationPatches before setting SimulationActive, matching FGN's own startup order. Existing broad/selective prefixes read the disabled entries and pass through; their startup-only creature/ship ownership mode flags are cleared. Compatibility blocks and missing/uninitialized contracts leave TML inactive rather than announcing readiness. SSS activation produces one startup CPU warning regardless of optional diagnostic logging.
-
-Tests use the actual BepInEx ConfigFile and production setup code to check 52 assertions covering disabled/enabled SSS, one-time initialization, stale modes, unchanged saved entries even after Save/Reload, metadata, client scope, disabled AI and blocked/missing contracts. Native IL/metadata checks verify the initializer, completion order, safety properties, fields and dynamic ownership gates against FGN 1.5.36 and 1.5.41. No live Unity/dedicated-server startup or multiplayer session was performed; server CPU impact depends on the loaded world and owned objects.
-
-Based on TooManyLags 1.0.0 and BotanicServerAuthority 3.7.4. Existing grid geometry, directional timers, inventory consent, refilling protection, summon exclusion, default ownership, regional bypass and unloading cleanup are retained. The original project remains unchanged.
-
-## Camera heading
-
-Clients sample the completed native GameCamera.LateUpdate at the configured cadence. Camera intervals support 0.05–5 seconds with an unchanged 0.1-second default; the server movement cadence retains its 0.1-second minimum. Only changed eight-sector headings are written into the locally owned player's existing ZDO. No camera RPC, server polling cache or new network protocol is needed. The key is session-only. Server consumers validate player ownership; missing, invalid, freefly or vertical camera data falls back to character heading. Destruction clears a valid local heading; disconnect/world replacement cannot write into an old world.
-
-Fixtures cover sector boundaries, stationary camera changes, unchanged samples, freefly, vertical/missing cameras, cleanup, ownership, world changes and the actual controller's directional requests. Native code/delegate inspection verifies supported hooks and that received player rotations do not rely on local SetRotation events. Actual network delivery remains subject to transport/backlog latency.
-
-## Imported AI policy
-
-FgnCombatOwnership, FgnCombatBridge, FgnTargetEvents, FgnAttackRetry, FgnCombatStatus and FieldReader are imported from BotanicPupPatch 2.1.0. Detailed source equivalence and hashes are recorded in tests/combat-import-equivalence.json. Namespace, session keys, RPC names, console command and Harmony IDs are isolated to prevent cross-mod callback replacement. Config branding/default activation, duplicate-policy handling and the narrow friendly-creature exclusion are the explicit integration changes.
-
-Original target reports, revision checks, client consent, attack blocking/retry, FGN candidate scans and transfer limits, tamed/boss/control exclusions, high-ping server leases, damage forwarding and session cleanup remain. Console diagnostic: toomanylags_ai_status. Duplicate active or dormant original AI hooks disable this addon's AI policy; they do not disable the grid or optional collision guards.
-
-The optional PUP adapter retains only the exact collision-readiness proof needed for server mob fallback, including CellReadiness. It does not import physics, support or body guards. Without PUP, exact native scene/area readiness is checked; unsupported present PUP denies server fallback. The copied PUP proof is verified against PUP FPS 1.0.34, including its fingerprint. This is not a dependency or a version lock on the grid/FGN feature. PupPatch has no assembly reference or plugin dependency.
-
-## Friendly magic creatures
-
-FriendlyCreatures.IsFriendly reads the native raw Character faction and excludes real players. Current vanilla magic skeletons, four spiritcaller animals and green roots use Faction.Players; hostile Troll_Summoned uses PlayerSpawned and summoned charred use Demon. Ordinary taming does not alter the raw faction. Native source/assets were inspected read-only; the compact classification evidence is in tests/friendly-summon-classification.json. This is a faction/behavior filter, not a record of who created an object.
-
-The grid checks loaded instances before allocating a node and uses the existing cached actor on later checks. Legacy unsummon-marker protections are retained. AI eligibility rejects friendly prefabs and actual loaded friendly actors before watches, target reports or handoff requests. A scene-scoped, bounded prefab cache avoids repeated component lookups; missing prefabs are not cached and world/scene cleanup releases references. Hostile summons follow the unchanged Hostile Mobs rules. Existing player-only target reporting, boss/control exclusions, attack waits, caps, consent and readiness checks remain.
-
-## Inner-only departure transfers
-
-With KeepOwnershipOnCellExit enabled in directional mode, an overlap ending at one stationary player automatically transfers only that player's inner/red fields. Forward/outer fields retain their settled policy owner and cancel their field timer. A real cell or heading-sector change of the remaining player releases those fields, including unchanged footprint intersections. Full-grid mode and disabled retention keep the previous behavior. Classification uses the field tier, not a floating-point comparison of configured delays.
-
-The pure grid stores one deferred bit per active policy and one refresh bit per existing peer. A counter skips deferred-field lookups entirely while none exist; there is no additional timer, position query, object scan or player-pair search. Timer/guard processing and native in-flight inventory/FGN transactions stay intact. Fixtures cover eight headings, both rounded shapes, all three tiers, unchanged motion, simultaneous update order, reversed delays, readiness, transient overlap, multiple peers and 2000 departure/unload/reuse cycles. Deferred state is removed with active coverage; only the existing capped allocation pool remains.
-
-## Checks and limits
-
-Version 1.0.7 changes the installation wording to explicitly state that required FiresGhettoNetworking settings are automatic. Runtime source and configuration defaults remain the same as 1.0.6 except for the plugin/assembly version and generated config header. The release is rebuilt and checked before packaging.
-
-The 1.0.6 documentation refresh adds the two supplied GitHub videos to the repository README and links their GIF conversions from the Thunderstore README. Both GIFs were decoded frame by frame and visually reviewed: 640x358 pixels, 10 fps, infinite loop, 8.2/13.8 seconds. The original recordings remain available through each GIF's link. Media are hosted in the GitHub repository, outside the install ZIP. The DLL and previous runtime test results are unchanged; metadata/media hashes and archive contents were checked again before publication.
-
-Build uses installed Valheim/BepInEx APIs with warnings treated as errors. Controller/grid, directional geometry, field cache, region bypass, inventory and refill suites run against production logic. AI fixtures run on both CLR and Valheim's embedded Mono; optional readiness and modern runtime bridge fixtures are separate. Native IL/contracts are checked against FiresGhettoNetworking 1.5.36 and 1.5.41. Both ownership transpilers compose in either order, preserving native branches and changing only the intended getter/two calls. Startup validates actual contracts rather than rejecting FGN version numbers.
-
-The actual config binding prefixes execute with installed BepInEx.ConfigFile: 42 settings, nine English sections, reload/save equality. Verification JSON records the final DLL, native dependencies, copied sources and config hashes. Release packaging checks version, DLL hash, manifest, README and config contents.
-
-No live multiplayer, real packet transport, Unity physics session or in-game latency benchmark was performed. Automated checks cannot guarantee immediate delivery or compatibility with arbitrary future/third-party changes. The new filter covers native summons and the current faction of loaded actors. Unloaded actors use their prefab's current faction; arbitrary modded per-instance faction changes while unloaded cannot be inferred from native ZDO data. Modded friendly creatures using another faction are not identified by this predicate; existing summon safeguards still apply. Local PUP collision/stability protection remains separate.
-
-## Camera interval recovery (2026-10-12)
-
-- User-provided runtime snapshot: camera publisher and hook present, multiplayer active, player ownership valid, server grid active, but intervalReceived=False and raw camera coverage=-1 on client and server. The diagnostic request/reply succeeds; this isolates the missing camera configuration prerequisite without proving why the original join push was missed.
-- Added an authenticated, rate-limited request for the authoritative server interval. Clients retry at most every two seconds while unconfigured; successful receipt stops requests. Reconnect/shutdown clear the request identity. No ownership or gameplay actions are retried.
-- test-camera-recovery.ps1: 17 managed recovery/authentication/reconnect checks passed, including a missed early join push and no sends across 1000 configured frame checks.
-- Existing test-config-console.ps1 passed: 60 console/authorization/persistence checks, both 9-check grid timing suites and both 11015-check camera receipt/wake suites.
-- An isolated 1.0.12 test package includes the recovery plus tml_camera snapshots. IL comparison verified 861 original method bodies unchanged outside ConfigConsole and the camera sampling hook. No live multiplayer success has yet been reported. No installed profile or remote release was modified automatically.
-
-## Teleport footprint input validation (2026-10-12, 1.0.18 local)
-
-A new controller regression reproduces a stale peer footprint in 1.0.17: two peers overlap; one peer's reference area moves 1024m while its character ZDO remains at the old position. The grid incorrectly retains the overlap instead of giving the inner field to the remaining player. The test fails on the released source and passes with one native InActiveArea check per sampled ready peer. Positions remain sourced from the character ZDO; reference position is only a validity boundary, not a replacement for high-frequency character position. Normal in-area position skew remains eligible; a character update arriving before its reference is excluded until its native area agrees. No new per-object scans, RPCs, timers, owner writes or guard bypasses.
-
-This establishes a real input-validation gap, not the runtime cause of the user's reported server-to-distant-player assignment. A temporary read-only diagnostic can report the field owner/candidate, actual owner and peer character/reference positions on command. Live confirmation remains required.
-
-## Distant-player assignment investigation (2026-10-12)
-
-The user clarified that a different player was at least about 100m away, without teleporting, when white objects changed to that player's colour as the local player approached. The teleport input fix does not establish the cause of this case.
-
-- Added a full-controller fixture with distinct peer UIDs 411/822, server UID 99, 4m Rounded7x7 directional cells and server-default ownership. Server-owned doors, beehives, containers, smelters and crafting stations all transfer to the approaching player, never the player 100m away. Settled nodes veto the native ownership-release getter. A subsequent remote teleport leaves the local objects alone; a completely vacated remote cell keeps its old owner while allowing native out-of-area release. The integration suite passes 10661 assertions, including 28 additional checks in this scenario.
-- Native ReleaseNearbyZDOS uses active/loading areas, not nearest-player distance or the small ownership footprint. A normal-mode managed node shields its settled owner through Persistent; untracked, ineligible or externally changed objects may take the native path. This is a possible mechanism, not a demonstrated runtime cause. Existing inventory/refill/use guards are unchanged.
-- Diagnostic revision 2 also reports peer names, connection UIDs, character IDs/owners, focused-object revision/prefab, grid settings and current instance eligibility. This distinguishes actual ownership from a colour/name mismatch and the field decision from its committed owner. All snapshots remain command-only and read-only. IL comparison against normal 1.0.18: 968 existing method bodies unchanged outside the two diagnostic registration calls; 11 added methods contain no ZDO/owner writes or ForceSendZDO calls.
-
-No further production logic changed for this investigation. Live diagnostic output is still needed to locate the incorrect assignment; the managed fixture does not reproduce it.
-
-## Configurable directional overlap (2026-10-13, local)
-
-CameraDirectionOverlapDegrees is server-controlled (0–45, default 30), with live admin tuning. Clients negotiate authenticated timing/angle replies; older peers receive only the legacy timing endpoint and their old camera advisory key falls back to character rotation. Settings retries stop after confirmation. Negotiated camera peers are pruned on connection events and reset at shutdown; no per-frame peer-cache scan is added.
-
-Both simulation modes reuse the existing 16 single/pair raster masks. Independent angular membership checks cover zero, fractional and maximum overlap, negative/full-turn angles and exact boundaries. At 45 degrees each angle selects exactly two adjacent directions; direction centers choose the following pair, preventing a third mask. Existing grid timers, overlap cooldowns, ownership handoffs and active-use protections are unchanged. Greater overlap keeps a pair active more often; it does not increase the largest existing pair footprint or add object scans. Full live multiplayer testing remains outstanding.
-
-Directional grids with KeepOwnershipOnCellExit=false now retain their complete shape at every heading; the whole inner 3x3 uses the inner timer. The forward row retains its own timer and the remaining cells use the outer timer. The rounded footprint and its existing diagonal forward tip are retained. KeepOwnershipOnCellExit=true keeps the previous six inner cells and rear cutout. Tests cover all three patterns and eight directions, sketch priorities and stationary work counts. Construction computes this once; no new per-tick condition or scan is added.
-
-## Unreleased configuration layout
-
-The user-supplied feature layout is implemented through canonical config bindings and a startup/save-only formatter. Existing supported values move by key to the new sections, with an original `.cfg.pre-layout.bak` saved once. Existing intervals are retained; new movement/fallback checks default to 0.1 seconds and camera checks stay at 0.05. Deferred combat bindings preserve their orphaned values until bound. Other plugins' config instances retain normal BepInEx saving. No gameplay, physics or network timer was added.
-
-Actual BepInEx/Harmony migration passes 28 checks; production default generation/reload verifies 53 settings in eleven ordered sections. Console tests pass 109 validation/persistence/scope checks plus timing/camera cases. Production compilation and native ownership/Pickable contracts pass. These are focused checks for the configuration work, not a new live-multiplayer release certification. Concurrent text-editing integration remains separate; the native audit recognizes its private endpoint and the narrowly scoped queued-text cancellation.
-The same migration fixtures also pass on the game's embedded Valheim Mono (28 assertions), with BepInEx paths initialized as during normal bootstrap. This exercises the actual Save prefix and atomic file replacement on the game runtime, without starting Unity or a world.

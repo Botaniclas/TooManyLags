@@ -34,6 +34,8 @@ FiresGhettoNetworking loads first, so an initial log message saying simulation s
 
 ## Built-in PUP safeguards
 
+Mob takeovers onto the server require PUP's local collision readiness; a running client keeps ownership until then. Held server mobs within 40 metres of a player receive priority native collision preparation when `EnablePupCompatibility` is enabled. This also supplements a separate collision patch without replacing its guards. Collision holds are never forcibly released, and distant missing colliders do not directly block a local query.
+
 `[08 - PUP FPS Compatibility] EnablePupCompatibility = true` enables the integrated guards automatically when their required mods and interfaces are available. Install PUP FPS on the server and clients that use it; use matching versions.
 
 - Protects building stability while required cluster collisions load.
